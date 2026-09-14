@@ -1,7 +1,8 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import Tabs from './tabs';
-// import Menu from '../pages/Menu'
+import Registro from '../pages/Registro'
+
 
 const Stack = createNativeStackNavigator();
 
@@ -22,7 +23,8 @@ export default function Rotas() {
         }}
       />
 
-      {/* <Stack.Screen name="Menu" component={Menu} options={{animation:'slide_from_left'}} /> */}
+
+      <Stack.Screen name="Registro" component={Registro} options={{animation:'slide_from_left'}} />
     </Stack.Navigator>
   );
 }

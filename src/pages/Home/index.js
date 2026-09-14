@@ -1,15 +1,17 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   FlatList,
   RefreshControl,
+  TouchableOpacity,
 } from "react-native";
-import { useTheme, useNavigation } from "@react-navigation/native";
+import { useNavigation, useTheme } from "@react-navigation/native";
+import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../../context/AppContext";
 import Load from "../../componentes/Load";
+import { useTabBarVisibility } from "../../context/TabBarVisibility";
 
 export default function Home() {
   const {
@@ -23,11 +25,29 @@ export default function Home() {
 
   const { colors } = useTheme();
   const navigation = useNavigation();
+  const { onScroll } = useTabBarVisibility();
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     carregar();
   }, []);
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={() => {
+            // exemplo: ir para Registro
+            navigation.navigate("Registro");
+          }}
+          style={{ marginRight: 12, padding: 6 }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="add" size={24} color={colors.principal} />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, colors]);
 
   async function carregar() {
     setLoad(true);
@@ -46,20 +66,6 @@ export default function Home() {
   const mesAtual = agora.getMonth();
   const anoAtual = agora.getFullYear();
 
-
-
-
-
-
-  const totalEntradas = lista
-    .filter((i) => i.tipoMovimento === "entrada")
-    .reduce((acc, i) => acc + (i.valorRecebidoTotal || i.valorTotal || 0), 0);
-
-  const totalSaidas = lista
-    .filter((i) => i.tipoMovimento === "saida")
-    .reduce((acc, i) => acc + (i.valorPagoTotal || i.valorTotal || 0), 0);
-
-  // Movimentos do mês atual (para estimar saldo anterior)
   const entradasMesAtual = lista
     .filter((i) => {
       if (i.tipoMovimento !== "entrada" || !i.data) return false;
@@ -79,7 +85,6 @@ export default function Home() {
   const saldoAtual = saldo || 0;
   const saldoAnterior = saldoAtual - entradasMesAtual + saidasMesAtual;
 
-  // Valores ainda em aberto (futuros)
   const entradasFuturas = lista
     .filter((i) => i.tipoMovimento === "entrada" && i.status === "aberta")
     .reduce((acc, i) => {
@@ -95,14 +100,12 @@ export default function Home() {
     }, 0);
 
   const projecaoFutura = saldoAtual + entradasFuturas - despesasFuturas;
-
   const abertos = lista.filter((i) => i.status === "aberta").length;
 
-
-
-  // Dízimos do mês atual
   const dizimosMes = lista.filter((i) => {
-    if (i.tipoMovimento !== "entrada" || i.tipo !== "Dízimo" || !i.data) return false;
+    if (i.tipoMovimento !== "entrada" || i.tipo !== "Dízimo" || !i.data) {
+      return false;
+    }
     const d = new Date(i.data);
     return d.getMonth() === mesAtual && d.getFullYear() === anoAtual;
   });
@@ -115,184 +118,117 @@ export default function Home() {
   const mediaDizimosMes =
     dizimosMes.length > 0 ? totalDizimosMes / dizimosMes.length : 0;
 
+  const resumoItens = useMemo(
+    () => [
+      {
+        id: "1",
+        label: "A receber",
+        value: `R$ ${formatoMoeda.format(entradasFuturas)}`,
+      },
+      {
+        id: "2",
+        label: "A pagar",
+        value: `R$ ${formatoMoeda.format(despesasFuturas)}`,
+      },
+      {
+        id: "3",
+        label: "Média de dízimos (mês)",
+        value: `R$ ${formatoMoeda.format(mediaDizimosMes)}`,
+      },
+      {
+        id: "4",
+        label: "Dízimos no mês",
+        value: `R$ ${formatoMoeda.format(totalDizimosMes)}`,
+      },
+      {
+        id: "5",
+        label: "Registros pendentes",
+        value: `${abertos}`,
+      },
+    ],
+    [
+      entradasFuturas,
+      despesasFuturas,
+      mediaDizimosMes,
+      totalDizimosMes,
+      abertos,
+      formatoMoeda,
+    ]
+  );
 
-
-  // 1. Monta os itens do resumo
-  const resumoItens = [
-
-    {
-      id: "1",
-      label: "A receber",
-      value: `R$ ${formatoMoeda.format(entradasFuturas)}`,
-    },
-    {
-      id: "2",
-      label: "A pagar",
-      value: `R$ ${formatoMoeda.format(despesasFuturas)}`,
-    },
-    {
-      id: "3",
-      label: "Média de dízimos (mês)",
-      value: `R$ ${formatoMoeda.format(mediaDizimosMes)}`,
-    },
-    {
-      id: "4",
-      label: "Registros pendentes",
-      value: `${abertos}`,
-    },
-    {
-      id: "5",
-      label: "A pagar",
-      value: `R$ ${formatoMoeda.format(despesasFuturas)}`,
-    },
-    {
-      id: "6",
-      label: "Média de dízimos (mês)",
-      value: `R$ ${formatoMoeda.format(mediaDizimosMes)}`,
-    },
-    {
-      id: "7",
-      label: "Registros pendentes",
-      value: `${abertos}`,
-    },
-  ];
-
-  if (load && !refreshing) return <Load />
+  if (load && !refreshing) return <Load />;
 
   return (
-    <View
-      style={styles.container}
-
-    >
-      <View style={styles.saldoCard}>
-        <View style={styles.saldoItem}>
-          <Text style={styles.saldoLabel}>Saldo Anterior</Text>
-          <Text style={styles.saldoValorSecundario}>
-            R$ {formatoMoeda.format(saldoAnterior)}
-          </Text>
-        </View>
-
-        <View style={styles.divisorVertical} />
-
-        <View style={styles.saldoItem}>
-          <Text style={styles.saldoLabel}>Saldo Atual</Text>
-          <Text style={styles.saldoValorPrincipal}>
-            R$ {formatoMoeda.format(saldoAtual)}
-          </Text>
-        </View>
-
-        <View style={styles.divisorVertical} />
-
-        <View style={styles.saldoItem}>
-          <Text style={styles.saldoLabel}>Projeção Futura</Text>
-          <Text
-            style={[
-              styles.saldoValorSecundario,
-            ]}
-          >
-            R$ {formatoMoeda.format(projecaoFutura)}
-          </Text>
-        </View>
-      </View>
-
-
-
-      <View style={styles.chartCard}>
-        <Text style={styles.infoTitle}>Cabo de força</Text>
-        <Text style={styles.chartSubtitle}>
-          Quem puxa mais o saldo: entradas ou saídas
-        </Text>
-
-        <View style={styles.tugHeader}>
+    <View style={styles.container}>
+      <FlatList
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        data={resumoItens}
+        keyExtractor={(item) => item.id}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.principal]}
+          />
+        }
+        ListHeaderComponent={
           <View>
-            <Text style={styles.tugSideLabel}>Entradas</Text>
-            <Text style={styles.tugSideValue}>
-              R$ {formatoMoeda.format(totalEntradas)}
-            </Text>
-          </View>
+            <View style={styles.saldoCard}>
+              <View style={styles.saldoItem}>
+                <Text style={styles.saldoLabel}>Saldo Anterior</Text>
+                <Text style={styles.saldoValorSecundario}>
+                  R$ {formatoMoeda.format(saldoAnterior)}
+                </Text>
+              </View>
 
-          <View style={{ alignItems: "flex-end" }}>
-            <Text style={styles.tugSideLabel}>Saídas</Text>
-            <Text style={[styles.tugSideValue]}>
-              R$ {formatoMoeda.format(totalSaidas)}
-            </Text>
-          </View>
-        </View>
+              <View style={styles.divisorVertical} />
 
-        <View style={styles.tugTrack}>
-          <View style={styles.tugEmpate} />
-          <View
-            style={[
-              styles.tugEntrada,
-              {
-                flex: totalEntradas > 0 ? totalEntradas : 0.0001,
-                backgroundColor: colors.principal,
-              },
-            ]}
-          />
-          <View style={styles.tugCenter} />
-          <View
-            style={[
-              styles.tugSaida,
-              {
-                flex: totalSaidas > 0 ? totalSaidas : 0.0001,
-                backgroundColor: colors.destaque,
-              },
-            ]}
-          />
-        </View>
+              <View style={styles.saldoItem}>
+                <Text style={styles.saldoLabel}>Saldo Atual</Text>
+                <Text style={styles.saldoValorPrincipal}>
+                  R$ {formatoMoeda.format(saldoAtual)}
+                </Text>
+              </View>
 
+              <View style={styles.divisorVertical} />
 
-      </View>
-
-
-
-
-
-      <View style={styles.listaWrapper}>
-
-      <View pointerEvents="none" style={styles.fadeTop}>
-          <View style={[styles.fadeFaixa, { opacity: 1 }]} />
-          <View style={[styles.fadeFaixa, { opacity: 0.9 }]} />
-          <View style={[styles.fadeFaixa, { opacity: 0.7 }]} />
-          <View style={[styles.fadeFaixa, { opacity: 0.5 }]} />
-          <View style={[styles.fadeFaixa, { opacity: 0.3 }]} />
-      </View>
-
-        <FlatList
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={[colors.principal]}
-            />
-          }
-          data={resumoItens}
-          keyExtractor={(item) => item.id}
-          showsVerticalScrollIndicator={false}
-          style={styles.listaScroll}
-          ListHeaderComponent={
+              <View style={styles.saldoItem}>
+                <Text style={styles.saldoLabel}>Projeção Futura</Text>
+                <Text
+                  style={[
+                    styles.saldoValorSecundario,
+                    {
+                      color:
+                        projecaoFutura >= 0
+                          ? colors.principal
+                          : colors.destaque,
+                    },
+                  ]}
+                >
+                  R$ {formatoMoeda.format(projecaoFutura)}
+                </Text>
+              </View>
+            </View>
 
             <Text style={styles.infoTitle}>Resumo geral</Text>
-          }
-          contentContainerStyle={styles.listaContent}
-          renderItem={({ item }) => (
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>{item.label}</Text>
-              <Text style={styles.infoValue}>{item.value}</Text>
-            </View>
-          )}
-        />
-
-        <View pointerEvents="none" style={styles.fadeBottom}>
-          <View style={[styles.fadeFaixa, { opacity: 0.3 }]} />
-          <View style={[styles.fadeFaixa, { opacity: 0.5 }]} />
-          <View style={[styles.fadeFaixa, { opacity: 0.7 }]} />
-          <View style={[styles.fadeFaixa, { opacity: 0.9 }]} />
-          <View style={[styles.fadeFaixa, { opacity: 1 }]} />
-        </View>
-      </View>
-
+          </View>
+        }
+        renderItem={({ item, index }) => (
+          <View
+            style={[
+              styles.infoRow,
+              index === resumoItens.length - 1 && styles.infoRowLast,
+            ]}
+          >
+            <Text style={styles.infoLabel}>{item.label}</Text>
+            <Text style={styles.infoValue}>{item.value}</Text>
+          </View>
+        )}
+        ListFooterComponent={<View style={{ height: 20 }} />}
+      />
     </View>
   );
 }
@@ -300,244 +236,86 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    gap:14,
-    paddingVertical:14
   },
-
+  listContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 24,
+  },
   saldoCard: {
-    paddingVertical: 21,
-    marginHorizontal: 14,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 8,
     flexDirection: "row",
     alignItems: "center",
+    marginVertical: 14,
+    elevation: 1,
   },
   saldoItem: {
-    paddingHorizontal: 6,
     flex: 1,
     alignItems: "center",
+    paddingHorizontal: 4,
   },
   divisorVertical: {
     width: 1,
-    height: 35,
+    height: 36,
     backgroundColor: "#ececec",
   },
   saldoLabel: {
-    fontSize: 12,
+    fontSize: 11,
     marginBottom: 6,
     textAlign: "center",
     fontFamily: "Roboto-Light",
+    color: "#888",
   },
   saldoValorPrincipal: {
     fontSize: 16,
     fontFamily: "Roboto-Bold",
     textAlign: "center",
+    color: "#222",
   },
   saldoValorSecundario: {
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: "Roboto-Medium",
     textAlign: "center",
-  },
-  saldoLegenda: {
-    fontSize: 12,
-    fontFamily: "Roboto-Regular",
-    textAlign: "center",
-    marginTop: 8,
-    marginBottom: 16,
-  },
-
-  // Cards de informação
-  infoCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 16,
+    color: "#333",
   },
   infoTitle: {
     fontSize: 15,
     fontFamily: "Roboto-Medium",
-    marginBottom: 12,
+    color: "#333",
+    marginTop: 14,
+    marginBottom: 8,
+    paddingHorizontal: 14,
   },
   infoRow: {
+    backgroundColor: "#fff",
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 10,
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 14,
     borderBottomWidth: 1,
     borderBottomColor: "#f0f0f0",
+  },
+  infoRowLast: {
+    borderBottomWidth: 0,
+    borderBottomLeftRadius: 14,
+    borderBottomRightRadius: 14,
+    marginBottom: 4,
   },
   infoLabel: {
     fontSize: 14,
     fontFamily: "Roboto-Light",
+    color: "#555",
     flex: 1,
+    paddingRight: 12,
   },
   infoValue: {
     fontSize: 14,
     fontFamily: "Roboto-Medium",
-    textAlign: "right",
-  },
-
-  // Cabo de força
-  chartCard: {
-    backgroundColor: "#fff",
-    elevation: 3,
-    borderRadius: 14,
-    paddingHorizontal: 21,
-    paddingVertical: 35,
-    marginHorizontal: 14,
-  },
-  chartSubtitle: {
-    fontSize: 13,
-    fontFamily: "Roboto-Light",
-    marginBottom: 16,
-    marginTop: -6,
-  },
-  tugHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 14,
-  },
-  tugSideLabel: {
-    fontSize: 12,
-    fontFamily: "Roboto-Light",
-    marginBottom: 2,
-  },
-  tugSideValue: {
-    fontSize: 16,
-    fontFamily: "Roboto-Bold",
-  },
-  tugTrack: {
-    height: 5,
-    borderRadius: 10,
-    flexDirection: "row",
-    overflow: "hidden",
-    backgroundColor:'#ddd'
-  },
-
-  tugEmpate:{
-  width:2,
-  height:10,
-  backgroundColor:'#fff',
-  position:"absolute",
-  marginLeft:'50%',
-  marginRight:'50%',
-  zIndex:99,
-  
-},
-  tugEntrada: {
-    height: "90%",
-  },
-  tugSaida: {
-    height: "90%",
-    alignSelf:'center'
-  },
-  tugCenter: {
-    width: 3,
-    backgroundColor: "#fff",
-  },
-  tugResult: {
-    marginTop: 14,
-    fontSize: 13,
-    fontFamily: "Roboto-Regular",
-    textAlign: "center",
-  },
-
-  // Últimos registros
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  link: {
-    fontSize: 14,
-    fontFamily: "Roboto-Medium",
-  },
-  item: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#ececec",
-  },
-  itemLeft: {
-    flex: 1,
-    marginRight: 12,
-  },
-  itemTipo: {
-    fontSize: 12,
-    fontFamily: "Roboto-Regular",
-    marginBottom: 2,
-  },
-  itemDesc: {
-    fontSize: 15,
-    fontFamily: "Roboto-Medium",
     color: "#222",
-  },
-  itemData: {
-    fontSize: 12,
-    fontFamily: "Roboto-Regular",
-    marginTop: 3,
-  },
-  itemValor: {
-    fontSize: 15,
-    fontFamily: "Roboto-Bold",
-  },
-  empty: {
-    textAlign: "center",
-    fontFamily: "Roboto-Regular",
-    marginVertical: 16,
-  },
-
-  // Botão
-  btn: {
-    marginTop: 16,
-    height: 50,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#fff",
-  },
-  btnText: {
-    fontSize: 15,
-    fontFamily: "Roboto-Medium",
-  },
-
-
-
-  listaWrapper: {
-    marginHorizontal: 14,
-    padding: 21,
-    height: 280, // altura visível da área de estatísticas
-    position: "relative",
-  },
-  listaScroll: {
-    flex: 1,
-  },
-  listaContent: {
-    paddingTop: 35,
-    paddingBottom: 35,
-  },
-
-  fadeBottom: {
-    position: "absolute",
-    bottom: 10,
-    left: 0,
-    right: 0,
-    zIndex: 2,
-  },
-    fadeTop: {
-    position: 'absolute',
-    zIndex: 2,
-    left: 0,
-    right: 0,
-    top: 20,
-    height: 28,
-  },
-  fadeFaixa: {
-    height: 10,
-    backgroundColor: "#fff",
+    textAlign: "right",
   },
 });

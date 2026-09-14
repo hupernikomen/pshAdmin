@@ -51,8 +51,8 @@ export default function Registro() {
   const [abertos, setAbertos] = useState([]);
   const [selecionado, setSelecionado] = useState(null);
 
-  const tiposEntrada = ["Dízimo", "Oferta", "Bazar", "Restante", "Outros"];
-  const tiposSaida = ["Conta Fixa", "Parcelada", "Futura", "Outros"];
+  const tiposEntrada = ["Dízimo", "Oferta", "Bazar"];
+  const tiposSaida = ["Conta Fixa", "Parcelada"];
 
   useEffect(() => {
     if (modo === "adicionar" && tipoMovimento) {

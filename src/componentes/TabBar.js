@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { useTheme } from '@react-navigation/native';
+import { useEffect, useRef, useState } from "react";
+import { useTheme } from "@react-navigation/native";
 import {
   TouchableOpacity,
   View,
@@ -7,31 +7,32 @@ import {
   Animated,
   Platform,
   UIManager,
-} from 'react-native';
-import Ionicons from 'react-native-vector-icons/Ionicons';
+} from "react-native";
+import Ionicons from "react-native-vector-icons/Ionicons";
+import { useTabBarVisibility } from "../context/TabBarVisibility";
 
 if (
-  Platform.OS === 'android' &&
+  Platform.OS === "android" &&
   UIManager.setLayoutAnimationEnabledExperimental
 ) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const TAB_SIZE = 60; // área de cada aba
-const PILL_SIZE = 52; // bolinha da cor principal
+const TAB_SIZE = 60;
+const PILL_SIZE = 52;
 
 export default function TabbarPersonalizada({ state, descriptors, navigation }) {
   const { colors } = useTheme();
+  const { translateY } = useTabBarVisibility();
+
   const slideX = useRef(new Animated.Value(state.index * TAB_SIZE)).current;
   const scales = useRef(
     state.routes.map((_, i) => new Animated.Value(i === state.index ? 1 : 0))
   ).current;
 
-  // layouts medidos de cada aba (para o pill seguir o centro real)
   const [layouts, setLayouts] = useState({});
 
   useEffect(() => {
-    // desliza a cor principal até a aba focada
     const layout = layouts[state.index];
     const toX = layout
       ? layout.x + layout.width / 2 - PILL_SIZE / 2
@@ -44,7 +45,6 @@ export default function TabbarPersonalizada({ state, descriptors, navigation }) 
       tension: 120,
     }).start();
 
-    // cresce o ícone focado e reduz os outros
     scales.forEach((anim, i) => {
       Animated.spring(anim, {
         toValue: i === state.index ? 1 : 0,
@@ -64,8 +64,15 @@ export default function TabbarPersonalizada({ state, descriptors, navigation }) 
   }
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.content, { borderWidth: 1, borderColor: '#ddd' }]}>
+    <Animated.View
+      style={[
+        styles.container,
+        {
+          transform: [{ translateY }],
+        },
+      ]}
+    >
+      <View style={[styles.content, { borderWidth: 1, borderColor: "#ddd" }]}>
         <Animated.View
           pointerEvents="none"
           style={[
@@ -73,7 +80,7 @@ export default function TabbarPersonalizada({ state, descriptors, navigation }) 
             {
               backgroundColor: colors.principal,
               transform: [{ translateX: slideX }],
-              elevation: 5
+              elevation: 5,
             },
           ]}
         />
@@ -82,25 +89,16 @@ export default function TabbarPersonalizada({ state, descriptors, navigation }) 
           const { options } = descriptors[route.key];
           const isFocused = state.index === index;
 
-          const scale = scales[index].interpolate({
-            inputRange: [0, 1],
-            outputRange: [1, 1.10],
-          });
-
           const onPress = () => {
             const event = navigation.emit({
-              type: 'tabPress',
+              type: "tabPress",
               target: route.key,
               canPreventDefault: true,
             });
 
             if (event.defaultPrevented) return;
-            if (!isFocused) {
-              navigation.navigate(route.name);
-            }
+            if (!isFocused) navigation.navigate(route.name);
           };
-
-
 
           return (
             <TouchableOpacity
@@ -113,34 +111,34 @@ export default function TabbarPersonalizada({ state, descriptors, navigation }) 
               <Ionicons
                 name={options.tabBarIcon}
                 size={26}
-                color={isFocused ? '#fff' : "#333"}
+                color={isFocused ? "#fff" : "#333"}
               />
             </TouchableOpacity>
           );
         })}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   content: {
-    backgroundColor:'#fff',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'absolute',
+    backgroundColor: "#fff",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "absolute",
     bottom: -10,
     marginBottom: 28,
     padding: 2,
     borderRadius: 35,
   },
   pill: {
-    position: 'absolute',
+    position: "absolute",
     left: -1,
     width: PILL_SIZE,
     height: PILL_SIZE,
@@ -150,14 +148,8 @@ const styles = StyleSheet.create({
   buttonTab: {
     width: TAB_SIZE,
     height: TAB_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     zIndex: 1,
-  },
-  iconWrap: {
-    width: PILL_SIZE,
-    height: PILL_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });
