@@ -130,7 +130,7 @@ export default function Home() {
       label: "A pagar",
       value: `R$ ${formatoMoeda.format(despesasFuturas)}`,
     },
-        {
+    {
       id: "3",
       label: "Média de dízimos (mês)",
       value: `R$ ${formatoMoeda.format(mediaDizimosMes)}`,
@@ -140,24 +140,30 @@ export default function Home() {
       label: "Registros pendentes",
       value: `${abertos}`,
     },
+    {
+      id: "5",
+      label: "A pagar",
+      value: `R$ ${formatoMoeda.format(despesasFuturas)}`,
+    },
+    {
+      id: "6",
+      label: "Média de dízimos (mês)",
+      value: `R$ ${formatoMoeda.format(mediaDizimosMes)}`,
+    },
+    {
+      id: "7",
+      label: "Registros pendentes",
+      value: `${abertos}`,
+    },
   ];
 
-  if (load && !refreshing) return <Load />;
+  if (load && !refreshing) return <Load />
 
   return (
     <View
       style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          colors={[colors.principal]}
-        />
-      }
-      showsVerticalScrollIndicator={false}
+
     >
-      {/* SALDOS */}
       <View style={styles.saldoCard}>
         <View style={styles.saldoItem}>
           <Text style={styles.saldoLabel}>Saldo Anterior</Text>
@@ -191,14 +197,12 @@ export default function Home() {
 
 
 
-      {/* CABO DE FORÇA */}
       <View style={styles.chartCard}>
         <Text style={styles.infoTitle}>Cabo de força</Text>
         <Text style={styles.chartSubtitle}>
           Quem puxa mais o saldo: entradas ou saídas
         </Text>
 
-        {/* Valores */}
         <View style={styles.tugHeader}>
           <View>
             <Text style={styles.tugSideLabel}>Entradas</Text>
@@ -215,8 +219,8 @@ export default function Home() {
           </View>
         </View>
 
-        {/* Barra do cabo de força */}
         <View style={styles.tugTrack}>
+          <View style={styles.tugEmpate} />
           <View
             style={[
               styles.tugEntrada,
@@ -244,38 +248,48 @@ export default function Home() {
 
 
 
-      {/* RESUMO GERAL COM FADE */}
-      <View style={styles.resumoContainer}>
 
-        <View style={styles.listaWrapper}>
+      <View style={styles.listaWrapper}>
 
+      <View pointerEvents="none" style={styles.fadeTop}>
+          <View style={[styles.fadeFaixa, { opacity: 1 }]} />
+          <View style={[styles.fadeFaixa, { opacity: 0.9 }]} />
+          <View style={[styles.fadeFaixa, { opacity: 0.7 }]} />
+          <View style={[styles.fadeFaixa, { opacity: 0.5 }]} />
+          <View style={[styles.fadeFaixa, { opacity: 0.3 }]} />
+      </View>
 
-          <FlatList
-            data={resumoItens}
-            keyExtractor={(item) => item.id}
-            showsVerticalScrollIndicator={false}
-            style={styles.listaScroll}
-            ListHeaderComponent={
+        <FlatList
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[colors.principal]}
+            />
+          }
+          data={resumoItens}
+          keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          style={styles.listaScroll}
+          ListHeaderComponent={
 
-              <Text style={styles.infoTitle}>Resumo geral</Text>
-            }
-            contentContainerStyle={styles.listaContent}
-            renderItem={({ item }) => (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>{item.label}</Text>
-                <Text style={styles.infoValue}>{item.value}</Text>
-              </View>
-            )}
-          />
+            <Text style={styles.infoTitle}>Resumo geral</Text>
+          }
+          contentContainerStyle={styles.listaContent}
+          renderItem={({ item }) => (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>{item.label}</Text>
+              <Text style={styles.infoValue}>{item.value}</Text>
+            </View>
+          )}
+        />
 
-          {/* Fade inferior */}
-          <View pointerEvents="none" style={styles.fadeBottom}>
-            <View style={[styles.fadeFaixa, { opacity: 0.2 }]} />
-            <View style={[styles.fadeFaixa, { opacity: 0.3 }]} />
-            <View style={[styles.fadeFaixa, { opacity: 0.65 }]} />
-            <View style={[styles.fadeFaixa, { opacity: 0.8 }]} />
-            <View style={[styles.fadeFaixa, { opacity: 1 }]} />
-          </View>
+        <View pointerEvents="none" style={styles.fadeBottom}>
+          <View style={[styles.fadeFaixa, { opacity: 0.3 }]} />
+          <View style={[styles.fadeFaixa, { opacity: 0.5 }]} />
+          <View style={[styles.fadeFaixa, { opacity: 0.7 }]} />
+          <View style={[styles.fadeFaixa, { opacity: 0.9 }]} />
+          <View style={[styles.fadeFaixa, { opacity: 1 }]} />
         </View>
       </View>
 
@@ -286,27 +300,24 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 20,
-  },
-  content: {
-    paddingBottom: 40,
+    gap:14,
+    paddingVertical:14
   },
 
-  // Saldos
   saldoCard: {
-    backgroundColor: "#fff",
-    paddingVertical: 20,
-    paddingHorizontal: 8,
+    paddingVertical: 21,
+    marginHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
   },
   saldoItem: {
+    paddingHorizontal: 6,
     flex: 1,
     alignItems: "center",
   },
   divisorVertical: {
     width: 1,
-    height: 48,
+    height: 35,
     backgroundColor: "#ececec",
   },
   saldoLabel: {
@@ -316,7 +327,7 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Light",
   },
   saldoValorPrincipal: {
-    fontSize: 18,
+    fontSize: 16,
     fontFamily: "Roboto-Bold",
     textAlign: "center",
   },
@@ -337,7 +348,7 @@ const styles = StyleSheet.create({
   infoCard: {
     backgroundColor: "#fff",
     borderRadius: 16,
-    padding: 18,
+    padding: 14,
     marginBottom: 16,
   },
   infoTitle: {
@@ -366,11 +377,11 @@ const styles = StyleSheet.create({
   // Cabo de força
   chartCard: {
     backgroundColor: "#fff",
-    elevation:15,
-    borderRadius: 16,
-    paddingHorizontal: 32,
-    paddingVertical:32,
-    marginVertical: 21,
+    elevation: 3,
+    borderRadius: 14,
+    paddingHorizontal: 21,
+    paddingVertical: 35,
+    marginHorizontal: 14,
   },
   chartSubtitle: {
     fontSize: 13,
@@ -393,17 +404,29 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Bold",
   },
   tugTrack: {
-    height: 4,
+    height: 5,
     borderRadius: 10,
     flexDirection: "row",
     overflow: "hidden",
-
+    backgroundColor:'#ddd'
   },
+
+  tugEmpate:{
+  width:2,
+  height:10,
+  backgroundColor:'#fff',
+  position:"absolute",
+  marginLeft:'50%',
+  marginRight:'50%',
+  zIndex:99,
+  
+},
   tugEntrada: {
-    height: "100%",
+    height: "90%",
   },
   tugSaida: {
-    height: "100%",
+    height: "90%",
+    alignSelf:'center'
   },
   tugCenter: {
     width: 3,
@@ -483,12 +506,10 @@ const styles = StyleSheet.create({
   },
 
 
-  resumoContainer: {
-    backgroundColor: "#fff",
-    padding: 18,
-    marginBottom: 16,
-  },
+
   listaWrapper: {
+    marginHorizontal: 14,
+    padding: 21,
     height: 280, // altura visível da área de estatísticas
     position: "relative",
   },
@@ -496,22 +517,24 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listaContent: {
-    paddingTop: 14,
+    paddingTop: 35,
     paddingBottom: 35,
   },
-  fadeTop: {
+
+  fadeBottom: {
     position: "absolute",
-    top: 0,
+    bottom: 10,
     left: 0,
     right: 0,
     zIndex: 2,
   },
-  fadeBottom: {
-    position: "absolute",
-    bottom: 0,
+    fadeTop: {
+    position: 'absolute',
+    zIndex: 2,
     left: 0,
     right: 0,
-    zIndex: 2,
+    top: 20,
+    height: 28,
   },
   fadeFaixa: {
     height: 10,

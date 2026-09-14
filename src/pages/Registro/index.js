@@ -27,6 +27,7 @@ import {
   where,
 } from "firebase/firestore";
 import Load from "../../componentes/Load";
+import Ionicons from 'react-native-vector-icons/Ionicons'
 
 export default function Registro() {
   const { colors } = useTheme();
@@ -77,9 +78,11 @@ export default function Registro() {
     }
   }
 
+
+
   async function salvarImagemLocal(uri) {
     const nomeArquivo = `recibo_${Date.now()}.jpg`;
-    const pastaDestino = `${RNFS.DocumentDirectoryPath}/recibos`;
+    const pastaDestino = `${RNFS.ExternalStorageDirectoryPath}/Pictures/PSH_App`;
 
     const pastaExiste = await RNFS.exists(pastaDestino);
     if (!pastaExiste) await RNFS.mkdir(pastaDestino);
@@ -87,8 +90,10 @@ export default function Registro() {
     const caminhoFinal = `${pastaDestino}/${nomeArquivo}`;
     await RNFS.copyFile(uri, caminhoFinal);
 
-    return Platform.OS === "android" ? `file://${caminhoFinal}` : caminhoFinal;
+    return `file://${caminhoFinal}`;
   }
+
+
 
   async function tirarFoto() {
     try {
@@ -104,20 +109,22 @@ export default function Registro() {
 
       const result = await launchCamera({
         mediaType: "photo",
-        quality: 0.7,
+        quality: 0.6,
+        maxWidth: 700,
+        maxHeight: 700,
         saveToPhotos: false,
       });
 
       if (result.didCancel || result.errorCode) return;
 
       if (result.assets?.length > 0) {
-        const caminho = await salvarImagemLocal(result.assets[0].uri);
-        setReciboUri(caminho);
+        setReciboUri(result.assets[0].uri);
       }
     } catch (error) {
       Alert.alert("Erro", "Não foi possível abrir a câmera.");
     }
   }
+
 
   async function salvar() {
     if (!tipoMovimento) {
@@ -180,7 +187,16 @@ export default function Registro() {
           base.valorPagoTotal = parcial;
           base.quantidadeParcelas = qtdParcelas ? parseInt(qtdParcelas) : 1;
           base.reciboUrl = reciboUri || null;
+
+          // só salva a imagem agora
+          if (reciboUri) {
+            const caminhoFinal = await salvarImagemLocal(reciboUri);
+            base.reciboUrl = caminhoFinal;
+          } else {
+            base.reciboUrl = null;
+          }
         }
+
 
         await addDoc(collection(db, "registros"), base);
       }
@@ -204,7 +220,6 @@ export default function Registro() {
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-      {/* Entrada / Saída */}
       <View style={styles.segment}>
         {["entrada", "saida"].map((item) => (
           <TouchableOpacity
@@ -234,7 +249,6 @@ export default function Registro() {
 
       {tipoMovimento && (
         <>
-          {/* Nova ou Adicionar */}
           <View style={styles.segment}>
             <TouchableOpacity
               style={[
@@ -264,7 +278,6 @@ export default function Registro() {
             </TouchableOpacity>
           </View>
 
-          {/* Tipo (somente Nova) */}
           {modo === "nova" && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Tipo</Text>
@@ -287,7 +300,6 @@ export default function Registro() {
             </View>
           )}
 
-          {/* Lista de abertos */}
           {modo === "adicionar" && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Selecione o registro</Text>
@@ -316,7 +328,6 @@ export default function Registro() {
             </View>
           )}
 
-          {/* Formulário */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Dados</Text>
 
@@ -395,19 +406,21 @@ export default function Registro() {
                   />
                 </View>
 
-                <TouchableOpacity
-                  style={styles.input}
-                  onPress={tirarFoto}
-                >
-                  <Text style={styles.inputLabel}>Recibo</Text>
-                  <Text style={styles.inputValue}>
-                    {reciboUri ? "Foto adicionada" : "Tirar foto"}
-                  </Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 14 }}>
 
-                {reciboUri && (
-                  <Image source={{ uri: reciboUri }} style={styles.preview} />
-                )}
+                  <TouchableOpacity
+                    style={[styles.input, { height: 120, alignItems: 'center', justifyContent: 'center', gap: 7 }]}
+                    onPress={tirarFoto}
+                  >
+                    <Text style={styles.inputLabel}>Recibo</Text>
+                    <Ionicons name={reciboUri ? 'camera' : 'camera-outline'} size={24} color={reciboUri ? colors.principal : '#777'} />
+
+                  </TouchableOpacity>
+
+                  {reciboUri && (
+                    <Image source={{ uri: reciboUri }} style={styles.preview} />
+                  )}
+                </View>
               </>
             )}
 
@@ -521,8 +534,8 @@ const styles = StyleSheet.create({
   // Inputs
   input: {
     backgroundColor: "#fff",
-    borderWidth:1,
-    borderColor:'#aaa',
+    borderWidth: 1,
+    borderColor: '#aaa',
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -545,8 +558,8 @@ const styles = StyleSheet.create({
 
   // Foto
   preview: {
-    width: "100%",
-    height: 180,
+    height: 120,
+    aspectRatio: 9 / 16,
     borderRadius: 14,
     marginBottom: 10,
   },

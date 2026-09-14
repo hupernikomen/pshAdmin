@@ -66,7 +66,6 @@ export default function TabbarPersonalizada({ state, descriptors, navigation }) 
   return (
     <View style={styles.container}>
       <View style={[styles.content, { borderWidth: 1, borderColor: '#ddd' }]}>
-        {/* Bolinha que desliza (cor principal) */}
         <Animated.View
           pointerEvents="none"
           style={[
