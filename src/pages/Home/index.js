@@ -16,10 +16,14 @@ import { useTabBarVisibility } from "../../context/TabBarVisibility";
 export default function Home() {
   const {
     saldo,
+    saldoDisponivel,
+    totalReservado,
+    caixinhas,
     dadosFinancas,
     load,
     setLoad,
     HistoricoMovimentos,
+    CarregarCaixinhas,
     formatoMoeda,
   } = useContext(AppContext);
 
@@ -36,28 +40,25 @@ export default function Home() {
     navigation.setOptions({
       headerRight: () => (
         <TouchableOpacity
-          onPress={() => {
-            // exemplo: ir para Registro
-            navigation.navigate("Registro");
-          }}
+          onPress={() => navigation.navigate("Registro")}
           style={{ marginRight: 12, padding: 6 }}
           activeOpacity={0.7}
         >
-          <Ionicons name="add" size={24} color={colors.principal} />
+          <Ionicons name="add-outline" size={24} color="#222" />
         </TouchableOpacity>
       ),
     });
-  }, [navigation, colors]);
+  }, [navigation]);
 
   async function carregar() {
     setLoad(true);
-    await HistoricoMovimentos();
+    await Promise.all([HistoricoMovimentos(), CarregarCaixinhas?.()]);
     setLoad(false);
   }
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await HistoricoMovimentos();
+    await Promise.all([HistoricoMovimentos(), CarregarCaixinhas?.()]);
     setRefreshing(false);
   };
 
@@ -82,7 +83,10 @@ export default function Home() {
     })
     .reduce((acc, i) => acc + (i.valorPagoTotal || i.valorTotal || 0), 0);
 
-  const saldoAtual = saldo || 0;
+  const saldoAtual = Number(saldo) || 0;
+  const caixaGeral = Number(saldoDisponivel) || 0;
+  const emCaixinhas = Number(totalReservado) || 0;
+  const qtdCaixinhas = (caixinhas || []).length;
   const saldoAnterior = saldoAtual - entradasMesAtual + saidasMesAtual;
 
   const entradasFuturas = lista
@@ -123,34 +127,54 @@ export default function Home() {
       {
         id: "1",
         label: "A receber",
+        sub: "Valores em aberto",
         value: `R$ ${formatoMoeda.format(entradasFuturas)}`,
+        icon: "arrow-down-outline",
+        tint: "#E8F5E9",
+        iconColor: "#2E7D32",
       },
       {
         id: "2",
         label: "A pagar",
+        sub: "Despesas pendentes",
         value: `R$ ${formatoMoeda.format(despesasFuturas)}`,
+        icon: "arrow-up-outline",
+        tint: "#FFEBEE",
+        iconColor: "#C62828",
       },
       {
         id: "3",
-        label: "Média de dízimos (mês)",
-        value: `R$ ${formatoMoeda.format(mediaDizimosMes)}`,
+        label: "Dízimos no mês",
+        sub: "Total arrecadado",
+        value: `R$ ${formatoMoeda.format(totalDizimosMes)}`,
+        icon: "hand-left-outline",
+        tint: "#E3F2FD",
+        iconColor: "#1565C0",
       },
       {
         id: "4",
-        label: "Dízimos no mês",
-        value: `R$ ${formatoMoeda.format(totalDizimosMes)}`,
+        label: "Média de dízimos",
+        sub: "Por lançamento no mês",
+        value: `R$ ${formatoMoeda.format(mediaDizimosMes)}`,
+        icon: "stats-chart-outline",
+        tint: "#FFF3E0",
+        iconColor: "#EF6C00",
       },
       {
         id: "5",
         label: "Registros pendentes",
+        sub: "Ainda em aberto",
         value: `${abertos}`,
+        icon: "time-outline",
+        tint: "#F3E5F5",
+        iconColor: "#6A1B9A",
       },
     ],
     [
       entradasFuturas,
       despesasFuturas,
-      mediaDizimosMes,
       totalDizimosMes,
+      mediaDizimosMes,
       abertos,
       formatoMoeda,
     ]
@@ -166,7 +190,7 @@ export default function Home() {
         data={resumoItens}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -176,58 +200,77 @@ export default function Home() {
         }
         ListHeaderComponent={
           <View>
-            <View style={styles.saldoCard}>
-              <View style={styles.saldoItem}>
-                <Text style={styles.saldoLabel}>Saldo Anterior</Text>
-                <Text style={styles.saldoValorSecundario}>
-                  R$ {formatoMoeda.format(saldoAnterior)}
-                </Text>
-              </View>
+            {/* Card de saldo */}
+            <View style={styles.balanceCard}>
+              <Text style={styles.balanceLabel}>Saldo atual</Text>
 
-              <View style={styles.divisorVertical} />
+              <Text style={styles.balanceValue}>
+                R$ {formatoMoeda.format(saldoAtual)}
+              </Text>
 
-              <View style={styles.saldoItem}>
-                <Text style={styles.saldoLabel}>Saldo Atual</Text>
-                <Text style={styles.saldoValorPrincipal}>
-                  R$ {formatoMoeda.format(saldoAtual)}
-                </Text>
-              </View>
+              <View style={styles.balanceBottom}>
+                <View>
+                  <Text style={styles.miniLabel}>Caixa geral</Text>
+                  <Text style={styles.miniValue}>
+                    R$ {formatoMoeda.format(caixaGeral)}
+                  </Text>
+                </View>
 
-              <View style={styles.divisorVertical} />
-
-              <View style={styles.saldoItem}>
-                <Text style={styles.saldoLabel}>Projeção Futura</Text>
-                <Text
-                  style={[
-                    styles.saldoValorSecundario,
-                    {
-                      color:
-                        projecaoFutura >= 0
-                          ? colors.principal
-                          : colors.destaque,
-                    },
-                  ]}
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => navigation.navigate("Caixinhas")}
+                  style={styles.caixinhasBtn}
                 >
-                  R$ {formatoMoeda.format(projecaoFutura)}
-                </Text>
+                  <View style={styles.caixinhasTitleRow}>
+                    <Text style={styles.miniLabel}>Caixinhas</Text>
+                    <Ionicons name="chevron-forward" size={14} color="#9aa3ad" />
+                  </View>
+                  <Text style={styles.miniValue}>
+                    R$ {formatoMoeda.format(emCaixinhas)}
+                  </Text>
+                </TouchableOpacity>
               </View>
             </View>
 
-            <Text style={styles.infoTitle}>Resumo geral</Text>
+            {/* Chips secundários */}
+            <View style={styles.chipsRow}>
+              <View style={styles.chip}>
+                <Text style={styles.chipLabel}>Anterior</Text>
+                <Text style={styles.chipValue}>
+                  R$ {formatoMoeda.format(saldoAnterior)}
+                </Text>
+              </View>
+              <View style={styles.chip}>
+                <Text style={styles.chipLabel}>Projeção</Text>
+                <Text style={styles.chipValue}>
+                  R$ {formatoMoeda.format(projecaoFutura)}
+                </Text>
+              </View>
+              <View style={styles.chip}>
+                <Text style={styles.chipLabel}>Ministérios</Text>
+                <Text style={styles.chipValue}>{qtdCaixinhas}</Text>
+              </View>
+            </View>
+
+            <Text style={styles.sectionTitle}>Resumo geral</Text>
           </View>
         }
-        renderItem={({ item, index }) => (
-          <View
-            style={[
-              styles.infoRow,
-              index === resumoItens.length - 1 && styles.infoRowLast,
-            ]}
-          >
-            <Text style={styles.infoLabel}>{item.label}</Text>
-            <Text style={styles.infoValue}>{item.value}</Text>
+        renderItem={({ item }) => (
+          <View style={styles.itemCard}>
+            <View style={[styles.iconCircle, { backgroundColor: item.tint }]}>
+              <Ionicons name={item.icon} size={18} color={item.iconColor} />
+            </View>
+
+            <View style={styles.itemCenter}>
+              <Text style={styles.itemTitle}>{item.label}</Text>
+              <Text style={styles.itemSub}>{item.sub}</Text>
+            </View>
+
+            <Text style={styles.itemValue}>{item.value}</Text>
           </View>
         )}
-        ListFooterComponent={<View style={{ height: 20 }} />}
+        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+        ListFooterComponent={<View style={{ height: 68 }} />}
       />
     </View>
   );
@@ -236,86 +279,134 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#f4f5f7",
   },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 24,
+  content: {
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 20,
   },
-  saldoCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    paddingVertical: 18,
-    paddingHorizontal: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 14,
-    elevation: 1,
+
+  balanceCard: {
+    backgroundColor: "#1f2933",
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 12,
   },
-  saldoItem: {
-    flex: 1,
-    alignItems: "center",
-    paddingHorizontal: 4,
-  },
-  divisorVertical: {
-    width: 1,
-    height: 36,
-    backgroundColor: "#ececec",
-  },
-  saldoLabel: {
-    fontSize: 11,
-    marginBottom: 6,
-    textAlign: "center",
-    fontFamily: "Roboto-Light",
-    color: "#888",
-  },
-  saldoValorPrincipal: {
-    fontSize: 16,
-    fontFamily: "Roboto-Bold",
-    textAlign: "center",
-    color: "#222",
-  },
-  saldoValorSecundario: {
-    fontSize: 14,
-    fontFamily: "Roboto-Medium",
-    textAlign: "center",
-    color: "#333",
-  },
-  infoTitle: {
-    fontSize: 15,
-    fontFamily: "Roboto-Medium",
-    color: "#333",
-    marginTop: 14,
-    marginBottom: 8,
-    paddingHorizontal: 14,
-  },
-  infoRow: {
-    backgroundColor: "#fff",
+  balanceTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
+    marginBottom: 8,
   },
-  infoRowLast: {
-    borderBottomWidth: 0,
-    borderBottomLeftRadius: 14,
-    borderBottomRightRadius: 14,
-    marginBottom: 4,
+  balanceLabel: {
+    fontSize: 13,
+    fontFamily: "Roboto-Regular",
+    color: "#9aa3ad",
   },
-  infoLabel: {
-    fontSize: 14,
-    fontFamily: "Roboto-Light",
-    color: "#555",
-    flex: 1,
-    paddingRight: 12,
+  balanceValue: {
+    fontSize: 30,
+    fontFamily: "Roboto-Bold",
+    color: "#fff",
+    letterSpacing: -0.8,
+    marginBottom: 16,
   },
-  infoValue: {
+  balanceBottom: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  miniLabel: {
+    fontSize: 11,
+    fontFamily: "Roboto-Regular",
+    color: "#8b949e",
+    marginBottom: 3,
+  },
+  miniValue: {
     fontSize: 14,
     fontFamily: "Roboto-Medium",
+    color: "#e8eef4",
+  },
+
+  chipsRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 18,
+  },
+  chip: {
+    flex: 1,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+  },
+  chipLabel: {
+    fontSize: 11,
+    fontFamily: "Roboto-Regular",
+    color: "#8a8f98",
+    marginBottom: 3,
+  },
+  chipValue: {
+    fontSize: 13,
+    fontFamily: "Roboto-Medium",
     color: "#222",
-    textAlign: "right",
+  },
+
+  sectionTitle: {
+    fontSize: 16,
+    fontFamily: "Roboto-Medium",
+    color: "#222",
+    marginBottom: 12,
+  },
+
+  itemCard: {
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  iconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  itemCenter: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  itemTitle: {
+    fontSize: 14,
+    fontFamily: "Roboto-Medium",
+    color: "#1f2933",
+    marginBottom: 2,
+  },
+  itemSub: {
+    fontSize: 12,
+    fontFamily: "Roboto-Regular",
+    color: "#9aa0a6",
+  },
+  itemValue: {
+    fontSize: 14,
+    fontFamily: "Roboto-Bold",
+    color: "#1f2933",
+  },
+  balanceLabel: {
+    fontSize: 13,
+    fontFamily: "Roboto-Regular",
+    color: "#9aa3ad",
+    marginBottom: 8,
+  },
+  caixinhasBtn: {
+    alignItems: "flex-end",
+  },
+  caixinhasTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    marginBottom: 3,
   },
 });

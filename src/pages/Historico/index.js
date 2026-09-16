@@ -14,6 +14,7 @@ import {
   PermissionsAndroid,
 } from "react-native";
 import { useTheme } from "@react-navigation/native";
+import Ionicons from "react-native-vector-icons/Ionicons";
 import RNFS from "react-native-fs";
 import { AppContext } from "../../context/AppContext";
 import Load from "../../componentes/Load";
@@ -33,6 +34,30 @@ function normalizarUri(uri) {
 function caminhoSemPrefixo(uri) {
   if (!uri) return null;
   return uri.replace("file://", "");
+}
+
+function textoOrigem(item) {
+  if (item.tipoMovimento !== "saida") return null;
+
+  if (item.origemPagamento === "caixinha") {
+    return item.caixinhaNome || "Caixinha";
+  }
+  if (item.origemPagamento === "geral") {
+    return "Caixa geral";
+  }
+
+  const pagos = item.valoresPagos || [];
+  if (pagos.length > 0) {
+    const ultimo = pagos[pagos.length - 1];
+    if (ultimo?.origemPagamento === "caixinha") {
+      return ultimo.caixinhaNome || "Caixinha";
+    }
+    if (ultimo?.origemPagamento === "geral") {
+      return "Caixa geral";
+    }
+  }
+
+  return null;
 }
 
 export default function Historico() {
@@ -80,7 +105,6 @@ export default function Historico() {
       );
       return granted === PermissionsAndroid.RESULTS.GRANTED;
     } catch (e) {
-      console.log("Erro permissão leitura:", e);
       return false;
     }
   }
@@ -111,7 +135,6 @@ export default function Historico() {
       }
       setFotoSelecionada(uri);
     } catch (e) {
-      console.log("Erro ao abrir recibo:", e);
       setFotoSelecionada(uri);
     }
   }
@@ -129,10 +152,16 @@ export default function Historico() {
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Nenhum registro encontrado.</Text>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="receipt-outline" size={28} color="#9aa3ad" />
+            </View>
+            <Text style={styles.emptyTitle}>Nenhum registro</Text>
+            <Text style={styles.emptyText}>
+              Quando houver movimentações, elas aparecem aqui.
+            </Text>
           </View>
         }
         refreshControl={
@@ -156,86 +185,72 @@ export default function Historico() {
             item.valorTotal !==
               (item.valorRecebidoTotal || item.valorPagoTotal);
 
+          const quitado = item.status === "quitada";
           const temRecibo = !!item.reciboUrl;
-          const reciboUri = normalizarUri(item.reciboUrl);
+          const origem = textoOrigem(item);
+
+          const tint = isEntrada ? "#E8F5E9" : "#FFEBEE";
+          const iconColor = isEntrada ? "#2E7D32" : "#C62828";
+          const iconName = isEntrada
+            ? "arrow-down-outline"
+            : "arrow-up-outline";
 
           return (
-            <View style={styles.card}>
-              <View style={styles.topRow}>
-                <View style={{ flex: 1, paddingRight: 10 }}>
-                  <View style={styles.metaRow}>
-                    <Text
-                      style={[
-                        styles.tipo,
-                        { color: isEntrada ? colors.principal : colors.destaque },
-                      ]}
-                    >
-                      {item.tipo || "Sem tipo"}
-                    </Text>
-                    <Text style={styles.dot}>·</Text>
-                    <Text style={styles.movimento}>
-                      {isEntrada ? "Entrada" : "Saída"}
-                    </Text>
-                  </View>
-
-                  <Text style={styles.descricao} numberOfLines={1}>
-                    {item.descricao || "Sem descrição"}
-                  </Text>
-                </View>
-
-                <Text
-                  style={[
-                    styles.valor,
-                    { color: isEntrada ? colors.principal : colors.destaque },
-                  ]}
-                >
-                  {isEntrada ? "+" : "-"} R$ {formatoMoeda.format(valor)}
-                </Text>
+            <View style={styles.itemCard}>
+              <View style={[styles.iconCircle, { backgroundColor: tint }]}>
+                <Ionicons name={iconName} size={18} color={iconColor} />
               </View>
 
-              <View style={styles.bottomRow}>
-                <Text style={styles.data}>
+              <View style={styles.itemCenter}>
+                <Text style={styles.itemTitle} numberOfLines={1}>
+                  {item.descricao || "Sem descrição"}
+                </Text>
+
+                <Text style={styles.itemSub} numberOfLines={1}>
                   {item.data
                     ? new Date(item.data).toLocaleDateString("pt-BR")
                     : "-"}
+                  {"  ·  "}
+                  {item.tipo || "Sem tipo"}
+                  {"  ·  "}
+                  {quitado ? "Quitado" : "Aberto"}
                 </Text>
 
-                <Text
-                  style={[
-                    styles.status,
-                    {
-                      color:
-                        item.status === "quitada"
-                          ? colors.principal
-                          : colors.destaque,
-                    },
-                  ]}
-                >
-                  {item.status === "quitada" ? "Quitado" : "Aberto"}
-                </Text>
+                {!!origem && (
+                  <Text style={styles.itemOrigem}>Pago com: {origem}</Text>
+                )}
+
+                {temParcial && (
+                  <Text style={styles.itemParcial}>
+                    Total {formatoMoeda.format(item.valorTotal)} · Pago{" "}
+                    {formatoMoeda.format(
+                      item.valorRecebidoTotal || item.valorPagoTotal || 0
+                    )}
+                  </Text>
+                )}
               </View>
 
-              {temParcial && (
-                <Text style={styles.parcial}>
-                  Total R$ {formatoMoeda.format(item.valorTotal)} · Pago R${" "}
-                  {formatoMoeda.format(
-                    item.valorRecebidoTotal || item.valorPagoTotal || 0
-                  )}
-                </Text>
-              )}
-
-              {temRecibo && (
-                <TouchableOpacity
-                  style={styles.reciboBtn}
-                  onPress={() => abrirRecibo(item.reciboUrl)}
-                  activeOpacity={0.8}
+              <View style={styles.itemRight}>
+                <Text
+                  style={[
+                    styles.itemValue,
+                    { color: isEntrada ? "#2E7D32" : "#C62828" },
+                  ]}
                 >
-                  <Image source={{ uri: reciboUri }} style={styles.reciboThumb} />
-                  <Text style={[styles.reciboText, { color: colors.principal }]}>
-                    Ver recibo
-                  </Text>
-                </TouchableOpacity>
-              )}
+                  {isEntrada ? "+" : "−"} {formatoMoeda.format(valor)}
+                </Text>
+
+                {temRecibo && (
+                  <TouchableOpacity
+                    style={styles.reciboBtn}
+                    onPress={() => abrirRecibo(item.reciboUrl)}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="image-outline" size={14} color="#6b7280" />
+                    <Text style={styles.reciboText}>Recibo</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           );
         }}
@@ -276,99 +291,103 @@ export default function Historico() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#f4f5f7",
   },
   listContent: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 32,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 36,
   },
-  card: {
+
+  itemCard: {
     backgroundColor: "#fff",
-    borderRadius: 12,
+    borderRadius: 18,
+    paddingVertical: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    elevation: 1,
-  },
-  topRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-  },
-  metaRow: {
     flexDirection: "row",
     alignItems: "center",
+  },
+  iconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  itemCenter: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  itemTitle: {
+    fontSize: 14,
+    fontFamily: "Roboto-Medium",
+    color: "#1f2933",
     marginBottom: 2,
   },
-  tipo: {
+  itemSub: {
     fontSize: 12,
-    fontFamily: "Roboto-Medium",
-  },
-  dot: {
-    marginHorizontal: 5,
-    color: "#bbb",
-    fontSize: 12,
-  },
-  movimento: {
-    fontSize: 12,
-    fontFamily: "Roboto-Light",
-    color: "#888",
-  },
-  descricao: {
-    fontSize: 14,
-    fontFamily: "Roboto-Medium",
-    color: "#222",
-  },
-  valor: {
-    fontSize: 14,
-    fontFamily: "Roboto-Bold",
-    marginTop: 1,
-  },
-  bottomRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 6,
-  },
-  data: {
-    fontSize: 11,
     fontFamily: "Roboto-Regular",
-    color: "#999",
+    color: "#9aa0a6",
   },
-  status: {
-    fontSize: 11,
-    fontFamily: "Roboto-Medium",
-  },
-  parcial: {
+  itemOrigem: {
     marginTop: 4,
     fontSize: 11,
+    fontFamily: "Roboto-Medium",
+    color: "#6b7280",
+  },
+  itemParcial: {
+    marginTop: 3,
+    fontSize: 11,
     fontFamily: "Roboto-Regular",
-    color: "#777",
+    color: "#9aa0a6",
+  },
+  itemRight: {
+    alignItems: "flex-end",
+  },
+  itemValue: {
+    fontSize: 14,
+    fontFamily: "Roboto-Bold",
   },
   reciboBtn: {
-    marginTop: 8,
+    marginTop: 6,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-  },
-  reciboThumb: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    backgroundColor: "#f2f2f0",
+    gap: 4,
   },
   reciboText: {
-    fontSize: 12,
-    fontFamily: "Roboto-Medium",
+    fontSize: 11,
+    fontFamily: "Roboto-Regular",
+    color: "#6b7280",
   },
+
   emptyContainer: {
-    marginTop: 50,
+    marginTop: 80,
     alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  emptyIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyTitle: {
+    marginTop: 14,
+    fontSize: 16,
+    fontFamily: "Roboto-Medium",
+    color: "#666",
   },
   emptyText: {
-    fontSize: 14,
+    marginTop: 6,
+    fontSize: 13,
     fontFamily: "Roboto-Regular",
-    color: "#888",
+    color: "#999",
+    textAlign: "center",
   },
+
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.85)",

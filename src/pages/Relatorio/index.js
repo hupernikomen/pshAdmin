@@ -6,39 +6,20 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from "react-native";
-
-import { useTheme } from "@react-navigation/native";
+import { useNavigation, useTheme } from "@react-navigation/native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import RNFS from "react-native-fs";
 import Share from "react-native-share";
+import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../../context/AppContext";
 import Load from "../../componentes/Load";
 
-const PERIODOS = [
-  { id: "7d", label: "7 dias" },
-  { id: "15d", label: "15 dias" },
-  { id: "1m", label: "1 mês" },
-  { id: "3m", label: "3 meses" },
-  { id: "6m", label: "6 meses" },
-  { id: "1a", label: "1 ano" },
-  { id: "custom", label: "Personalizado" },
-];
-
 const MESES = [
-  "Janeiro",
-  "Fevereiro",
-  "Março",
-  "Abril",
-  "Maio",
-  "Junho",
-  "Julho",
-  "Agosto",
-  "Setembro",
-  "Outubro",
-  "Novembro",
-  "Dezembro",
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 
 function inicioDoDia(d) {
@@ -53,67 +34,26 @@ function fimDoDia(d) {
   return x;
 }
 
-function calcularPeriodo(id, de, ate) {
-  const agora = new Date();
-  const fim = fimDoDia(agora);
-  let inicio = inicioDoDia(agora);
-
-  switch (id) {
-    case "7d":
-      inicio.setDate(inicio.getDate() - 7);
-      break;
-    case "15d":
-      inicio.setDate(inicio.getDate() - 15);
-      break;
-    case "1m":
-      inicio.setMonth(inicio.getMonth() - 1);
-      break;
-    case "3m":
-      inicio.setMonth(inicio.getMonth() - 3);
-      break;
-    case "6m":
-      inicio.setMonth(inicio.getMonth() - 6);
-      break;
-    case "1a":
-      inicio.setFullYear(inicio.getFullYear() - 1);
-      break;
-    case "custom":
-      return {
-        inicio: inicioDoDia(de),
-        fim: fimDoDia(ate),
-      };
-    default:
-      inicio.setMonth(inicio.getMonth() - 1);
-  }
-
-  return { inicio, fim };
-}
-
 function calcularMes(mesIndex, ano) {
-  const inicio = new Date(ano, mesIndex, 1, 0, 0, 0, 0);
-  const fim = new Date(ano, mesIndex + 1, 0, 23, 59, 59, 999);
-  return { inicio, fim };
-}
-
-function textoSemAcento(texto) {
-  return String(texto || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+  return {
+    inicio: new Date(ano, mesIndex, 1, 0, 0, 0, 0),
+    fim: new Date(ano, mesIndex + 1, 0, 23, 59, 59, 999),
+  };
 }
 
 export default function Relatorio() {
   const { dadosFinancas, load, HistoricoMovimentos, formatoMoeda } =
     useContext(AppContext);
   const { colors } = useTheme();
+  const navigation = useNavigation();
 
   const agora = new Date();
-  const [modoFiltro, setModoFiltro] = useState("periodo"); // 'periodo' | 'mes'
-  const [periodoId, setPeriodoId] = useState("1m");
+  const [modoFiltro, setModoFiltro] = useState("mes");
   const [mesSelecionado, setMesSelecionado] = useState(agora.getMonth());
   const [anoSelecionado, setAnoSelecionado] = useState(agora.getFullYear());
   const [dataDe, setDataDe] = useState(() => {
     const d = new Date();
-    d.setMonth(d.getMonth() - 1);
+    d.setDate(d.getDate() - 7);
     return d;
   });
   const [dataAte, setDataAte] = useState(new Date());
@@ -129,8 +69,11 @@ export default function Relatorio() {
     if (modoFiltro === "mes") {
       return calcularMes(mesSelecionado, anoSelecionado);
     }
-    return calcularPeriodo(periodoId, dataDe, dataAte);
-  }, [modoFiltro, periodoId, dataDe, dataAte, mesSelecionado, anoSelecionado]);
+    return {
+      inicio: inicioDoDia(dataDe),
+      fim: fimDoDia(dataAte),
+    };
+  }, [modoFiltro, dataDe, dataAte, mesSelecionado, anoSelecionado]);
 
   const filtrados = useMemo(() => {
     return (dadosFinancas || []).filter((item) => {
@@ -149,10 +92,7 @@ export default function Relatorio() {
 
     filtrados.forEach((item) => {
       const valor =
-        item.valorRecebidoTotal ||
-        item.valorPagoTotal ||
-        item.valorTotal ||
-        0;
+        item.valorRecebidoTotal || item.valorPagoTotal || item.valorTotal || 0;
       const tipo = item.tipo || "Outros";
 
       if (item.tipoMovimento === "entrada") {
@@ -178,9 +118,7 @@ export default function Relatorio() {
     if (modoFiltro === "mes") {
       return `${MESES[mesSelecionado]} de ${anoSelecionado}`;
     }
-    const a = inicio.toLocaleDateString("pt-BR");
-    const b = fim.toLocaleDateString("pt-BR");
-    return `${a} até ${b}`;
+    return `${inicio.toLocaleDateString("pt-BR")} até ${fim.toLocaleDateString("pt-BR")}`;
   }, [modoFiltro, mesSelecionado, anoSelecionado, inicio, fim]);
 
   async function exportarPDF() {
@@ -282,6 +220,7 @@ export default function Relatorio() {
         const cardW = (leftWidth - 8) / 3;
         const cardH = 36;
         ensureLeft(cardH + 12);
+
         const cards = [
           {
             label: "RECEITAS",
@@ -402,7 +341,6 @@ export default function Relatorio() {
           });
           yLeft -= 12;
         });
-        yLeft -= 8;
       }
 
       page.drawLine({
@@ -428,17 +366,32 @@ export default function Relatorio() {
           ? String(new Date(item.data).getDate()).padStart(2, "0")
           : "--";
 
-        const isDizimo = String(item.tipo || "")
-          .toLowerCase()
-          .includes("dizimo") || String(item.tipo || "")
-          .toLowerCase()
-          .includes("dízimo");
+        const isDizimo =
+          String(item.tipo || "").toLowerCase().includes("dizimo") ||
+          String(item.tipo || "").toLowerCase().includes("dízimo");
 
         const desc = isDizimo
           ? "********"
           : item.descricao || item.tipo || "-";
 
-        const linha = `${dia} - ${desc}`;
+        let origemTxt = "";
+        if (!isEntrada) {
+          if (item.origemPagamento === "caixinha") {
+            origemTxt = ` [${item.caixinhaNome || "Caixinha"}]`;
+          } else if (item.origemPagamento === "geral") {
+            origemTxt = " [Caixa geral]";
+          } else {
+            const pagos = item.valoresPagos || [];
+            const ultimo = pagos[pagos.length - 1];
+            if (ultimo?.origemPagamento === "caixinha") {
+              origemTxt = ` [${ultimo.caixinhaNome || "Caixinha"}]`;
+            } else if (ultimo?.origemPagamento === "geral") {
+              origemTxt = " [Caixa geral]";
+            }
+          }
+        }
+
+        const linha = `${dia} - ${desc}${origemTxt}`;
         const valorStr = `${isEntrada ? "+" : "-"} ${formatoMoeda.format(valor)}`;
 
         ensureRight(20);
@@ -475,11 +428,7 @@ export default function Relatorio() {
       yLeft -= 12;
       textLeft(
         `Relatorio de ${new Date().toLocaleDateString("pt-BR")} ${new Date().toLocaleTimeString("pt-BR")}`,
-        {
-          size: 8,
-          color: rgb(0.5, 0.55, 0.55),
-          lh: 10,
-        }
+        { size: 8, color: rgb(0.5, 0.55, 0.55), lh: 10 }
       );
 
       const base64 = await pdfDoc.saveAsBase64();
@@ -488,7 +437,6 @@ export default function Relatorio() {
       const fileName = `relatorio_${Date.now()}.pdf`;
       const cachePath = `${RNFS.CachesDirectoryPath}/${fileName}`;
       await RNFS.writeFile(cachePath, base64, "base64");
-
       const fileUrl = cachePath.startsWith("file://")
         ? cachePath
         : `file://${cachePath}`;
@@ -501,21 +449,39 @@ export default function Relatorio() {
           showAppsToView: true,
           failOnCancel: false,
         });
-      } catch (shareError) {
-        const downloadPath = `${RNFS.DownloadDirectoryPath}/${fileName}`;
-        await RNFS.copyFile(cachePath, downloadPath);
-        Alert.alert(
-          "PDF salvo",
-          `Arquivo salvo em Downloads:\n\n${fileName}`
+      } catch {
+        await RNFS.copyFile(
+          cachePath,
+          `${RNFS.DownloadDirectoryPath}/${fileName}`
         );
+        Alert.alert("PDF salvo", `Arquivo salvo em Downloads:\n\n${fileName}`);
       }
     } catch (e) {
-      console.log("ERRO PDF COMPLETO:", e);
+      console.log("ERRO PDF:", e);
       Alert.alert("Erro ao exportar PDF", e?.message || "Erro desconhecido");
     } finally {
       setGerando(false);
     }
   }
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={exportarPDF}
+          disabled={gerando}
+          style={styles.headerBtn}
+          activeOpacity={0.7}
+        >
+          {gerando ? (
+            <ActivityIndicator size="small" color={colors.principal} />
+          ) : (
+            <Ionicons name="receipt-outline" size={22} />
+          )}
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, colors, gerando, filtrados, resumo, labelPeriodo]);
 
   if (load && !(dadosFinancas || []).length) return <Load />;
 
@@ -533,245 +499,194 @@ export default function Relatorio() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
       >
-        {/* Alternar Período / Mês */}
-        <View style={styles.segment}>
-          <TouchableOpacity
-            style={[
-              styles.segmentBtn,
-              modoFiltro === "periodo" && { backgroundColor: colors.principal },
-            ]}
-            onPress={() => setModoFiltro("periodo")}
-          >
-            <Text
+      
+
+        <View style={styles.block}>
+          <View style={styles.segment}>
+            <TouchableOpacity
               style={[
-                styles.segmentText,
-                modoFiltro === "periodo" && { color: "#fff" },
+                styles.segmentBtn,
+                modoFiltro === "mes" && { backgroundColor: colors.principal },
               ]}
+              onPress={() => setModoFiltro("mes")}
             >
-              Período
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.segmentBtn,
-              modoFiltro === "mes" && { backgroundColor: colors.principal },
-            ]}
-            onPress={() => setModoFiltro("mes")}
-          >
-            <Text
-              style={[
-                styles.segmentText,
-                modoFiltro === "mes" && { color: "#fff" },
-              ]}
-            >
-              Mês
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {modoFiltro === "periodo" ? (
-          <>
-            <Text style={styles.sectionTitle}>Período</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.periodosRow}
-            >
-              {PERIODOS.map((p) => {
-                const ativo = periodoId === p.id;
-                return (
-                  <TouchableOpacity
-                    key={p.id}
-                    style={[
-                      styles.periodoChip,
-                      ativo && { backgroundColor: colors.principal },
-                    ]}
-                    onPress={() => setPeriodoId(p.id)}
-                  >
-                    <Text
-                      style={[styles.periodoText, ativo && { color: "#fff" }]}
-                    >
-                      {p.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            {periodoId === "custom" && (
-              <View style={styles.customRow}>
-                <TouchableOpacity
-                  style={styles.dateBox}
-                  onPress={() => setShowDe(true)}
-                >
-                  <Text style={styles.dateLabel}>De</Text>
-                  <Text style={styles.dateValue}>
-                    {dataDe.toLocaleDateString("pt-BR")}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.dateBox}
-                  onPress={() => setShowAte(true)}
-                >
-                  <Text style={styles.dateLabel}>Até</Text>
-                  <Text style={styles.dateValue}>
-                    {dataAte.toLocaleDateString("pt-BR")}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {showDe && (
-              <DateTimePicker
-                value={dataDe}
-                mode="date"
-                display="default"
-                maximumDate={dataAte}
-                onChange={(e, selected) => {
-                  setShowDe(false);
-                  if (selected) setDataDe(selected);
-                }}
-              />
-            )}
-
-            {showAte && (
-              <DateTimePicker
-                value={dataAte}
-                mode="date"
-                display="default"
-                minimumDate={dataDe}
-                maximumDate={new Date()}
-                onChange={(e, selected) => {
-                  setShowAte(false);
-                  if (selected) setDataAte(selected);
-                }}
-              />
-            )}
-          </>
-        ) : (
-          <>
-            <View style={styles.anoRow}>
-              <TouchableOpacity
-                style={styles.anoBtn}
-                onPress={() => setAnoSelecionado((a) => a - 1)}
+              <Text
+                style={[
+                  styles.segmentText,
+                  modoFiltro === "mes" && { color: "#fff" },
+                ]}
               >
-                <Text style={styles.anoBtnText}>{"‹"}</Text>
-              </TouchableOpacity>
-              <Text style={styles.anoText}>{anoSelecionado}</Text>
-              <TouchableOpacity
-                style={styles.anoBtn}
-                onPress={() => setAnoSelecionado((a) => a + 1)}
-              >
-                <Text style={styles.anoBtnText}>{"›"}</Text>
-              </TouchableOpacity>
-            </View>
+                Por mês
+              </Text>
+            </TouchableOpacity>
 
-            <Text style={styles.sectionTitle}>Mês</Text>
-            <View style={styles.mesesGrid}>
-              {MESES.map((nome, index) => {
-                const ativo = mesSelecionado === index;
-                return (
-                  <TouchableOpacity
-                    key={nome}
-                    style={[
-                      styles.mesChip,
-                      ativo && { backgroundColor: colors.principal },
-                    ]}
-                    onPress={() => setMesSelecionado(index)}
-                  >
-                    <Text
-                      style={[styles.mesText, ativo && { color: "#fff" }]}
-                    >
-                      {nome.substring(0, 3)}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </>
-        )}
-
-        <Text style={styles.periodoInfo}>{labelPeriodo}</Text>
-
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Entradas</Text>
-            <Text style={[styles.summaryValue, { color: colors.principal }]}>
-              R$ {formatoMoeda.format(resumo.entradas)}
-            </Text>
-          </View>
-
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Saídas</Text>
-            <Text style={[styles.summaryValue, { color: colors.destaque }]}>
-              R$ {formatoMoeda.format(resumo.saidas)}
-            </Text>
-          </View>
-
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Saldo</Text>
-            <Text
+            <TouchableOpacity
               style={[
-                styles.summaryValue,
-                {
-                  color:
-                    resumo.saldo >= 0 ? colors.principal : colors.destaque,
+                styles.segmentBtn,
+                modoFiltro === "periodo" && {
+                  backgroundColor: colors.principal,
                 },
               ]}
+              onPress={() => setModoFiltro("periodo")}
             >
-              R$ {formatoMoeda.format(resumo.saldo)}
-            </Text>
+              <Text
+                style={[
+                  styles.segmentText,
+                  modoFiltro === "periodo" && { color: "#fff" },
+                ]}
+              >
+                Por período
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {modoFiltro === "mes" ? (
+            <>
+              <View style={styles.anoRow}>
+                <TouchableOpacity
+                  style={styles.anoBtn}
+                  onPress={() => setAnoSelecionado((a) => a - 1)}
+                >
+                  <Ionicons name="chevron-back" size={18} color="#444" />
+                </TouchableOpacity>
+                <Text style={styles.anoText}>{anoSelecionado}</Text>
+                <TouchableOpacity
+                  style={styles.anoBtn}
+                  onPress={() => setAnoSelecionado((a) => a + 1)}
+                >
+                  <Ionicons name="chevron-forward" size={18} color="#444" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.mesesGrid}>
+                {MESES.map((nome, index) => {
+                  const ativo = mesSelecionado === index;
+                  return (
+                    <TouchableOpacity
+                      key={nome}
+                      style={[
+                        styles.mesChip,
+                        ativo && { backgroundColor: colors.principal },
+                      ]}
+                      onPress={() => setMesSelecionado(index)}
+                    >
+                      <Text
+                        style={[styles.mesText, ativo && { color: "#fff" }]}
+                      >
+                        {nome.substring(0, 3)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </>
+          ) : (
+            <View style={styles.customRow}>
+              <TouchableOpacity
+                style={styles.dateBox}
+                onPress={() => setShowDe(true)}
+              >
+                <Text style={styles.dateLabel}>De</Text>
+                <Text style={styles.dateValue}>
+                  {dataDe.toLocaleDateString("pt-BR")}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.dateBox}
+                onPress={() => setShowAte(true)}
+              >
+                <Text style={styles.dateLabel}>Até</Text>
+                <Text style={styles.dateValue}>
+                  {dataAte.toLocaleDateString("pt-BR")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {showDe && (
+            <DateTimePicker
+              value={dataDe}
+              mode="date"
+              display="default"
+              maximumDate={dataAte}
+              onChange={(e, selected) => {
+                setShowDe(false);
+                if (selected) setDataDe(selected);
+              }}
+            />
+          )}
+
+          {showAte && (
+            <DateTimePicker
+              value={dataAte}
+              mode="date"
+              display="default"
+              minimumDate={dataDe}
+              maximumDate={new Date()}
+              onChange={(e, selected) => {
+                setShowAte(false);
+                if (selected) setDataAte(selected);
+              }}
+            />
+          )}
+
+          <View style={styles.filtroAtivo}>
+            <Ionicons name="calendar-outline" size={14} color="#9aa0a6" />
+            <Text style={styles.filtroAtivoText}>{labelPeriodo}</Text>
+            <Text style={styles.filtroQtd}>{resumo.quantidade} reg.</Text>
           </View>
         </View>
 
-        <Text style={styles.qtdText}>
-          {resumo.quantidade} registro
-          {resumo.quantidade !== 1 ? "s" : ""} no filtro
-        </Text>
-
-        <View style={styles.sectionCard}>
-          <Text style={styles.cardTitle}>Entradas por tipo</Text>
+        <Text style={styles.sectionTitle}>Entradas por tipo</Text>
+        <View style={styles.listCard}>
           {listaEntradas.length === 0 ? (
-            <Text style={styles.emptySection}>Nenhuma entrada</Text>
+            <Text style={styles.emptySection}>Nenhuma entrada no filtro</Text>
           ) : (
-            listaEntradas.map((item) => (
-              <View key={item.tipo} style={styles.row}>
-                <Text style={styles.rowLabel}>{item.tipo}</Text>
-                <Text style={[styles.rowValue, { color: colors.principal }]}>
-                  + R$ {formatoMoeda.format(item.total)}
+            listaEntradas.map((item, index) => (
+              <View
+                key={item.tipo}
+                style={[
+                  styles.itemRow,
+                  index === listaEntradas.length - 1 && styles.itemRowLast,
+                ]}
+              >
+                <View style={[styles.iconCircle, { backgroundColor: "#E8F5E9" }]}>
+                  <Ionicons name="arrow-down-outline" size={16} color="#2E7D32" />
+                </View>
+                <Text style={styles.itemLabel}>{item.tipo}</Text>
+                <Text style={[styles.itemValue, { color: "#2E7D32" }]}>
+                  + {formatoMoeda.format(item.total)}
                 </Text>
               </View>
             ))
           )}
         </View>
 
-        <View style={styles.sectionCard}>
-          <Text style={styles.cardTitle}>Saídas por tipo</Text>
+        <Text style={styles.sectionTitle}>Saídas por tipo</Text>
+        <View style={styles.listCard}>
           {listaSaidas.length === 0 ? (
-            <Text style={styles.emptySection}>Nenhuma saída</Text>
+            <Text style={styles.emptySection}>Nenhuma saída no filtro</Text>
           ) : (
-            listaSaidas.map((item) => (
-              <View key={item.tipo} style={styles.row}>
-                <Text style={styles.rowLabel}>{item.tipo}</Text>
-                <Text style={[styles.rowValue, { color: colors.destaque }]}>
-                  - R$ {formatoMoeda.format(item.total)}
+            listaSaidas.map((item, index) => (
+              <View
+                key={item.tipo}
+                style={[
+                  styles.itemRow,
+                  index === listaSaidas.length - 1 && styles.itemRowLast,
+                ]}
+              >
+                <View style={[styles.iconCircle, { backgroundColor: "#FFEBEE" }]}>
+                  <Ionicons name="arrow-up-outline" size={16} color="#C62828" />
+                </View>
+                <Text style={styles.itemLabel}>{item.tipo}</Text>
+                <Text style={[styles.itemValue, { color: "#C62828" }]}>
+                  − {formatoMoeda.format(item.total)}
                 </Text>
               </View>
             ))
           )}
         </View>
-
-        <TouchableOpacity
-          style={[styles.pdfBtn, { backgroundColor: colors.principal }]}
-          onPress={exportarPDF}
-          disabled={gerando}
-        >
-          <Text style={styles.pdfBtnText}>
-            {gerando ? "Gerando PDF..." : "Exportar PDF"}
-          </Text>
-        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -780,19 +695,63 @@ export default function Relatorio() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#f4f5f7",
   },
   content: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingHorizontal: 18,
     paddingTop: 12,
+    paddingBottom: 40,
+  },
+  headerBtn: {
+    marginRight: 12,
+    padding: 6,
+  },
+  balanceCard: {
+    backgroundColor: "#1f2933",
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 14,
+  },
+  balanceLabel: {
+    fontSize: 13,
+    fontFamily: "Roboto-Regular",
+    color: "#9aa3ad",
+    marginBottom: 8,
+  },
+  balanceValue: {
+    fontSize: 30,
+    fontFamily: "Roboto-Bold",
+    color: "#fff",
+    letterSpacing: -0.8,
+    marginBottom: 16,
+  },
+  balanceBottom: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  miniLabel: {
+    fontSize: 11,
+    fontFamily: "Roboto-Regular",
+    color: "#8b949e",
+    marginBottom: 3,
+  },
+  miniValue: {
+    fontSize: 14,
+    fontFamily: "Roboto-Medium",
+    color: "#e8eef4",
+  },
+  block: {
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 18,
   },
   segment: {
     flexDirection: "row",
-    backgroundColor: "#fff",
+    backgroundColor: "#f4f5f7",
     borderRadius: 14,
     padding: 4,
-    marginBottom: 16,
-    elevation: 1,
+    marginBottom: 14,
   },
   segmentBtn: {
     flex: 1,
@@ -801,58 +760,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   segmentText: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: "Roboto-Medium",
     color: "#555",
-  },
-  sectionTitle: {
-    fontSize: 13,
-    fontFamily: "Roboto-Medium",
-    color: "#888",
-    marginBottom: 10,
-  },
-  periodosRow: {
-    gap: 8,
-    paddingBottom: 4,
-  },
-  periodoChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: "#fff",
-    elevation: 1,
-  },
-  periodoText: {
-    fontSize: 13,
-    fontFamily: "Roboto-Medium",
-    color: "#444",
   },
   anoRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 12,
-    gap: 20,
+    gap: 18,
   },
   anoBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#fff",
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#f4f5f7",
     alignItems: "center",
     justifyContent: "center",
-    elevation: 1,
-  },
-  anoBtnText: {
-    fontSize: 22,
-    color: "#444",
-    marginTop: -2,
   },
   anoText: {
-    fontSize: 18,
+    fontSize: 17,
     fontFamily: "Roboto-Bold",
-    color: "#222",
-    minWidth: 70,
+    color: "#1f2933",
+    minWidth: 64,
     textAlign: "center",
   },
   mesesGrid: {
@@ -862,123 +793,104 @@ const styles = StyleSheet.create({
   },
   mesChip: {
     width: "22%",
-    paddingVertical: 10,
+    paddingVertical: 9,
     borderRadius: 12,
-    backgroundColor: "#fff",
     alignItems: "center",
-    elevation: 1,
+    backgroundColor: "#f4f5f7",
   },
   mesText: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: "Roboto-Medium",
-    color: "#444",
+    color: "#333",
   },
   customRow: {
     flexDirection: "row",
     gap: 10,
-    marginTop: 12,
   },
   dateBox: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: "#f4f5f7",
     borderRadius: 14,
-    padding: 12,
-    elevation: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   dateLabel: {
-    fontSize: 12,
-    fontFamily: "Roboto-Light",
-    color: "#888",
+    fontSize: 11,
+    fontFamily: "Roboto-Regular",
+    color: "#9aa0a6",
     marginBottom: 2,
   },
   dateValue: {
-    fontSize: 15,
+    fontSize: 14,
+    fontFamily: "Roboto-Medium",
+    color: "#1f2933",
+  },
+  filtroAtivo: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#ececec",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  filtroAtivoText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Roboto-Regular",
+    color: "#555",
+  },
+  filtroQtd: {
+    fontSize: 12,
+    fontFamily: "Roboto-Medium",
+    color: "#9aa0a6",
+  },
+  sectionTitle: {
+    fontSize: 16,
     fontFamily: "Roboto-Medium",
     color: "#222",
-  },
-  periodoInfo: {
-    marginTop: 12,
-    marginBottom: 16,
-    fontSize: 13,
-    fontFamily: "Roboto-Regular",
-    color: "#777",
-  },
-  summaryRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 8,
-  },
-  summaryCard: {
-    flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-    alignItems: "center",
-    elevation: 1,
-  },
-  summaryLabel: {
-    fontSize: 12,
-    fontFamily: "Roboto-Light",
-    color: "#777",
-    marginBottom: 4,
-  },
-  summaryValue: {
-    fontSize: 13,
-    fontFamily: "Roboto-Bold",
-    textAlign: "center",
-  },
-  qtdText: {
-    fontSize: 12,
-    fontFamily: "Roboto-Regular",
-    color: "#999",
-    marginBottom: 16,
-  },
-  sectionCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
-    elevation: 1,
-  },
-  cardTitle: {
-    fontSize: 15,
-    fontFamily: "Roboto-Medium",
-    color: "#333",
     marginBottom: 10,
   },
-  row: {
+  listCard: {
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    marginBottom: 18,
+  },
+  itemRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-    borderBottomWidth: 1,
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "#f0f0f0",
   },
-  rowLabel: {
-    fontSize: 14,
-    fontFamily: "Roboto-Regular",
-    color: "#444",
-    flex: 1,
+  itemRowLast: {
+    borderBottomWidth: 0,
   },
-  rowValue: {
+  iconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  itemLabel: {
+    flex: 1,
     fontSize: 14,
     fontFamily: "Roboto-Medium",
+    color: "#1f2933",
+  },
+  itemValue: {
+    fontSize: 14,
+    fontFamily: "Roboto-Bold",
   },
   emptySection: {
     fontSize: 13,
     fontFamily: "Roboto-Regular",
-    paddingVertical: 8,
-  },
-  pdfBtn: {
-    height: 54,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 8,
-  },
-  pdfBtnText: {
-    color: "#fff",
-    fontSize: 16,
-    fontFamily: "Roboto-Bold",
+    color: "#9aa0a6",
+    paddingVertical: 14,
+    textAlign: "center",
   },
 });

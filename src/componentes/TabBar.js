@@ -18,7 +18,7 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const TAB_SIZE = 60;
+const TAB_SIZE = 58;
 const PILL_SIZE = 52;
 
 export default function TabbarPersonalizada({ state, descriptors, navigation }) {

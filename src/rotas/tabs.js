@@ -19,7 +19,7 @@ export default function Tabs() {
     <SafeAreaView style={{ flex: 1 }} edges={['bottom', 'left', 'right']}>
 
       <TabBarVisibilityProvider>
-        <Tab.Navigator 
+        <Tab.Navigator
           initialRouteName='Home'
           tabBar={(props) => <TabBar {...props} />}
           screenOptions={{
@@ -34,22 +34,22 @@ export default function Tabs() {
             name="Home"
             component={Home}
             options={{
+              title: '',
               tabBarIcon: 'pulse-outline',
             }}
           />
-
           <Tab.Screen
-            name="Relatorio"
-            component={Relatorio}
+            name="Histórico"
+            component={Historico}
             options={{
-              tabBarIcon: 'reader-outline',
+              tabBarIcon: 'albums-outline',
             }}
           />
           <Tab.Screen
-            name="Historico"
-            component={Historico}
+            name="Relatório"
+            component={Relatorio}
             options={{
-              tabBarIcon: 'folder-open-outline',
+              tabBarIcon: 'reader-outline',
             }}
           />
 

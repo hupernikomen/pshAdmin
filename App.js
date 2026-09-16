@@ -10,14 +10,17 @@ import Rotas from './src/rotas';
 // import Login from './src/pages/Login';
 // import TelaCarregamento from './src/componentes/TelaCarregamento';
 
+
+
+
 const Tema = {
   ...DefaultTheme,
   colors: {
     ...DefaultTheme.colors,
     background: '#fff',
-    principal: '#66796b',
-    neutro: '#efdfcc99',
-    destaque: '#d7a184'
+    principal: '#65C556',
+    neutro: '#f6f6f6ff',
+    negativo: '#EB271C'
   },
 };
 
