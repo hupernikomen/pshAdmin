@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "53234150017",
+    "project_id": "psh-admin-8c0f7",
+    "storage_bucket": "psh-admin-8c0f7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:53234150017:android:c5edc308e222ac164b7b80",
+        "android_client_info": {
+          "package_name": "com.pshadmin"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "53234150017-qaq5ml6vj7cirk141fajmi50tejr861g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pshadmin",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "53234150017-ef5jlf4qgsuoa5ufi9qv8r110tqpq67l.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCy8aYizVmWM3fPRcDXNja1YrcHQ3c7nDk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "53234150017-ef5jlf4qgsuoa5ufi9qv8r110tqpq67l.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

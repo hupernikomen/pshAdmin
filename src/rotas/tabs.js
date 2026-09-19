@@ -10,7 +10,6 @@ import Historico from '../pages/Historico'
 const Tab = createBottomTabNavigator();
 
 
-import { TabBarVisibilityProvider } from "../../src/context/TabBarVisibility";
 
 
 export default function Tabs() {
@@ -18,15 +17,13 @@ export default function Tabs() {
 
     <SafeAreaView style={{ flex: 1 }} edges={['bottom', 'left', 'right']}>
 
-      <TabBarVisibilityProvider>
         <Tab.Navigator
           initialRouteName='Home'
           tabBar={(props) => <TabBar {...props} />}
           screenOptions={{
             headerTitleStyle: {
-              fontSize: 18,
+              fontSize: 20,
               fontFamily: 'Roboto-Bold',
-              marginLeft: 14,
             }
           }}>
 
@@ -34,7 +31,7 @@ export default function Tabs() {
             name="Home"
             component={Home}
             options={{
-              title: '',
+              title: 'Tesouraria PSH',
               tabBarIcon: 'pulse-outline',
             }}
           />
@@ -55,7 +52,6 @@ export default function Tabs() {
 
 
         </Tab.Navigator>
-      </TabBarVisibilityProvider>
     </SafeAreaView>
   );
 }

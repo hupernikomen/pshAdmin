@@ -1,4 +1,4 @@
-import React, { createContext, useEffect, useState } from "react";
+import React, { createContext, useEffect, useState, useContext } from "react";
 import { db } from "../firebaseConnection";
 import {
   doc,
@@ -14,6 +14,8 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+
+import { AuthContext } from "./AuthContext";
 
 export const AppContext = createContext({});
 
@@ -37,10 +39,11 @@ export function AppProvider({ children }) {
   const [caixinhas, setCaixinhas] = useState([]);
   const [totalReservado, setTotalReservado] = useState(0);
 
-  const TEMP_USER_ID = "temp_user_001";
+const { user, uid, authPronto } = useContext(AuthContext);
+
 
   function getUserId() {
-    return usuarioDoAS?.usuarioId || TEMP_USER_ID;
+    return uid || user?.uid || null;
   }
 
   useEffect(() => {
@@ -48,25 +51,14 @@ export function AppProvider({ children }) {
     CarregarCaixinhas();
   }, []);
 
-  async function BuscarUsuarioAsyncStorage() {
-    try {
-      const data = await AsyncStorage.getItem("usuarioAsyncStorage");
-      if (!data) {
-        setUsuarioDoAS(null);
-        return null;
-      }
-      const parsed = JSON.parse(data);
-      setUsuarioDoAS(parsed);
-      return parsed;
-    } catch (error) {
-      console.log("Erro AsyncStorage:", error);
-      setUsuarioDoAS(null);
-      return null;
-    }
-  }
+
 
   async function HistoricoMovimentos() {
-    const userId = getUserId();
+   const userId = getUserId();
+  if (!userId) {
+    setDadosFinanceiros([]);
+    return;
+  }
 
     try {
       const q = query(
@@ -100,6 +92,10 @@ export function AppProvider({ children }) {
 
   async function ResumoFinanceiro() {
     const userId = getUserId();
+  if (!userId) {
+    setDadosFinanceiros([]);
+    return;
+  }
 
     try {
       const q = query(

@@ -1,17 +1,35 @@
-import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
 
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
+import {
+  initializeAuth,
+  getAuth,
+  getReactNativePersistence,
+} from 'firebase/auth';
+import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
+
+// Use a MESMA config que você já tem no projeto
 const firebaseConfig = {
-  apiKey: "AIzaSyBUzudyPgQYksqyWJLQjpHfMWApAmhSuWs",
-  authDomain: "tesourariaapp-dc9ee.firebaseapp.com",
-  projectId: "tesourariaapp-dc9ee",
-  storageBucket: "tesourariaapp-dc9ee.firebasestorage.app",
-  messagingSenderId: "783811848303",
-  appId: "1:783811848303:web:1e15e2647fad520b3a859a"
+  apiKey: "AIzaSyDJFnhKXoUqKSIzsffYWkJ7qGIuEUhlUFs",
+  authDomain: "psh-admin-8c0f7.firebaseapp.com",
+  projectId: "psh-admin-8c0f7",
+  storageBucket: "psh-admin-8c0f7.firebasestorage.app",
+  messagingSenderId: "53234150017",
+  appId: "1:53234150017:web:6e64b2536d79dff74b7b80"
 };
 
-const app = initializeApp(firebaseConfig);
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+
+let auth;
+try {
+  auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(ReactNativeAsyncStorage),
+  });
+} catch (e) {
+  // Se o Auth já foi criado (hot reload), reutiliza
+  auth = getAuth(app);
+}
 
 export const db = getFirestore(app);
-export const storage = getStorage(app);
+export { auth };
+export default app;

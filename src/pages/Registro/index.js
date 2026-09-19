@@ -28,6 +28,8 @@ import {
 } from "firebase/firestore";
 import Load from "../../componentes/Load";
 import Ionicons from "react-native-vector-icons/Ionicons";
+import { useAuth } from "../../context/AuthContext"; // caminho do seu projeto
+
 
 function parseNumero(txt) {
   if (txt === null || txt === undefined) return 0;
@@ -66,7 +68,10 @@ export default function Registro() {
     formatoMoeda,
   } = useContext(AppContext);
 
-  const TEMP_USER_ID = "temp_user_001";
+const { uid } = useAuth();
+
+console.log(uid, 'UID');
+
 
   const [tipoMovimento, setTipoMovimento] = useState(null);
   const [modo, setModo] = useState("nova");
@@ -107,7 +112,7 @@ export default function Registro() {
     try {
       const q = query(
         collection(db, "registros"),
-        where("idUsuario", "==", TEMP_USER_ID),
+    where("idUsuario", "==", uid),
         where("tipoMovimento", "==", tipoMovimento),
         where("status", "==", "aberta")
       );
@@ -199,6 +204,12 @@ export default function Registro() {
   }
 
   async function salvar() {
+
+    if (!uid) {
+  Alert.alert("Atenção", "Faça login novamente.");
+  return;
+}
+
     if (!tipoMovimento) {
       Alert.alert("Atenção", "Selecione Entrada ou Saída.");
       return;
@@ -262,7 +273,7 @@ export default function Registro() {
         const parcial = valorParcial ? parseNumero(valorParcial) : valor;
 
         const base = {
-          idUsuario: TEMP_USER_ID,
+          idUsuario: uid,
           tipoMovimento,
           tipo,
           data: data.getTime(),

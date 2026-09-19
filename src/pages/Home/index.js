@@ -11,7 +11,6 @@ import { useNavigation, useTheme } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../../context/AppContext";
 import Load from "../../componentes/Load";
-import { useTabBarVisibility } from "../../context/TabBarVisibility";
 
 export default function Home() {
   const {
@@ -29,7 +28,6 @@ export default function Home() {
 
   const { colors } = useTheme();
   const navigation = useNavigation();
-  const { onScroll } = useTabBarVisibility();
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -141,6 +139,7 @@ export default function Home() {
         icon: "arrow-up-outline",
         tint: "#FFEBEE",
         iconColor: "#C62828",
+        route: "APagar",
       },
       {
         id: "3",
@@ -185,8 +184,6 @@ export default function Home() {
   return (
     <View style={styles.container}>
       <FlatList
-        onScroll={onScroll}
-        scrollEventThrottle={16}
         data={resumoItens}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
@@ -223,7 +220,7 @@ export default function Home() {
                 >
                   <View style={styles.caixinhasTitleRow}>
                     <Text style={styles.miniLabel}>Caixinhas</Text>
-                    <Ionicons name="chevron-forward" size={14} color="#9aa3ad" />
+                    <Ionicons name="chevron-forward" size={14} />
                   </View>
                   <Text style={styles.miniValue}>
                     R$ {formatoMoeda.format(emCaixinhas)}
@@ -256,7 +253,16 @@ export default function Home() {
           </View>
         }
         renderItem={({ item }) => (
-          <View style={styles.itemCard}>
+
+
+
+
+
+          <TouchableOpacity
+            activeOpacity={item.route ? 0.75 : 1}
+            disabled={!item.route}
+            onPress={() => item.route && navigation.navigate(item.route)}
+            style={styles.itemCard}>
             <View style={[styles.iconCircle, { backgroundColor: item.tint }]}>
               <Ionicons name={item.icon} size={18} color={item.iconColor} />
             </View>
@@ -267,7 +273,7 @@ export default function Home() {
             </View>
 
             <Text style={styles.itemValue}>{item.value}</Text>
-          </View>
+          </TouchableOpacity>
         )}
         ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
         ListFooterComponent={<View style={{ height: 68 }} />}
@@ -288,7 +294,7 @@ const styles = StyleSheet.create({
   },
 
   balanceCard: {
-    backgroundColor: "#1f2933",
+    backgroundColor: "#fff",
     borderRadius: 22,
     padding: 18,
     marginBottom: 12,
@@ -302,12 +308,11 @@ const styles = StyleSheet.create({
   balanceLabel: {
     fontSize: 13,
     fontFamily: "Roboto-Regular",
-    color: "#9aa3ad",
+    color: '#000'
   },
   balanceValue: {
     fontSize: 30,
     fontFamily: "Roboto-Bold",
-    color: "#fff",
     letterSpacing: -0.8,
     marginBottom: 16,
   },
@@ -316,15 +321,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   miniLabel: {
-    fontSize: 11,
-    fontFamily: "Roboto-Regular",
-    color: "#8b949e",
+    fontSize: 12,
+    fontFamily: "Roboto-Light",
     marginBottom: 3,
   },
   miniValue: {
     fontSize: 14,
     fontFamily: "Roboto-Medium",
-    color: "#e8eef4",
   },
 
   chipsRow: {
@@ -340,9 +343,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   chipLabel: {
-    fontSize: 11,
-    fontFamily: "Roboto-Regular",
-    color: "#8a8f98",
+    fontSize: 12,
+    fontFamily: "Roboto-Light",
     marginBottom: 3,
   },
   chipValue: {
@@ -354,7 +356,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontFamily: "Roboto-Medium",
-    color: "#222",
     marginBottom: 12,
   },
 
@@ -380,26 +381,19 @@ const styles = StyleSheet.create({
   },
   itemTitle: {
     fontSize: 14,
-    fontFamily: "Roboto-Medium",
+    fontFamily: "Roboto-Regular",
     color: "#1f2933",
     marginBottom: 2,
   },
   itemSub: {
     fontSize: 12,
-    fontFamily: "Roboto-Regular",
-    color: "#9aa0a6",
+    fontFamily: "Roboto-Light",
   },
   itemValue: {
     fontSize: 14,
-    fontFamily: "Roboto-Bold",
-    color: "#1f2933",
+    fontFamily: "Roboto-Medium",
   },
-  balanceLabel: {
-    fontSize: 13,
-    fontFamily: "Roboto-Regular",
-    color: "#9aa3ad",
-    marginBottom: 8,
-  },
+
   caixinhasBtn: {
     alignItems: "flex-end",
   },

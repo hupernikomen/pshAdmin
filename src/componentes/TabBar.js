@@ -9,7 +9,6 @@ import {
   UIManager,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
-import { useTabBarVisibility } from "../context/TabBarVisibility";
 
 if (
   Platform.OS === "android" &&
@@ -23,7 +22,6 @@ const PILL_SIZE = 52;
 
 export default function TabbarPersonalizada({ state, descriptors, navigation }) {
   const { colors } = useTheme();
-  const { translateY } = useTabBarVisibility();
 
   const slideX = useRef(new Animated.Value(state.index * TAB_SIZE)).current;
   const scales = useRef(
@@ -66,10 +64,7 @@ export default function TabbarPersonalizada({ state, descriptors, navigation }) 
   return (
     <Animated.View
       style={[
-        styles.container,
-        {
-          transform: [{ translateY }],
-        },
+        styles.container
       ]}
     >
       <View style={[styles.content, { borderWidth: 1, borderColor: "#ddd" }]}>
@@ -80,14 +75,14 @@ export default function TabbarPersonalizada({ state, descriptors, navigation }) 
             {
               backgroundColor: colors.principal,
               transform: [{ translateX: slideX }],
-              elevation: 5,
             },
           ]}
         />
 
         {state.routes.map((route, index) => {
+
           const { options } = descriptors[route.key];
-          const isFocused = state.index === index;
+          const isFocused = state.index === index
 
           const onPress = () => {
             const event = navigation.emit({

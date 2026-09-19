@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import {
   View,
   FlatList,
@@ -13,11 +13,12 @@ import {
   Platform,
   PermissionsAndroid,
 } from "react-native";
-import { useTheme } from "@react-navigation/native";
+import { useNavigation, useTheme } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import RNFS from "react-native-fs";
 import { AppContext } from "../../context/AppContext";
 import Load from "../../componentes/Load";
+import { podeEditarRegistro } from "../../utils/registroEdit";
 
 function normalizarUri(uri) {
   if (!uri) return null;
@@ -37,7 +38,7 @@ function caminhoSemPrefixo(uri) {
 }
 
 function textoOrigem(item) {
-  if (item.tipoMovimento !== "saida") return null;
+  if (item.tipoMovimento !== "saida" && item.kind !== "pagamento") return null;
 
   if (item.origemPagamento === "caixinha") {
     return item.caixinhaNome || "Caixinha";
@@ -60,6 +61,66 @@ function textoOrigem(item) {
   return null;
 }
 
+function montarLinhasHistorico(dadosFinancas) {
+  const linhas = [];
+
+  (dadosFinancas || []).forEach((item) => {
+    const sortBase = item.reg || item.data || item.createdAt || 0;
+
+    linhas.push({
+      ...item,
+      kind: "registro",
+      rowId: item.id,
+      sortKey: sortBase,
+    });
+
+    (item.valoresPagos || []).forEach((p, idx) => {
+      linhas.push({
+        kind: "pagamento",
+        rowId: `${item.id}_pag_${p.id || idx}`,
+        id: item.id,
+        tipoMovimento: "saida",
+        tipo: item.tipo || "Pagamento",
+        descricao: item.descricao || item.tipo || "Despesa",
+        data: p.data || sortBase,
+        valorTotal: p.valor,
+        valorPagoTotal: p.valor,
+        status: "quitada",
+        origemPagamento: p.origemPagamento || item.origemPagamento || null,
+        caixinhaNome: p.caixinhaNome || item.caixinhaNome || null,
+        caixinhaId: p.caixinhaId || item.caixinhaId || null,
+        registroPaiId: item.id,
+        reg: p.data || sortBase,
+        sortKey: p.data || sortBase,
+        createdAt: p.data || sortBase,
+        reciboUrl: null,
+      });
+    });
+
+    (item.valoresRecebidos || []).forEach((p, idx) => {
+      linhas.push({
+        kind: "recebimento",
+        rowId: `${item.id}_rec_${p.id || idx}`,
+        id: item.id,
+        tipoMovimento: "entrada",
+        tipo: item.tipo || "Recebimento",
+        descricao: item.descricao || item.tipo || "Receita",
+        data: p.data || sortBase,
+        valorTotal: p.valor,
+        valorRecebidoTotal: p.valor,
+        status: "quitada",
+        registroPaiId: item.id,
+        reg: p.data || sortBase,
+        sortKey: p.data || sortBase,
+        createdAt: p.data || sortBase,
+        reciboUrl: null,
+      });
+    });
+  });
+
+  return linhas.sort((a, b) => (b.sortKey || 0) - (a.sortKey || 0));
+}
+
 export default function Historico() {
   const {
     dadosFinancas,
@@ -70,6 +131,7 @@ export default function Historico() {
   } = useContext(AppContext);
 
   const { colors } = useTheme();
+  const navigation = useNavigation();
   const [refreshing, setRefreshing] = useState(false);
   const [fotoSelecionada, setFotoSelecionada] = useState(null);
 
@@ -91,7 +153,6 @@ export default function Historico() {
 
   async function pedirPermissaoLeitura() {
     if (Platform.OS !== "android") return true;
-
     try {
       if (Platform.Version >= 33) {
         const granted = await PermissionsAndroid.request(
@@ -99,7 +160,6 @@ export default function Historico() {
         );
         return granted === PermissionsAndroid.RESULTS.GRANTED;
       }
-
       const granted = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE
       );
@@ -111,7 +171,6 @@ export default function Historico() {
 
   async function abrirRecibo(reciboUrl) {
     if (!reciboUrl) return;
-
     const ok = await pedirPermissaoLeitura();
     if (!ok) {
       Alert.alert(
@@ -120,10 +179,8 @@ export default function Historico() {
       );
       return;
     }
-
     const uri = normalizarUri(reciboUrl);
     const path = caminhoSemPrefixo(uri);
-
     try {
       const existe = await RNFS.exists(path);
       if (!existe) {
@@ -139,20 +196,21 @@ export default function Historico() {
     }
   }
 
-  const sortedRegistros = dadosFinancas
-    ? [...dadosFinancas].sort((a, b) => (b.reg || 0) - (a.reg || 0))
-    : [];
+  const linhas = useMemo(
+    () => montarLinhasHistorico(dadosFinancas),
+    [dadosFinancas]
+  );
 
   if (load && !refreshing) return <Load />;
 
   return (
     <View style={styles.container}>
       <FlatList
-        data={sortedRegistros}
-        keyExtractor={(item) => item.id}
+        data={linhas}
+        keyExtractor={(item) => item.rowId}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+        ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIcon}>
@@ -172,7 +230,11 @@ export default function Historico() {
           />
         }
         renderItem={({ item }) => {
+          const isPagamento = item.kind === "pagamento";
+          const isRecebimento = item.kind === "recebimento";
+          const isParcela = isPagamento || isRecebimento;
           const isEntrada = item.tipoMovimento === "entrada";
+
           const valor =
             item.valorRecebidoTotal ||
             item.valorPagoTotal ||
@@ -180,78 +242,134 @@ export default function Historico() {
             0;
 
           const temParcial =
+            !isParcela &&
             item.valorTotal &&
             (item.valorRecebidoTotal || item.valorPagoTotal) &&
             item.valorTotal !==
               (item.valorRecebidoTotal || item.valorPagoTotal);
 
           const quitado = item.status === "quitada";
-          const temRecibo = !!item.reciboUrl;
+          const temRecibo = !!item.reciboUrl && !isParcela;
           const origem = textoOrigem(item);
+          const editavel = !isParcela && podeEditarRegistro(item);
 
-          const tint = isEntrada ? "#E8F5E9" : "#FFEBEE";
-          const iconColor = isEntrada ? "#2E7D32" : "#C62828";
-          const iconName = isEntrada
-            ? "arrow-down-outline"
-            : "arrow-up-outline";
+          const badgeLabel = isPagamento
+            ? "Pagamento"
+            : isRecebimento
+            ? "Recebimento"
+            : isEntrada
+            ? "Entrada"
+            : "Saída";
+
+          const badgeBg = isEntrada ? "#E8F5E9" : "#FFEBEE";
+          const badgeColor = isEntrada ? "#2E7D32" : "#C62828";
 
           return (
-            <View style={styles.itemCard}>
-              <View style={[styles.iconCircle, { backgroundColor: tint }]}>
-                <Ionicons name={iconName} size={18} color={iconColor} />
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={editavel ? 0.75 : 1}
+              disabled={!editavel}
+              onPress={() => {
+                if (editavel) {
+                  navigation.navigate("EditarRegistro", { id: item.id });
+                }
+              }}
+            >
+              {/* Linha 1: badge + valor */}
+              <View style={styles.topRow}>
+                <View style={[styles.badge, { backgroundColor: badgeBg }]}>
+                  <Text style={[styles.badgeText, { color: badgeColor }]}>
+                    {badgeLabel}
+                  </Text>
+                </View>
+
+                <Text style={[styles.valor, { color: badgeColor }]}>
+                  {isEntrada ? "+" : "−"} {formatoMoeda.format(valor)}
+                </Text>
               </View>
 
-              <View style={styles.itemCenter}>
-                <Text style={styles.itemTitle} numberOfLines={1}>
-                  {item.descricao || "Sem descrição"}
-                </Text>
+              {/* Linha 2: descrição */}
+              <Text style={styles.descricao} numberOfLines={2}>
+                {item.descricao || "Sem descrição"}
+              </Text>
 
-                <Text style={styles.itemSub} numberOfLines={1}>
+              {/* Linha 3: meta */}
+              <View style={styles.metaRow}>
+                <Text style={styles.meta}>
                   {item.data
                     ? new Date(item.data).toLocaleDateString("pt-BR")
                     : "-"}
-                  {"  ·  "}
-                  {item.tipo || "Sem tipo"}
-                  {"  ·  "}
-                  {quitado ? "Quitado" : "Aberto"}
                 </Text>
 
-                {!!origem && (
-                  <Text style={styles.itemOrigem}>Pago com: {origem}</Text>
+                {!isParcela && (
+                  <>
+                    <Text style={styles.dot}>·</Text>
+                    <Text style={styles.meta}>{item.tipo || "Sem tipo"}</Text>
+                    <Text style={styles.dot}>·</Text>
+                    <Text
+                      style={[
+                        styles.meta,
+                        { color: quitado ? colors.principal : "#e6a23c" },
+                      ]}
+                    >
+                      {quitado ? "Quitado" : "Aberto"}
+                    </Text>
+                  </>
                 )}
 
-                {temParcial && (
-                  <Text style={styles.itemParcial}>
-                    Total {formatoMoeda.format(item.valorTotal)} · Pago{" "}
-                    {formatoMoeda.format(
-                      item.valorRecebidoTotal || item.valorPagoTotal || 0
-                    )}
-                  </Text>
-                )}
+                {isParcela && item.tipo ? (
+                  <>
+                    <Text style={styles.dot}>·</Text>
+                    <Text style={styles.meta}>{item.tipo}</Text>
+                  </>
+                ) : null}
               </View>
 
-              <View style={styles.itemRight}>
-                <Text
-                  style={[
-                    styles.itemValue,
-                    { color: isEntrada ? "#2E7D32" : "#C62828" },
-                  ]}
-                >
-                  {isEntrada ? "+" : "−"} {formatoMoeda.format(valor)}
+              {/* Extras só se existirem */}
+              {!!origem && (
+                <Text style={styles.extra}>Pago com: {origem}</Text>
+              )}
+
+              {temParcial && (
+                <Text style={styles.extra}>
+                  Total {formatoMoeda.format(item.valorTotal)} · Pago{" "}
+                  {formatoMoeda.format(
+                    item.valorRecebidoTotal || item.valorPagoTotal || 0
+                  )}
                 </Text>
+              )}
 
-                {temRecibo && (
-                  <TouchableOpacity
-                    style={styles.reciboBtn}
-                    onPress={() => abrirRecibo(item.reciboUrl)}
-                    activeOpacity={0.75}
-                  >
-                    <Ionicons name="image-outline" size={14} color="#6b7280" />
-                    <Text style={styles.reciboText}>Recibo</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
+              {/* Ações */}
+              {(temRecibo || editavel) && (
+                <View style={styles.actions}>
+                  {temRecibo && (
+                    <TouchableOpacity
+                      style={styles.actionBtn}
+                      onPress={() => abrirRecibo(item.reciboUrl)}
+                      activeOpacity={0.75}
+                    >
+                      <Ionicons name="image-outline" size={15} color="#666" />
+                      <Text style={styles.actionText}>Recibo</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {editavel && (
+                    <View style={styles.actionBtn}>
+                      <Ionicons
+                        name="create-outline"
+                        size={15}
+                        color={colors.principal}
+                      />
+                      <Text
+                        style={[styles.actionText, { color: colors.principal }]}
+                      >
+                        Editar
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+            </TouchableOpacity>
           );
         }}
       />
@@ -274,7 +392,6 @@ export default function Historico() {
                 resizeMode="contain"
               />
             )}
-
             <TouchableOpacity
               style={[styles.closeBtn, { backgroundColor: colors.principal }]}
               onPress={() => setFotoSelecionada(null)}
@@ -294,71 +411,84 @@ const styles = StyleSheet.create({
     backgroundColor: "#f4f5f7",
   },
   listContent: {
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 36,
+    paddingBottom: 100,
   },
 
-  itemCard: {
+  card: {
     backgroundColor: "#fff",
-    borderRadius: 18,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    borderRadius: 16,
+    padding: 14,
+  },
+
+  topRow: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
   },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
-  itemCenter: {
-    flex: 1,
-    paddingRight: 8,
-  },
-  itemTitle: {
-    fontSize: 14,
-    fontFamily: "Roboto-Medium",
-    color: "#1f2933",
-    marginBottom: 2,
-  },
-  itemSub: {
-    fontSize: 12,
-    fontFamily: "Roboto-Regular",
-    color: "#9aa0a6",
-  },
-  itemOrigem: {
-    marginTop: 4,
+  badgeText: {
     fontSize: 11,
     fontFamily: "Roboto-Medium",
-    color: "#6b7280",
   },
-  itemParcial: {
-    marginTop: 3,
-    fontSize: 11,
-    fontFamily: "Roboto-Regular",
-    color: "#9aa0a6",
-  },
-  itemRight: {
-    alignItems: "flex-end",
-  },
-  itemValue: {
-    fontSize: 14,
+  valor: {
+    fontSize: 16,
     fontFamily: "Roboto-Bold",
   },
-  reciboBtn: {
+
+  descricao: {
+    fontSize: 15,
+    fontFamily: "Roboto-Medium",
+    color: "#1f2933",
+    marginBottom: 6,
+  },
+
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+  },
+  meta: {
+    fontSize: 12,
+    fontFamily: "Roboto-Regular",
+    color: "#8a8f98",
+  },
+  dot: {
+    marginHorizontal: 6,
+    color: "#ccc",
+    fontSize: 12,
+  },
+
+  extra: {
     marginTop: 6,
+    fontSize: 12,
+    fontFamily: "Roboto-Regular",
+    color: "#6b7280",
+  },
+
+  actions: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#eee",
+    flexDirection: "row",
+    gap: 16,
+  },
+  actionBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
   },
-  reciboText: {
-    fontSize: 11,
-    fontFamily: "Roboto-Regular",
-    color: "#6b7280",
+  actionText: {
+    fontSize: 12,
+    fontFamily: "Roboto-Medium",
+    color: "#666",
   },
 
   emptyContainer: {
