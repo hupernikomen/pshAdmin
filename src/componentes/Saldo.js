@@ -1,54 +1,85 @@
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-
+import { useContext, useState, useEffect } from "react";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
-import { AppContext } from '../context/AppContext';
-import { useContext } from 'react';
-import { useNavigation, useTheme } from '@react-navigation/native';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { AppContext } from "../context/AppContext";
+import { useNavigation, useTheme } from "@react-navigation/native";
 
+const KEY_SALDO_OCULTO = "@saldo_oculto";
 
-export default function componentes({
+export default function Saldo({
   saldoAtual,
   caixaGeral,
   emCaixinhas,
   saldoAnterior,
   projecaoFutura,
-  qtdCaixinhas
-
+  qtdCaixinhas,
 }) {
+  const { colors } = useTheme();
+  const { formatoMoeda } = useContext(AppContext);
+  const navigation = useNavigation();
+  const [oculto, setOculto] = useState(false);
+  const [pronto, setPronto] = useState(false);
 
-  const {colors} = useTheme()
+  useEffect(() => {
+    AsyncStorage.getItem(KEY_SALDO_OCULTO)
+      .then((v) => {
+        if (v === "1") setOculto(true);
+        if (v === "0") setOculto(false);
+      })
+      .finally(() => setPronto(true));
+  }, []);
 
-  const {
-    formatoMoeda,
-  } = useContext(AppContext);
+  async function alternarOculto() {
+    const novo = !oculto;
+    setOculto(novo);
+    try {
+      await AsyncStorage.setItem(KEY_SALDO_OCULTO, novo ? "1" : "0");
+    } catch (e) {
+      console.log("Erro ao salvar preferência de saldo:", e);
+    }
+  }
 
-  const navigation = useNavigation()
+  function mask(valor) {
+    if (oculto) return "R$ •••••";
+    return `R$ ${formatoMoeda.format(valor)}`;
+  }
 
   return (
     <View>
       <View style={styles.balanceCard}>
         <View style={styles.balanceTop}>
-          <Text style={styles.balanceLabel}>Saldo atual</Text>
+          <View style={styles.labelRow}>
+            <Text style={styles.balanceLabel}>Saldo atual</Text>
+            <TouchableOpacity
+              onPress={alternarOculto}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              activeOpacity={0.7}
+              style={styles.eyeBtn}
+            >
+              <Ionicons
+                name={oculto ? "eye-off-outline" : "eye-outline"}
+                size={20}
+                color="#666"
+              />
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             onPress={() => navigation.navigate("Registro")}
-            style={[styles.addBtn, {backgroundColor: colors.principal}]}
+            style={[styles.addBtn, { backgroundColor: colors.principal }]}
             activeOpacity={0.8}
           >
             <Ionicons name="add" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.balanceValue}>
-          R$ {formatoMoeda.format(saldoAtual)}
-        </Text>
+        <Text style={styles.balanceValue}>{mask(saldoAtual)}</Text>
 
         <View style={styles.balanceBottom}>
           <View>
             <Text style={styles.miniLabel}>Caixa geral</Text>
-            <Text style={styles.miniValue}>
-              R$ {formatoMoeda.format(caixaGeral)}
-            </Text>
+            <Text style={styles.miniValue}>{mask(caixaGeral)}</Text>
           </View>
 
           <TouchableOpacity
@@ -60,9 +91,7 @@ export default function componentes({
               <Text style={styles.miniLabel}>Caixinhas</Text>
               <Ionicons name="chevron-forward" size={14} />
             </View>
-            <Text style={styles.miniValue}>
-              R$ {formatoMoeda.format(emCaixinhas)}
-            </Text>
+            <Text style={styles.miniValue}>{mask(emCaixinhas)}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -70,19 +99,17 @@ export default function componentes({
       <View style={styles.chipsRow}>
         <View style={styles.chip}>
           <Text style={styles.chipLabel}>Anterior</Text>
-          <Text style={styles.chipValue}>
-            R$ {formatoMoeda.format(saldoAnterior)}
-          </Text>
+          <Text style={styles.chipValue}>{mask(saldoAnterior)}</Text>
         </View>
         <View style={styles.chip}>
           <Text style={styles.chipLabel}>Projeção</Text>
-          <Text style={styles.chipValue}>
-            R$ {formatoMoeda.format(projecaoFutura)}
-          </Text>
+          <Text style={styles.chipValue}>{mask(projecaoFutura)}</Text>
         </View>
         <View style={styles.chip}>
           <Text style={styles.chipLabel}>Caixinhas</Text>
-          <Text style={styles.chipValue}>{qtdCaixinhas}</Text>
+          <Text style={styles.chipValue}>
+            {oculto ? "•" : qtdCaixinhas}
+          </Text>
         </View>
       </View>
 
@@ -102,7 +129,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+  },
+  labelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  eyeBtn: {
+    padding: 2,
   },
   addBtn: {
     width: 34,
@@ -114,12 +148,11 @@ const styles = StyleSheet.create({
   balanceLabel: {
     fontSize: 13,
     fontFamily: "Roboto-Regular",
-    color: "#000",
   },
   balanceValue: {
     fontSize: 30,
     fontFamily: "Roboto-Bold",
-    letterSpacing: -0.8,
+    letterSpacing: -1,
     marginBottom: 16,
   },
   balanceBottom: {
@@ -171,4 +204,4 @@ const styles = StyleSheet.create({
     gap: 2,
     marginBottom: 3,
   },
-})
+});

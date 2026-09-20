@@ -51,7 +51,7 @@ export default function Home() {
       headerRight: () => (
         <TouchableOpacity
           onPress={() => setMenuAberto(true)}
-          style={{ marginRight: 12 }}
+          style={{ marginRight: 16 }}
           activeOpacity={0.8}
         >
           {foto ? (
@@ -357,9 +357,9 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 20,
     backgroundColor: "#ddd",
   },
   avatarFallback: {
