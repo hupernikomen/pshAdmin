@@ -112,7 +112,7 @@ export default function TabbarPersonalizada({
               <Ionicons
                 name={nomeIcone(options.tabBarIcon, isFocused)}
                 size={26}
-                color={isFocused ? "#fff" : "#9aa0a6"}
+                color={isFocused ? "#fff" : "#777"}
               />
             </TouchableOpacity>
           );
@@ -139,11 +139,7 @@ const styles = StyleSheet.create({
     borderRadius: 35,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#ececec",
-    elevation: 4,
-    shadowColor: "#1f2933",
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   pill: {
     position: "absolute",

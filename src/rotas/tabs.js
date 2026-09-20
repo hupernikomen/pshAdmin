@@ -17,41 +17,42 @@ export default function Tabs() {
 
     <SafeAreaView style={{ flex: 1 }} edges={['bottom', 'left', 'right']}>
 
-        <Tab.Navigator
-          initialRouteName='Home'
-          tabBar={(props) => <TabBar {...props} />}
-          screenOptions={{
-            headerTitleStyle: {
-              fontSize: 16,
-              fontFamily: 'Roboto-Medium',
-            }
-          }}>
+      <Tab.Navigator
+        initialRouteName='Home'
+        tabBar={(props) => <TabBar {...props} />}
+        screenOptions={{
+          headerTitleStyle: {
+            fontSize: 18,
+            fontFamily: 'Roboto-Medium',
+          },
+          headerShadowVisible: false
+        }}>
 
-          <Tab.Screen
-            name="Home"
-            component={Home}
-            options={{
-              title: 'Tesouraria PSH',
-              tabBarIcon: 'pie-chart-outline',
-            }}
-          />
-          <Tab.Screen
-            name="Histórico"
-            component={Historico}
-            options={{
-              tabBarIcon: 'albums-outline',
-            }}
-          />
-          <Tab.Screen
-            name="Relatório"
-            component={Relatorio}
-            options={{
-              tabBarIcon: 'reader-outline',
-            }}
-          />
+        <Tab.Screen
+          name="Home"
+          component={Home}
+          options={{
+            title: 'Tesouraria PSH',
+            tabBarIcon: 'pie-chart-outline',
+          }}
+        />
+        <Tab.Screen
+          name="Histórico"
+          component={Historico}
+          options={{
+            tabBarIcon: 'folder-open-outline',
+          }}
+        />
+        <Tab.Screen
+          name="Relatório"
+          component={Relatorio}
+          options={{
+            tabBarIcon: 'reader-outline',
+          }}
+        />
 
 
-        </Tab.Navigator>
+      </Tab.Navigator>
     </SafeAreaView>
   );
 }

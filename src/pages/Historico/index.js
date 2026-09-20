@@ -12,6 +12,7 @@ import {
   Alert,
   Platform,
   PermissionsAndroid,
+  ScrollView,
 } from "react-native";
 import { useNavigation, useTheme } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
@@ -20,6 +21,8 @@ import { AppContext } from "../../context/AppContext";
 import { useAuth } from "../../context/AuthContext";
 import Load from "../../componentes/Load";
 import { podeEditarRegistro } from "../../utils/registroEdit";
+
+const LIMITES = [30, 60, 90, 150];
 
 function normalizarUri(uri) {
   if (!uri) return null;
@@ -70,7 +73,6 @@ function montarLinhasHistorico(dadosFinancas) {
     const pagos = item.valoresPagos || [];
     const recebidos = item.valoresRecebidos || [];
 
-    // Card principal do registro (sempre)
     linhas.push({
       ...item,
       kind: "registro",
@@ -78,7 +80,6 @@ function montarLinhasHistorico(dadosFinancas) {
       sortKey: sortBase,
     });
 
-    // Só pagamentos extras (pula o 1º — já está no registro)
     if (pagos.length > 1) {
       const totalParcelas =
         item.quantidadeParcelas ||
@@ -110,7 +111,6 @@ function montarLinhasHistorico(dadosFinancas) {
       });
     }
 
-    // Só recebimentos extras (pula o 1º)
     if (recebidos.length > 1) {
       recebidos.slice(1).forEach((p, idx) => {
         linhas.push({
@@ -151,6 +151,7 @@ export default function Historico() {
   const navigation = useNavigation();
   const [refreshing, setRefreshing] = useState(false);
   const [fotoSelecionada, setFotoSelecionada] = useState(null);
+  const [limite, setLimite] = useState(30);
 
   useEffect(() => {
     if (!authPronto) return;
@@ -221,12 +222,53 @@ export default function Historico() {
     [dadosFinancas]
   );
 
+  const linhasLimitadas = useMemo(
+    () => linhas.slice(0, limite),
+    [linhas, limite]
+  );
+
   if ((!authPronto || load) && !refreshing) return <Load />;
 
   return (
     <View style={styles.container}>
+      <View style={styles.filtroWrap}>
+        <Text style={styles.filtroLabel}>Mostrar</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filtroRow}
+        >
+          {LIMITES.map((n) => {
+            const ativo = limite === n;
+            return (
+              <TouchableOpacity
+                key={n}
+                style={[
+                  styles.filtroChip,
+                  ativo && { backgroundColor: colors.principal },
+                ]}
+                onPress={() => setLimite(n)}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.filtroChipText,
+                    ativo && { color: "#fff" },
+                  ]}
+                >
+                  {n}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+        <Text style={styles.filtroInfo}>
+          {Math.min(limite, linhas.length)} de {linhas.length}
+        </Text>
+      </View>
+
       <FlatList
-        data={linhas}
+        data={linhasLimitadas}
         keyExtractor={(item) => item.rowId}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
@@ -264,7 +306,6 @@ export default function Historico() {
                 : `Parcela ${item.parcelaNumero}`
               : null;
 
-
           const isParcela = isPagamento || isRecebimento;
 
           const valor =
@@ -278,9 +319,8 @@ export default function Historico() {
             item.valorTotal &&
             (item.valorRecebidoTotal || item.valorPagoTotal) &&
             item.valorTotal !==
-            (item.valorRecebidoTotal || item.valorPagoTotal);
+              (item.valorRecebidoTotal || item.valorPagoTotal);
 
-          const quitado = item.status === "quitada";
           const temRecibo = !!item.reciboUrl && !isParcela;
           const origem = textoOrigem(item);
           const editavel = !isParcela && podeEditarRegistro(item);
@@ -288,10 +328,10 @@ export default function Historico() {
           const badgeLabel = isPagamento
             ? "Pagamento"
             : isRecebimento
-              ? "Recebimento"
-              : isEntrada
-                ? "Entrada"
-                : "Saída";
+            ? "Recebimento"
+            : isEntrada
+            ? "Entrada"
+            : "Saída";
 
           const badgeBg = isEntrada ? "#E8F5E9" : "#FFEBEE";
           const badgeColor = isEntrada ? "#2E7D32" : "#C62828";
@@ -308,13 +348,17 @@ export default function Historico() {
               }}
             >
               <View style={styles.topRow}>
-                <View style={{flexDirection:"row", alignItems:'center', gap: 14}}>
-
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 14,
+                  }}
+                >
                   <View style={[styles.badge, { backgroundColor: badgeBg }]}>
                     <Text style={[styles.badgeText, { color: badgeColor }]}>
                       {badgeLabel}
                     </Text>
-
                   </View>
                   <Text style={styles.meta}>
                     {item.data
@@ -333,30 +377,10 @@ export default function Historico() {
               </Text>
 
               <View style={styles.metaRow}>
-
-
-                {!isParcelaLinha && (
-                  <>
-                    {/* <Text style={styles.meta}>{item.tipo || "Sem tipo"}</Text> */}
-                    {/* <Text style={styles.dot}>·</Text> */}
-                    <Text
-                      style={[
-                        styles.meta,
-                        { backgroundColor: quitado ? '#E8F5E9' : "#e6a23c", paddingHorizontal:4 },
-                      ]}
-                    >
-                      {quitado ? "Quitado" : "Aberto"}
-                    </Text>
-                  </>
-                )}
-
                 {isParcelaLinha && (
-                  <>
-                    <Text style={styles.dot}>·</Text>
-                    <Text style={styles.meta}>
-                      {textoParcela || item.tipo || "Pagamento"}
-                    </Text>
-                  </>
+                  <Text style={styles.meta}>
+                    {textoParcela || item.tipo || "Pagamento"}
+                  </Text>
                 )}
               </View>
 
@@ -388,15 +412,8 @@ export default function Historico() {
 
                   {editavel && (
                     <View style={styles.actionBtn}>
-                      <Ionicons
-                        name="create-outline"
-                        size={15}
-                      />
-                      <Text
-                        style={[styles.actionText]}
-                      >
-                        Editar
-                      </Text>
+                      <Ionicons name="create-outline" size={15} />
+                      <Text style={styles.actionText}>Editar</Text>
                     </View>
                   )}
                 </View>
@@ -442,9 +459,43 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f4f5f7",
   },
+  filtroWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 8,
+    backgroundColor: "#f4f5f7",
+  },
+  filtroLabel: {
+    fontSize: 12,
+    fontFamily: "Roboto-Regular",
+    color: "#8a8f98",
+    marginBottom: 8,
+  },
+  filtroRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+  },
+  filtroChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+  },
+  filtroChipText: {
+    fontSize: 13,
+    fontFamily: "Roboto-Medium",
+    color: "#333",
+  },
+  filtroInfo: {
+    marginTop: 8,
+    fontSize: 11,
+    fontFamily: "Roboto-Regular",
+    color: "#9aa0a6",
+  },
   listContent: {
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 4,
     paddingBottom: 100,
   },
   card: {
@@ -456,7 +507,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 8,
+    marginBottom: 12,
   },
   badge: {
     paddingHorizontal: 10,
@@ -474,8 +525,7 @@ const styles = StyleSheet.create({
   descricao: {
     fontSize: 15,
     fontFamily: "Roboto-Medium",
-    color: "#1f2933",
-    marginBottom: 6,
+    marginBottom: 2,
   },
   metaRow: {
     flexDirection: "row",
@@ -486,16 +536,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Roboto-Regular",
   },
-  dot: {
-    marginHorizontal: 6,
-    color: "#ccc",
-    fontSize: 12,
-  },
   extra: {
     marginTop: 6,
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    color: "#6b7280",
   },
   actions: {
     marginTop: 12,
@@ -512,8 +556,7 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontSize: 12,
-    fontFamily: "Roboto-Medium",
-    color: "#666",
+    fontFamily: "Roboto-Light",
   },
   emptyContainer: {
     marginTop: 80,

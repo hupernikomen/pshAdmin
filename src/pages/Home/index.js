@@ -11,10 +11,12 @@ import {
   Pressable,
   Alert,
 } from "react-native";
+
 import { useNavigation, useTheme } from "@react-navigation/native";
-import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../../context/AppContext";
 import { useAuth } from "../../context/AuthContext";
+
+import Ionicons from "react-native-vector-icons/Ionicons";
 import Load from "../../componentes/Load";
 import Saldo from "../../componentes/Saldo";
 
@@ -150,10 +152,6 @@ export default function Home() {
     (i) => i.tipo === "Saldo inicial" && i.data
   );
 
-  // Média de dízimos:
-  // meses = do mês do saldo inicial até o mês ATUAL (inclusive)
-  // média = total de dízimos no período ÷ quantidade de meses
-  // Ex.: SI em jul + dízimo em set → 3 meses (jul, ago, set) → 650 / 3
   let mediaDizimosAnual = 0;
 
   if (saldoInicialReg) {
@@ -339,6 +337,7 @@ export default function Home() {
             >
               <Ionicons name="log-out-outline" size={18} />
               <Text style={styles.menuSair}>Sair</Text>
+
             </TouchableOpacity>
           </Pressable>
         </Pressable>
