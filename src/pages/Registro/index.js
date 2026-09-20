@@ -152,7 +152,7 @@ export default function Registro() {
   const [caixinhaId, setCaixinhaId] = useState(null);
   const [temSaldoInicial, setTemSaldoInicial] = useState(false);
 
-  const tiposEntrada = ["Saldo inicial", "Dízimo", "Oferta", "Bazar"];
+  const tiposEntrada = ["Saldo inicial", "Dízimo", "Oferta", "Bazar", "Rifa", "Propósito", "Doação", "Venda de Lanche"];
   const tiposSaida = ["Conta Fixa", "Parcelada"];
   const isSaldoInicial = tipo === "Saldo inicial";
   const isParcelada = tipo === "Parcelada" || selecionado?.tipo === "Parcelada";
@@ -649,25 +649,23 @@ export default function Registro() {
           {modo === "nova" && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Tipo</Text>
-              <View style={styles.chips}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chips}>
                 {(tipoMovimento === "entrada" ? tiposEntrada : tiposSaida).map(
                   (t) => {
                     const ativo = tipo === t;
                     const bloqueado = t === "Saldo inicial" && temSaldoInicial;
+                    if (!bloqueado) {
                     return (
+                        
                       <TouchableOpacity
                         key={t}
-                        disabled={bloqueado}
                         style={[
                           styles.chip,
                           ativo && { backgroundColor: colors.principal },
-                          bloqueado && styles.chipDisabled,
                         ]}
                         onPress={() => {
                           setTipo(t);
-                          if (t === "Saldo inicial" && !descricao) {
-                            setDescricao("Saldo inicial");
-                          }
+             
                           if (t === "Parcelada" && !qtdParcelas) {
                             setQtdParcelas("2");
                           }
@@ -682,11 +680,11 @@ export default function Registro() {
                         >
                           {t}
                         </Text>
-                      </TouchableOpacity>
-                    );
+                      </TouchableOpacity> 
+                    )}
                   }
                 )}
-              </View>
+              </ScrollView>
             </View>
           )}
 
@@ -884,7 +882,7 @@ export default function Registro() {
                 value={data}
                 mode="date"
                 display="default"
-                onChange={(e, selected) => {
+                onValueChange={(e, selected) => {
                   setShowDatePicker(false);
                   if (selected) setData(selected);
                 }}
@@ -1053,6 +1051,7 @@ const styles = StyleSheet.create({
   chip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
+    marginHorizontal:2,
     borderRadius: 16,
     backgroundColor: "#fff",
   },
