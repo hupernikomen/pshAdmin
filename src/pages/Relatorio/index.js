@@ -15,6 +15,7 @@ import RNFS from "react-native-fs";
 import Share from "react-native-share";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../../context/AppContext";
+import { useAuth } from "../../context/AuthContext";
 import Load from "../../componentes/Load";
 
 const MESES = [
@@ -41,9 +42,21 @@ function calcularMes(mesIndex, ano) {
   };
 }
 
+// Cores do app (suaves)
+const C = {
+  ink: rgb(0.12, 0.16, 0.2),       // #1f2933
+  muted: rgb(0.55, 0.58, 0.62),    // cinza texto
+  line: rgb(0.92, 0.93, 0.94),     // #ececec
+  card: rgb(0.96, 0.96, 0.97),     // #f4f5f7
+  green: rgb(0.18, 0.49, 0.2),     // entrada
+  red: rgb(0.78, 0.16, 0.16),      // saída
+  white: rgb(1, 1, 1),
+};
+
 export default function Relatorio() {
   const { dadosFinancas, load, HistoricoMovimentos, formatoMoeda } =
     useContext(AppContext);
+  const { uid, authPronto } = useAuth();
   const { colors } = useTheme();
   const navigation = useNavigation();
 
@@ -62,8 +75,9 @@ export default function Relatorio() {
   const [gerando, setGerando] = useState(false);
 
   useEffect(() => {
+    if (!authPronto || !uid) return;
     HistoricoMovimentos();
-  }, []);
+  }, [authPronto, uid]);
 
   const { inicio, fim } = useMemo(() => {
     if (modoFiltro === "mes") {
@@ -118,7 +132,7 @@ export default function Relatorio() {
     if (modoFiltro === "mes") {
       return `${MESES[mesSelecionado]} de ${anoSelecionado}`;
     }
-    return `${inicio.toLocaleDateString("pt-BR")} até ${fim.toLocaleDateString("pt-BR")}`;
+    return `${inicio.toLocaleDateString("pt-BR")} ate ${fim.toLocaleDateString("pt-BR")}`;
   }, [modoFiltro, mesSelecionado, anoSelecionado, inicio, fim]);
 
   async function exportarPDF() {
@@ -136,148 +150,149 @@ export default function Relatorio() {
 
       const pageWidth = 595;
       const pageHeight = 842;
-      const margin = 28;
-      const gap = 14;
-      const leftWidth = 340;
-      const rightX = margin + leftWidth + gap;
-      const rightWidth = pageWidth - rightX - margin;
+      const margin = 32;
+      const colGap = 18;
+      const leftW = 320;
+      const rightX = margin + leftW + colGap;
+      const rightW = pageWidth - rightX - margin;
 
       let page = pdfDoc.addPage([pageWidth, pageHeight]);
-      let yLeft = pageHeight - margin;
-      let yRight = pageHeight - margin;
+      let yL = pageHeight - margin;
+      let yR = pageHeight - margin;
 
       const safe = (t) =>
         String(t ?? "")
           .normalize("NFD")
           .replace(/[\u0300-\u036f]/g, "");
 
-      const ensureLeft = (need = 14) => {
-        if (yLeft - need < margin) {
-          page = pdfDoc.addPage([pageWidth, pageHeight]);
-          yLeft = pageHeight - margin;
-          yRight = pageHeight - margin;
-          drawRightHeader();
-        }
+      const newPage = () => {
+        page = pdfDoc.addPage([pageWidth, pageHeight]);
+        yL = pageHeight - margin;
+        yR = pageHeight - margin;
+        drawDivider();
       };
 
-      const ensureRight = (need = 12) => {
-        if (yRight - need < margin) {
-          page = pdfDoc.addPage([pageWidth, pageHeight]);
-          yLeft = pageHeight - margin;
-          yRight = pageHeight - margin;
-          drawLeftHeader();
-        }
-      };
-
-      const textLeft = (text, opts = {}) => {
-        const size = opts.size || 10;
-        const used = opts.bold ? fontBold : font;
-        ensureLeft(size + 4);
-        page.drawText(safe(text), {
-          x: opts.x ?? margin,
-          y: yLeft,
-          size,
-          font: used,
-          color: opts.color || rgb(0.2, 0.2, 0.2),
-          maxWidth: opts.maxWidth || leftWidth,
+      const drawDivider = () => {
+        page.drawLine({
+          start: { x: rightX - colGap / 2, y: margin },
+          end: { x: rightX - colGap / 2, y: pageHeight - margin },
+          thickness: 0.5,
+          color: C.line,
         });
-        yLeft -= opts.lh || size + 5;
       };
 
-      const textRight = (text, opts = {}) => {
-        const size = opts.size || 8;
-        const used = opts.bold ? fontBold : font;
-        ensureRight(size + 3);
-        page.drawText(safe(text), {
-          x: opts.x ?? rightX,
-          y: yRight,
-          size,
-          font: used,
-          color: opts.color || rgb(0.25, 0.25, 0.25),
-          maxWidth: opts.maxWidth || rightWidth,
-        });
-        yRight -= opts.lh || size + 4;
+      const needL = (h) => {
+        if (yL - h < margin + 20) newPage();
+      };
+      const needR = (h) => {
+        if (yR - h < margin + 20) newPage();
       };
 
-      const drawLeftHeader = () => {
-        textLeft("Relatorio Financeiro", {
-          size: 16,
-          bold: true,
-          color: rgb(0.17, 0.24, 0.31),
-          lh: 20,
+      drawDivider();
+
+      // ===== CABEÇALHO ESQUERDA =====
+      page.drawText(safe("Relatorio Financeiro"), {
+        x: margin,
+        y: yL,
+        size: 15,
+        font: fontBold,
+        color: C.ink,
+      });
+      yL -= 16;
+
+      page.drawText(safe(labelPeriodo), {
+        x: margin,
+        y: yL,
+        size: 9,
+        font,
+        color: C.muted,
+      });
+      yL -= 8;
+
+      page.drawLine({
+        start: { x: margin, y: yL },
+        end: { x: margin + leftW, y: yL },
+        thickness: 0.5,
+        color: C.line,
+      });
+      yL -= 16;
+
+      // Cards resumo
+      const cardH = 40;
+      const cardGap = 6;
+      const cardW = (leftW - cardGap * 2) / 3;
+      needL(cardH + 16);
+
+      const cards = [
+        { label: "Receitas", value: resumo.entradas, tone: C.green },
+        { label: "Despesas", value: resumo.saidas, tone: C.red },
+        { label: "Saldo", value: resumo.saldo, tone: C.ink },
+      ];
+
+      cards.forEach((c, i) => {
+        const x = margin + i * (cardW + cardGap);
+        page.drawRectangle({
+          x,
+          y: yL - cardH,
+          width: cardW,
+          height: cardH,
+          color: C.card,
+          borderColor: C.line,
+          borderWidth: 0.5,
         });
-        textLeft(labelPeriodo, {
+        page.drawText(safe(c.label.toUpperCase()), {
+          x: x + 8,
+          y: yL - 14,
+          size: 7,
+          font,
+          color: C.muted,
+        });
+        page.drawText(safe(`R$ ${formatoMoeda.format(c.value)}`), {
+          x: x + 8,
+          y: yL - 30,
           size: 9,
-          color: rgb(0.5, 0.55, 0.55),
-          lh: 12,
+          font: fontBold,
+          color: c.tone,
+          maxWidth: cardW - 12,
         });
-        textLeft("Resumo Financeiro do Periodo", {
-          size: 9,
-          color: rgb(0.5, 0.55, 0.55),
-          lh: 16,
+      });
+      yL -= cardH + 18;
+
+      // Seções por tipo
+      const drawTipoSection = (titulo, lista, sinal, cor) => {
+        if (!lista.length) return;
+        needL(20);
+        page.drawText(safe(titulo), {
+          x: margin,
+          y: yL,
+          size: 11,
+          font: fontBold,
+          color: C.ink,
         });
+        yL -= 14;
 
-        const cardW = (leftWidth - 8) / 3;
-        const cardH = 36;
-        ensureLeft(cardH + 12);
-
-        const cards = [
-          {
-            label: "RECEITAS",
-            value: `R$ ${formatoMoeda.format(resumo.entradas)}`,
-            color: rgb(0.91, 0.96, 0.91),
-          },
-          {
-            label: "DESPESAS",
-            value: `R$ ${formatoMoeda.format(resumo.saidas)}`,
-            color: rgb(1, 0.92, 0.93),
-          },
-          {
-            label: "SALDO",
-            value: `R$ ${formatoMoeda.format(resumo.saldo)}`,
-            color: rgb(0.89, 0.95, 0.99),
-          },
-        ];
-
-        cards.forEach((c, i) => {
-          const x = margin + i * (cardW + 4);
-          page.drawRectangle({
-            x,
-            y: yLeft - cardH,
-            width: cardW,
-            height: cardH,
-            color: c.color,
+        lista.forEach(([tipo, total]) => {
+          needL(14);
+          page.drawText(safe(String(tipo)), {
+            x: margin,
+            y: yL,
+            size: 9,
+            font,
+            color: C.ink,
+            maxWidth: leftW * 0.55,
           });
-          page.drawText(c.label, {
-            x: x + 6,
-            y: yLeft - 14,
-            size: 8,
-            font: fontBold,
-            color: rgb(0.2, 0.28, 0.33),
-          });
-          page.drawText(safe(c.value), {
-            x: x + 6,
-            y: yLeft - 28,
+          page.drawText(safe(`${sinal} R$ ${formatoMoeda.format(total)}`), {
+            x: margin + leftW * 0.58,
+            y: yL,
             size: 9,
             font: fontBold,
-            color: rgb(0.17, 0.24, 0.31),
-            maxWidth: cardW - 10,
+            color: cor,
+            maxWidth: leftW * 0.42,
           });
+          yL -= 13;
         });
-
-        yLeft -= cardH + 14;
+        yL -= 10;
       };
-
-      const drawRightHeader = () => {
-        textRight("Movimentacoes", {
-          size: 11,
-          bold: true,
-          color: rgb(0.17, 0.24, 0.31),
-          lh: 16,
-        });
-      };
-
-      drawLeftHeader();
 
       const entradas = Object.entries(resumo.porTipoEntrada).sort(
         (a, b) => b[1] - a[1]
@@ -286,71 +301,56 @@ export default function Relatorio() {
         (a, b) => b[1] - a[1]
       );
 
-      if (entradas.length > 0) {
-        textLeft("Receitas", {
-          size: 12,
-          bold: true,
-          color: rgb(0.17, 0.24, 0.31),
-          lh: 16,
-        });
-        entradas.forEach(([tipo, total]) => {
-          ensureLeft(12);
-          page.drawText(safe(String(tipo).toUpperCase()), {
-            x: margin,
-            y: yLeft,
-            size: 9,
-            font: fontBold,
-            color: rgb(0.2, 0.29, 0.37),
-            maxWidth: leftWidth * 0.6,
-          });
-          page.drawText(safe(`+ ${formatoMoeda.format(total)}`), {
-            x: margin + leftWidth * 0.62,
-            y: yLeft,
-            size: 9,
-            font: fontBold,
-            color: rgb(0.1, 0.53, 0.28),
-          });
-          yLeft -= 12;
-        });
-        yLeft -= 6;
-      }
+      drawTipoSection("Entradas por tipo", entradas, "+", C.green);
+      drawTipoSection("Saidas por tipo", saidas, "-", C.red);
 
-      if (saidas.length > 0) {
-        textLeft("Despesas", {
-          size: 12,
-          bold: true,
-          color: rgb(0.17, 0.24, 0.31),
-          lh: 16,
-        });
-        saidas.forEach(([tipo, total]) => {
-          ensureLeft(12);
-          page.drawText(safe(String(tipo).toUpperCase()), {
-            x: margin,
-            y: yLeft,
-            size: 9,
-            font: fontBold,
-            color: rgb(0.2, 0.29, 0.37),
-            maxWidth: leftWidth * 0.6,
-          });
-          page.drawText(safe(`- ${formatoMoeda.format(total)}`), {
-            x: margin + leftWidth * 0.62,
-            y: yLeft,
-            size: 9,
-            font: fontBold,
-            color: rgb(0.75, 0.22, 0.17),
-          });
-          yLeft -= 12;
-        });
-      }
-
+      // Rodapé esquerda
+      needL(28);
+      yL -= 4;
       page.drawLine({
-        start: { x: rightX - gap / 2, y: margin },
-        end: { x: rightX - gap / 2, y: pageHeight - margin },
-        thickness: 0.6,
-        color: rgb(0.88, 0.88, 0.88),
+        start: { x: margin, y: yL },
+        end: { x: margin + leftW, y: yL },
+        thickness: 0.5,
+        color: C.line,
+      });
+      yL -= 12;
+      page.drawText(
+        safe(
+          `Gerado em ${new Date().toLocaleDateString("pt-BR")} ${new Date().toLocaleTimeString("pt-BR")}`
+        ),
+        {
+          x: margin,
+          y: yL,
+          size: 8,
+          font,
+          color: C.muted,
+        }
+      );
+      yL -= 12;
+      page.drawText(safe(`${resumo.quantidade} registro(s) no periodo`), {
+        x: margin,
+        y: yL,
+        size: 8,
+        font,
+        color: C.muted,
       });
 
-      drawRightHeader();
+      // ===== COLUNA DIREITA: movimentações =====
+      page.drawText(safe("Movimentacoes"), {
+        x: rightX,
+        y: yR,
+        size: 12,
+        font: fontBold,
+        color: C.ink,
+      });
+      yR -= 8;
+      page.drawLine({
+        start: { x: rightX, y: yR },
+        end: { x: rightX + rightW, y: yR },
+        thickness: 0.5,
+        color: C.line,
+      });
+      yR -= 14;
 
       const lista = [...filtrados].sort((a, b) => (a.data || 0) - (b.data || 0));
 
@@ -362,13 +362,16 @@ export default function Relatorio() {
           item.valorTotal ||
           0;
 
-        const dia = item.data
-          ? String(new Date(item.data).getDate()).padStart(2, "0")
-          : "--";
+        const dataStr = item.data
+          ? new Date(item.data).toLocaleDateString("pt-BR")
+          : "--/--/----";
 
-        const isDizimo =
-          String(item.tipo || "").toLowerCase().includes("dizimo") ||
-          String(item.tipo || "").toLowerCase().includes("dízimo");
+        const isDizimo = String(item.tipo || "")
+          .toLowerCase()
+          .includes("dizimo") ||
+          String(item.tipo || "")
+            .toLowerCase()
+            .includes("dízimo");
 
         const desc = isDizimo
           ? "********"
@@ -377,59 +380,65 @@ export default function Relatorio() {
         let origemTxt = "";
         if (!isEntrada) {
           if (item.origemPagamento === "caixinha") {
-            origemTxt = ` [${item.caixinhaNome || "Caixinha"}]`;
+            origemTxt = ` · ${item.caixinhaNome || "Caixinha"}`;
           } else if (item.origemPagamento === "geral") {
-            origemTxt = " [Caixa geral]";
+            origemTxt = " · Caixa geral";
           } else {
             const pagos = item.valoresPagos || [];
             const ultimo = pagos[pagos.length - 1];
             if (ultimo?.origemPagamento === "caixinha") {
-              origemTxt = ` [${ultimo.caixinhaNome || "Caixinha"}]`;
+              origemTxt = ` · ${ultimo.caixinhaNome || "Caixinha"}`;
             } else if (ultimo?.origemPagamento === "geral") {
-              origemTxt = " [Caixa geral]";
+              origemTxt = " · Caixa geral";
             }
           }
         }
 
-        const linha = `${dia} - ${desc}${origemTxt}`;
-        const valorStr = `${isEntrada ? "+" : "-"} ${formatoMoeda.format(valor)}`;
+        needR(22);
 
-        ensureRight(20);
-
-        page.drawText(safe(linha), {
+        // data + tipo
+        page.drawText(safe(`${dataStr}  ·  ${item.tipo || "-"}`), {
           x: rightX,
-          y: yRight,
+          y: yR,
+          size: 7,
+          font,
+          color: C.muted,
+          maxWidth: rightW,
+        });
+        yR -= 10;
+
+        // descrição
+        page.drawText(safe(`${desc}${origemTxt}`), {
+          x: rightX,
+          y: yR,
           size: 8,
           font,
-          color: rgb(0.2, 0.29, 0.37),
-          maxWidth: rightWidth * 0.62,
+          color: C.ink,
+          maxWidth: rightW * 0.62,
         });
 
-        page.drawText(safe(valorStr), {
-          x: rightX + rightWidth * 0.64,
-          y: yRight,
-          size: 8,
-          font: fontBold,
-          color: isEntrada ? rgb(0.1, 0.53, 0.28) : rgb(0.75, 0.22, 0.17),
-          maxWidth: rightWidth * 0.36,
+        // valor
+        page.drawText(
+          safe(`${isEntrada ? "+" : "-"} R$ ${formatoMoeda.format(valor)}`),
+          {
+            x: rightX + rightW * 0.64,
+            y: yR,
+            size: 8,
+            font: fontBold,
+            color: isEntrada ? C.green : C.red,
+            maxWidth: rightW * 0.36,
+          }
+        );
+        yR -= 8;
+
+        page.drawLine({
+          start: { x: rightX, y: yR },
+          end: { x: rightX + rightW, y: yR },
+          thickness: 0.4,
+          color: C.line,
         });
-
-        yRight -= 11;
+        yR -= 8;
       });
-
-      ensureLeft(24);
-      yLeft -= 6;
-      page.drawLine({
-        start: { x: margin, y: yLeft },
-        end: { x: margin + leftWidth, y: yLeft },
-        thickness: 0.6,
-        color: rgb(0.88, 0.88, 0.88),
-      });
-      yLeft -= 12;
-      textLeft(
-        `Relatorio de ${new Date().toLocaleDateString("pt-BR")} ${new Date().toLocaleTimeString("pt-BR")}`,
-        { size: 8, color: rgb(0.5, 0.55, 0.55), lh: 10 }
-      );
 
       const base64 = await pdfDoc.saveAsBase64();
       if (!base64) throw new Error("Falha ao gerar o conteudo do PDF.");
@@ -483,7 +492,7 @@ export default function Relatorio() {
     });
   }, [navigation, colors, gerando, filtrados, resumo, labelPeriodo]);
 
-  if (load && !(dadosFinancas || []).length) return <Load />;
+  if ((!authPronto || load) && !(dadosFinancas || []).length) return <Load />;
 
   const listaEntradas = Object.entries(resumo.porTipoEntrada)
     .map(([tipo, total]) => ({ tipo, total }))
@@ -499,8 +508,6 @@ export default function Relatorio() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
       >
-      
-
         <View style={styles.block}>
           <View style={styles.segment}>
             <TouchableOpacity
@@ -610,7 +617,7 @@ export default function Relatorio() {
               mode="date"
               display="default"
               maximumDate={dataAte}
-              onChange={(e, selected) => {
+              onValueChange={(e, selected) => {
                 setShowDe(false);
                 if (selected) setDataDe(selected);
               }}
@@ -624,7 +631,7 @@ export default function Relatorio() {
               display="default"
               minimumDate={dataDe}
               maximumDate={new Date()}
-              onChange={(e, selected) => {
+              onValueChange={(e, selected) => {
                 setShowAte(false);
                 if (selected) setDataAte(selected);
               }}
@@ -700,45 +707,11 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 18,
     paddingTop: 12,
-    paddingBottom: 40,
+    paddingBottom: 100,
   },
   headerBtn: {
     marginRight: 12,
     padding: 6,
-  },
-  balanceCard: {
-    backgroundColor: "#1f2933",
-    borderRadius: 22,
-    padding: 18,
-    marginBottom: 14,
-  },
-  balanceLabel: {
-    fontSize: 13,
-    fontFamily: "Roboto-Regular",
-    color: "#9aa3ad",
-    marginBottom: 8,
-  },
-  balanceValue: {
-    fontSize: 30,
-    fontFamily: "Roboto-Bold",
-    color: "#fff",
-    letterSpacing: -0.8,
-    marginBottom: 16,
-  },
-  balanceBottom: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  miniLabel: {
-    fontSize: 11,
-    fontFamily: "Roboto-Regular",
-    color: "#8b949e",
-    marginBottom: 3,
-  },
-  miniValue: {
-    fontSize: 14,
-    fontFamily: "Roboto-Medium",
-    color: "#e8eef4",
   },
   block: {
     backgroundColor: "#fff",

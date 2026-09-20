@@ -13,8 +13,6 @@ import {
   updateDoc,
   deleteDoc,
 } from "firebase/firestore";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
 import { AuthContext } from "./AuthContext";
 
 export const AppContext = createContext({});
@@ -24,6 +22,8 @@ function arredondarMoney(v) {
 }
 
 export function AppProvider({ children }) {
+  const { user, uid, authPronto } = useContext(AuthContext);
+
   const [resumoFinanceiro, setResumoFinanceiro] = useState([]);
   const [saldo, setSaldo] = useState(0);
   const [dadosFinancas, setDadosFinanceiros] = useState([]);
@@ -39,26 +39,32 @@ export function AppProvider({ children }) {
   const [caixinhas, setCaixinhas] = useState([]);
   const [totalReservado, setTotalReservado] = useState(0);
 
-const { user, uid, authPronto } = useContext(AuthContext);
-
-
   function getUserId() {
     return uid || user?.uid || null;
   }
 
   useEffect(() => {
+    if (!authPronto) return;
+
+    const userId = getUserId();
+    if (!userId) {
+      setDadosFinanceiros([]);
+      setCaixinhas([]);
+      setSaldo(0);
+      setTotalReservado(0);
+      return;
+    }
+
     HistoricoMovimentos();
     CarregarCaixinhas();
-  }, []);
-
-
+  }, [authPronto, uid]);
 
   async function HistoricoMovimentos() {
-   const userId = getUserId();
-  if (!userId) {
-    setDadosFinanceiros([]);
-    return;
-  }
+    const userId = getUserId();
+    if (!userId) {
+      setDadosFinanceiros([]);
+      return [];
+    }
 
     try {
       const q = query(
@@ -76,8 +82,27 @@ const { user, uid, authPronto } = useContext(AuthContext);
 
       setDadosFinanceiros(lista);
       await BuscarSaldo();
+      return lista;
     } catch (e) {
       console.log("Erro HistoricoMovimentos:", e);
+      try {
+        const q2 = query(
+          collection(db, "registros"),
+          where("idUsuario", "==", userId)
+        );
+        const snap2 = await getDocs(q2);
+        const lista2 = snap2.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        }));
+        setDadosFinanceiros(lista2);
+        await BuscarSaldo();
+        return lista2;
+      } catch (e2) {
+        console.log("Erro fallback HistoricoMovimentos:", e2);
+        setDadosFinanceiros([]);
+        return [];
+      }
     }
   }
 
@@ -92,10 +117,10 @@ const { user, uid, authPronto } = useContext(AuthContext);
 
   async function ResumoFinanceiro() {
     const userId = getUserId();
-  if (!userId) {
-    setDadosFinanceiros([]);
-    return;
-  }
+    if (!userId) {
+      setSaldo(0);
+      return 0;
+    }
 
     try {
       const q = query(
@@ -150,12 +175,13 @@ const { user, uid, authPronto } = useContext(AuthContext);
     }
   }
 
-  // =========================
-  // CAIXINHAS
-  // =========================
-
   async function CarregarCaixinhas() {
     const userId = getUserId();
+    if (!userId) {
+      setCaixinhas([]);
+      setTotalReservado(0);
+      return [];
+    }
 
     try {
       const q = query(
@@ -207,6 +233,8 @@ const { user, uid, authPronto } = useContext(AuthContext);
 
   async function CriarCaixinha({ nome, valor = 0, meta = 0 }) {
     const userId = getUserId();
+    if (!userId) throw new Error("Faça login novamente.");
+
     const nomeLimpo = String(nome || "").trim();
     const valorNum = arredondarMoney(valor);
     const metaNum = arredondarMoney(meta);
@@ -304,6 +332,10 @@ const { user, uid, authPronto } = useContext(AuthContext);
 
   async function BuscarLixeira() {
     const userId = getUserId();
+    if (!userId) {
+      setLixo([]);
+      return;
+    }
 
     try {
       const q = query(

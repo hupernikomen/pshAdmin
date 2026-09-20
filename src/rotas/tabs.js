@@ -22,8 +22,8 @@ export default function Tabs() {
           tabBar={(props) => <TabBar {...props} />}
           screenOptions={{
             headerTitleStyle: {
-              fontSize: 20,
-              fontFamily: 'Roboto-Bold',
+              fontSize: 16,
+              fontFamily: 'Roboto-Medium',
             }
           }}>
 
@@ -32,7 +32,7 @@ export default function Tabs() {
             component={Home}
             options={{
               title: 'Tesouraria PSH',
-              tabBarIcon: 'pulse-outline',
+              tabBarIcon: 'pie-chart-outline',
             }}
           />
           <Tab.Screen

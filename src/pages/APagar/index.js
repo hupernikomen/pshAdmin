@@ -13,14 +13,13 @@ import {
   Platform,
   RefreshControl,
 } from "react-native";
-import { useNavigation, useTheme } from "@react-navigation/native";
+import { useTheme } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../../context/AppContext";
 import { db } from "../../firebaseConnection";
 import { doc, updateDoc } from "firebase/firestore";
 import Load from "../../componentes/Load";
-
-import { useAuth } from "../../context/AuthContext"; // caminho do seu projeto
+import { useAuth } from "../../context/AuthContext";
 
 function parseNumero(txt) {
   if (txt === null || txt === undefined) return 0;
@@ -40,6 +39,10 @@ function parseNumero(txt) {
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
 }
 
+function arred(v) {
+  return Math.round((Number(v) || 0) * 100) / 100;
+}
+
 export default function APagar() {
   const {
     dadosFinancas,
@@ -55,7 +58,7 @@ export default function APagar() {
   } = useContext(AppContext);
 
   const { colors } = useTheme();
-  const navigation = useNavigation();
+  const { uid, authPronto } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
 
   const [modalVisible, setModalVisible] = useState(false);
@@ -65,11 +68,10 @@ export default function APagar() {
   const [caixinhaId, setCaixinhaId] = useState(null);
   const [salvando, setSalvando] = useState(false);
 
-  const { uid } = useAuth();
-
   useEffect(() => {
+    if (!authPronto || !uid) return;
     carregar();
-  }, []);
+  }, [authPronto, uid]);
 
   async function carregar() {
     setLoad(true);
@@ -78,27 +80,51 @@ export default function APagar() {
   }
 
   const onRefresh = async () => {
+    if (!uid) return;
     setRefreshing(true);
     await HistoricoMovimentos();
     setRefreshing(false);
   };
 
   const pendentes = useMemo(() => {
-    return (dadosFinancas || [])
-      .filter((i) => {
-        if (i.tipoMovimento !== "saida") return false;
-        if (i.status === "quitada") return false;
-        const total = Number(i.valorTotal) || 0;
-        const pago = Number(i.valorPagoTotal) || 0;
-        return total > pago;
-      })
-      .map((i) => {
-        const total = Number(i.valorTotal) || 0;
-        const pago = Number(i.valorPagoTotal) || 0;
-        const falta = Math.round((total - pago) * 100) / 100;
-        return { ...i, falta };
-      })
-      .sort((a, b) => (a.data || 0) - (b.data || 0));
+    const lista = [];
+
+    (dadosFinancas || []).forEach((i) => {
+      if (i.tipoMovimento !== "saida") return;
+      if (i.status === "quitada") return;
+
+      if (Array.isArray(i.parcelas) && i.parcelas.length > 0) {
+        i.parcelas
+          .filter((p) => p.status === "aberta")
+          .forEach((p) => {
+            lista.push({
+              ...i,
+              rowId: `${i.id}_p${p.numero}`,
+              isParcela: true,
+              parcelaNumero: p.numero,
+              parcelaTotal: i.quantidadeParcelas || i.parcelas.length,
+              falta: arred(p.valor),
+              vencimento: p.vencimento,
+            });
+          });
+        return;
+      }
+
+      const total = Number(i.valorTotal) || 0;
+      const pago = Number(i.valorPagoTotal) || 0;
+      if (total > pago) {
+        lista.push({
+          ...i,
+          rowId: i.id,
+          isParcela: false,
+          falta: arred(total - pago),
+        });
+      }
+    });
+
+    return lista.sort(
+      (a, b) => (a.vencimento || a.data || 0) - (b.vencimento || b.data || 0)
+    );
   }, [dadosFinancas]);
 
   const totalAPagar = useMemo(
@@ -126,15 +152,17 @@ export default function APagar() {
       Alert.alert("Atenção", "Faça login novamente.");
       return;
     }
-
     if (!itemSel) return;
 
-    const valor = parseNumero(valorPago);
+    const valor = itemSel.isParcela
+      ? arred(itemSel.falta)
+      : parseNumero(valorPago);
+
     if (valor <= 0) {
       Alert.alert("Atenção", "Informe um valor válido.");
       return;
     }
-    if (valor > itemSel.falta + 0.001) {
+    if (!itemSel.isParcela && valor > itemSel.falta + 0.001) {
       Alert.alert(
         "Atenção",
         `O valor não pode ser maior que R$ ${formatoMoeda.format(itemSel.falta)}`
@@ -166,28 +194,68 @@ export default function APagar() {
     try {
       const cx = (caixinhas || []).find((c) => c.id === caixinhaId);
       const listaAtual = itemSel.valoresPagos || [];
-      const novoTotal =
-        Math.round(((Number(itemSel.valorPagoTotal) || 0) + valor) * 100) / 100;
 
-      const novoPagamento = {
-        valor,
-        data: Date.now(),
-        id: Date.now().toString(),
-        origemPagamento,
-        caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
-        caixinhaNome:
-          origemPagamento === "caixinha" ? cx?.nome || null : null,
-      };
+      if (itemSel.isParcela) {
+        const parcelas = (itemSel.parcelas || []).map((p) => {
+          if (p.numero !== itemSel.parcelaNumero) return p;
+          return {
+            ...p,
+            status: "paga",
+            pagoEm: Date.now(),
+            origemPagamento,
+            caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
+            caixinhaNome:
+              origemPagamento === "caixinha" ? cx?.nome || null : null,
+          };
+        });
 
-      await updateDoc(doc(db, "registros", itemSel.id), {
-        valoresPagos: [...listaAtual, novoPagamento],
-        valorPagoTotal: novoTotal,
-        status: novoTotal >= (Number(itemSel.valorTotal) || 0) ? "quitada" : "aberta",
-        origemPagamento,
-        caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
-        caixinhaNome:
-          origemPagamento === "caixinha" ? cx?.nome || null : null,
-      });
+        const novoTotal = arred((Number(itemSel.valorPagoTotal) || 0) + valor);
+        const todasPagas = parcelas.every((p) => p.status === "paga");
+
+        await updateDoc(doc(db, "registros", itemSel.id), {
+          parcelas,
+          valoresPagos: [
+            ...listaAtual,
+            {
+              valor,
+              data: Date.now(),
+              id: Date.now().toString(),
+              parcelaNumero: itemSel.parcelaNumero,
+              origemPagamento,
+              caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
+              caixinhaNome:
+                origemPagamento === "caixinha" ? cx?.nome || null : null,
+            },
+          ],
+          valorPagoTotal: novoTotal,
+          status: todasPagas ? "quitada" : "aberta",
+        });
+      } else {
+        const novoTotal = arred((Number(itemSel.valorPagoTotal) || 0) + valor);
+        await updateDoc(doc(db, "registros", itemSel.id), {
+          valoresPagos: [
+            ...listaAtual,
+            {
+              valor,
+              data: Date.now(),
+              id: Date.now().toString(),
+              origemPagamento,
+              caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
+              caixinhaNome:
+                origemPagamento === "caixinha" ? cx?.nome || null : null,
+            },
+          ],
+          valorPagoTotal: novoTotal,
+          status:
+            novoTotal >= (Number(itemSel.valorTotal) || 0)
+              ? "quitada"
+              : "aberta",
+          origemPagamento,
+          caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
+          caixinhaNome:
+            origemPagamento === "caixinha" ? cx?.nome || null : null,
+        });
+      }
 
       if (origemPagamento === "caixinha" && caixinhaId) {
         await RetirarDaCaixinha(caixinhaId, valor);
@@ -212,13 +280,13 @@ export default function APagar() {
     (c) => (Number(c.valor) || 0) > 0
   );
 
-  if (load && !refreshing) return <Load />;
+  if ((!authPronto || load) && !refreshing) return <Load />
 
   return (
     <View style={styles.container}>
       <FlatList
         data={pendentes}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.rowId}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
         refreshControl={
@@ -232,67 +300,61 @@ export default function APagar() {
         ListEmptyComponent={
           <View style={styles.emptyBox}>
             <View style={styles.emptyIcon}>
-              <Ionicons name="checkmark-circle-outline" size={28} color="#9aa3ad" />
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={28}
+                color="#9aa3ad"
+              />
             </View>
             <Text style={styles.emptyTitle}>Nada pendente</Text>
             <Text style={styles.emptyText}>
-              Quando houver despesas em aberto, elas aparecem aqui.
+              {!uid
+                ? "Faça login para ver as despesas."
+                : "Quando houver despesas em aberto, elas aparecem aqui."}
             </Text>
           </View>
         }
         renderItem={({ item }) => {
-          const pago = Number(item.valorPagoTotal) || 0;
-          const total = Number(item.valorTotal) || 0;
-          const pct = total > 0 ? Math.min(pago / total, 1) : 0;
-
           return (
             <View style={styles.card}>
-              <View style={styles.cardTop}>
-                <View style={styles.iconCircle}>
-                  <Ionicons name="arrow-up-outline" size={18} color="#C62828" />
-                </View>
-                <View style={styles.cardCenter}>
-                  <Text style={styles.cardTitle} numberOfLines={1}>
-                    {item.descricao || "Sem descrição"}
-                  </Text>
-                  <Text style={styles.cardSub}>
-                    {item.tipo || "Saída"}
-                    {"  ·  "}
-                    {item.data
-                      ? new Date(item.data).toLocaleDateString("pt-BR")
-                      : "-"}
+              <View style={styles.topRow}>
+                <View style={{flexDirection:'row', alignItems:'center'}}>
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {item.isParcela
+                      ? `${item.parcelaNumero}/${item.parcelaTotal}`
+                      : "A pagar"}
                   </Text>
                 </View>
-                <Text style={styles.cardFalta}>
+                <Text style={styles.dot}>·</Text>
+                <Text style={styles.meta}>
+                  {item.vencimento || item.data
+                    ? new Date(item.vencimento || item.data).toLocaleDateString("pt-BR")
+                    : "-"}
+                </Text>
+                  </View>
+                <Text style={styles.valor}>
                   R$ {formatoMoeda.format(item.falta)}
                 </Text>
               </View>
 
-              <View style={styles.metaRow}>
-                <Text style={styles.metaText}>
-                  Pago R$ {formatoMoeda.format(pago)} de{" "}
-                  {formatoMoeda.format(total)}
-                </Text>
-              </View>
+              <Text style={styles.descricao} numberOfLines={2}>
+                {item.descricao || "Sem descrição"}
+              </Text>
 
-              <View style={styles.barTrack}>
-                <View
-                  style={[
-                    styles.barFill,
-                    {
-                      width: `${pct * 100}%`,
-                      backgroundColor: colors.principal,
-                    },
-                  ]}
-                />
-              </View>
+ 
 
               <TouchableOpacity
-                style={[styles.payBtn, { backgroundColor: colors.principal }]}
+                style={styles.payBtn}
                 onPress={() => abrirPagar(item)}
-                activeOpacity={0.85}
+                activeOpacity={0.8}
               >
-                <Text style={styles.payBtnText}>Registrar pagamento</Text>
+                <Text style={styles.payBtnText}>
+                  {item.isParcela
+                    ? `Pagar parcela ${item.parcelaNumero}`
+                    : "Registrar pagamento"}
+                </Text>
+
               </TouchableOpacity>
             </View>
           );
@@ -313,21 +375,29 @@ export default function APagar() {
             style={{ width: "100%", alignItems: "center" }}
           >
             <Pressable style={styles.modalCard} onPress={() => { }}>
-              <Text style={styles.modalTitle}>Registrar pagamento</Text>
+              <Text style={styles.modalTitle}>
+                {itemSel?.isParcela
+                  ? `Pagar parcela ${itemSel?.parcelaNumero}`
+                  : "Registrar pagamento"}
+              </Text>
               <Text style={styles.modalSub}>
-                {itemSel?.descricao || ""} · falta R${" "}
+                {itemSel?.descricao || ""} · R${" "}
                 {formatoMoeda.format(itemSel?.falta || 0)}
               </Text>
 
-              <Text style={styles.inputLabel}>Valor</Text>
-              <TextInput
-                style={styles.input}
-                value={valorPago}
-                onChangeText={setValorPago}
-                keyboardType="decimal-pad"
-                placeholder="0,00"
-                placeholderTextColor="#aaa"
-              />
+              {!itemSel?.isParcela && (
+                <>
+                  <Text style={styles.inputLabel}>Valor</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={valorPago}
+                    onChangeText={setValorPago}
+                    keyboardType="decimal-pad"
+                    placeholder="0,00"
+                    placeholderTextColor="#aaa"
+                  />
+                </>
+              )}
 
               <Text style={styles.inputLabel}>Pagar com</Text>
               <View style={styles.segment}>
@@ -399,7 +469,10 @@ export default function APagar() {
               )}
 
               <View style={styles.modalActions}>
-                <TouchableOpacity style={styles.btnCancel} onPress={fecharModal}>
+                <TouchableOpacity
+                  style={styles.btnCancel}
+                  onPress={fecharModal}
+                >
                   <Text style={styles.btnCancelText}>Cancelar</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -428,7 +501,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f4f5f7" },
   content: { paddingHorizontal: 18, paddingTop: 12, paddingBottom: 20 },
   balanceCard: {
-    backgroundColor: "#1f2933",
+    backgroundColor: "#fff",
     borderRadius: 22,
     padding: 18,
     marginBottom: 16,
@@ -442,73 +515,73 @@ const styles = StyleSheet.create({
   balanceValue: {
     fontSize: 30,
     fontFamily: "Roboto-Bold",
-    color: "#fff",
+    color: "#1f2933",
     letterSpacing: -0.8,
   },
   balanceSub: {
     marginTop: 8,
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    color: "#8b949e",
   },
   card: {
     backgroundColor: "#fff",
-    borderRadius: 18,
+    borderRadius: 16,
     padding: 14,
   },
-  cardTop: { flexDirection: "row", alignItems: "flex-start" },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: "#FFEBEE",
+  topRow: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
+    justifyContent: "space-between",
+    marginBottom: 8,
   },
-  cardCenter: { flex: 1, paddingRight: 8 },
-  cardTitle: {
-    fontSize: 14,
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: "#FFEBEE",
+  },
+  badgeText: {
+    fontSize: 11,
     fontFamily: "Roboto-Medium",
-    color: "#1f2933",
-  },
-  cardSub: {
-    marginTop: 2,
-    fontSize: 12,
-    fontFamily: "Roboto-Regular",
-    color: "#9aa0a6",
-  },
-  cardFalta: {
-    fontSize: 14,
-    fontFamily: "Roboto-Bold",
     color: "#C62828",
   },
-  metaRow: { marginTop: 10 },
-  metaText: {
+  valor: {
+    fontFamily: "Roboto-Medium",
+    color: "#C62828",
+  },
+  descricao: {
+    fontSize: 14,
+    fontFamily: "Roboto-Regular",
+    marginBottom: 8,
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    marginBottom: 12,
+  },
+  meta: {
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    color: "#888",
   },
-  barTrack: {
-    marginTop: 8,
-    height: 6,
-    borderRadius: 6,
-    backgroundColor: "#eef1f4",
-    overflow: "hidden",
+  dot: {
+    marginHorizontal: 6,
+    color: "#aaa",
+    fontSize: 12,
   },
-  barFill: { height: "100%", borderRadius: 6 },
   payBtn: {
-    marginTop: 12,
-    height: 42,
-    borderRadius: 12,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "space-between",
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#eee",
   },
   payBtnText: {
-    color: "#fff",
     fontSize: 13,
-    fontFamily: "Roboto-Bold",
+    fontFamily: "Roboto-Medium",
   },
+
   emptyBox: {
     marginTop: 40,
     alignItems: "center",
@@ -526,13 +599,11 @@ const styles = StyleSheet.create({
     marginTop: 14,
     fontSize: 16,
     fontFamily: "Roboto-Medium",
-    color: "#666",
   },
   emptyText: {
     marginTop: 6,
     fontSize: 13,
     fontFamily: "Roboto-Regular",
-    color: "#999",
     textAlign: "center",
   },
   modalOverlay: {
@@ -564,7 +635,6 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    color: "#777",
     marginBottom: 4,
   },
   input: {

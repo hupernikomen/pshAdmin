@@ -8,6 +8,7 @@ import {
   Platform,
   UIManager,
 } from "react-native";
+
 import Ionicons from "react-native-vector-icons/Ionicons";
 
 if (
@@ -17,10 +18,20 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const TAB_SIZE = 58;
+const TAB_SIZE = 54;
 const PILL_SIZE = 52;
 
-export default function TabbarPersonalizada({ state, descriptors, navigation }) {
+function nomeIcone(nome, focado) {
+  if (!nome) return "ellipse-outline";
+  const base = String(nome).replace(/-outline$/, "");
+  return focado ? base : `${base}-outline`;
+}
+
+export default function TabbarPersonalizada({
+  state,
+  descriptors,
+  navigation,
+}) {
   const { colors } = useTheme();
 
   const slideX = useRef(new Animated.Value(state.index * TAB_SIZE)).current;
@@ -62,12 +73,8 @@ export default function TabbarPersonalizada({ state, descriptors, navigation }) 
   }
 
   return (
-    <Animated.View
-      style={[
-        styles.container
-      ]}
-    >
-      <View style={[styles.content, { borderWidth: 1, borderColor: "#ddd" }]}>
+    <Animated.View style={styles.container}>
+      <View style={styles.content}>
         <Animated.View
           pointerEvents="none"
           style={[
@@ -80,9 +87,8 @@ export default function TabbarPersonalizada({ state, descriptors, navigation }) 
         />
 
         {state.routes.map((route, index) => {
-
           const { options } = descriptors[route.key];
-          const isFocused = state.index === index
+          const isFocused = state.index === index;
 
           const onPress = () => {
             const event = navigation.emit({
@@ -100,13 +106,13 @@ export default function TabbarPersonalizada({ state, descriptors, navigation }) 
               key={route.key}
               onPress={onPress}
               onLayout={(e) => onLayoutTab(index, e)}
-              style={[styles.buttonTab, { elevation: isFocused ? 15 : 0 }]}
+              style={styles.buttonTab}
               activeOpacity={0.85}
             >
               <Ionicons
-                name={options.tabBarIcon}
+                name={nomeIcone(options.tabBarIcon, isFocused)}
                 size={26}
-                color={isFocused ? "#fff" : "#333"}
+                color={isFocused ? "#fff" : "#9aa0a6"}
               />
             </TouchableOpacity>
           );
@@ -131,6 +137,13 @@ const styles = StyleSheet.create({
     marginBottom: 28,
     padding: 2,
     borderRadius: 35,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#ececec",
+    elevation: 4,
+    shadowColor: "#1f2933",
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
   },
   pill: {
     position: "absolute",

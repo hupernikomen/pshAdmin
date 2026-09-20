@@ -17,6 +17,7 @@ import { useNavigation, useTheme } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import RNFS from "react-native-fs";
 import { AppContext } from "../../context/AppContext";
+import { useAuth } from "../../context/AuthContext";
 import Load from "../../componentes/Load";
 import { podeEditarRegistro } from "../../utils/registroEdit";
 
@@ -66,7 +67,10 @@ function montarLinhasHistorico(dadosFinancas) {
 
   (dadosFinancas || []).forEach((item) => {
     const sortBase = item.reg || item.data || item.createdAt || 0;
+    const pagos = item.valoresPagos || [];
+    const recebidos = item.valoresRecebidos || [];
 
+    // Card principal do registro (sempre)
     linhas.push({
       ...item,
       kind: "registro",
@@ -74,48 +78,60 @@ function montarLinhasHistorico(dadosFinancas) {
       sortKey: sortBase,
     });
 
-    (item.valoresPagos || []).forEach((p, idx) => {
-      linhas.push({
-        kind: "pagamento",
-        rowId: `${item.id}_pag_${p.id || idx}`,
-        id: item.id,
-        tipoMovimento: "saida",
-        tipo: item.tipo || "Pagamento",
-        descricao: item.descricao || item.tipo || "Despesa",
-        data: p.data || sortBase,
-        valorTotal: p.valor,
-        valorPagoTotal: p.valor,
-        status: "quitada",
-        origemPagamento: p.origemPagamento || item.origemPagamento || null,
-        caixinhaNome: p.caixinhaNome || item.caixinhaNome || null,
-        caixinhaId: p.caixinhaId || item.caixinhaId || null,
-        registroPaiId: item.id,
-        reg: p.data || sortBase,
-        sortKey: p.data || sortBase,
-        createdAt: p.data || sortBase,
-        reciboUrl: null,
-      });
-    });
+    // Só pagamentos extras (pula o 1º — já está no registro)
+    if (pagos.length > 1) {
+      const totalParcelas =
+        item.quantidadeParcelas ||
+        (Array.isArray(item.parcelas) ? item.parcelas.length : null);
 
-    (item.valoresRecebidos || []).forEach((p, idx) => {
-      linhas.push({
-        kind: "recebimento",
-        rowId: `${item.id}_rec_${p.id || idx}`,
-        id: item.id,
-        tipoMovimento: "entrada",
-        tipo: item.tipo || "Recebimento",
-        descricao: item.descricao || item.tipo || "Receita",
-        data: p.data || sortBase,
-        valorTotal: p.valor,
-        valorRecebidoTotal: p.valor,
-        status: "quitada",
-        registroPaiId: item.id,
-        reg: p.data || sortBase,
-        sortKey: p.data || sortBase,
-        createdAt: p.data || sortBase,
-        reciboUrl: null,
+      pagos.slice(1).forEach((p, idx) => {
+        linhas.push({
+          kind: "pagamento",
+          rowId: `${item.id}_pag_${p.id || idx + 1}`,
+          id: item.id,
+          tipoMovimento: "saida",
+          tipo: item.tipo || "Pagamento",
+          descricao: item.descricao || item.tipo || "Despesa",
+          data: p.data || sortBase,
+          valorTotal: p.valor,
+          valorPagoTotal: p.valor,
+          status: "quitada",
+          origemPagamento: p.origemPagamento || item.origemPagamento || null,
+          caixinhaNome: p.caixinhaNome || item.caixinhaNome || null,
+          caixinhaId: p.caixinhaId || item.caixinhaId || null,
+          parcelaNumero: p.parcelaNumero || null,
+          parcelaTotal: totalParcelas,
+          registroPaiId: item.id,
+          reg: p.data || sortBase,
+          sortKey: p.data || sortBase,
+          createdAt: p.data || sortBase,
+          reciboUrl: null,
+        });
       });
-    });
+    }
+
+    // Só recebimentos extras (pula o 1º)
+    if (recebidos.length > 1) {
+      recebidos.slice(1).forEach((p, idx) => {
+        linhas.push({
+          kind: "recebimento",
+          rowId: `${item.id}_rec_${p.id || idx + 1}`,
+          id: item.id,
+          tipoMovimento: "entrada",
+          tipo: item.tipo || "Recebimento",
+          descricao: item.descricao || item.tipo || "Receita",
+          data: p.data || sortBase,
+          valorTotal: p.valor,
+          valorRecebidoTotal: p.valor,
+          status: "quitada",
+          registroPaiId: item.id,
+          reg: p.data || sortBase,
+          sortKey: p.data || sortBase,
+          createdAt: p.data || sortBase,
+          reciboUrl: null,
+        });
+      });
+    }
   });
 
   return linhas.sort((a, b) => (b.sortKey || 0) - (a.sortKey || 0));
@@ -130,14 +146,17 @@ export default function Historico() {
     formatoMoeda,
   } = useContext(AppContext);
 
+  const { uid, authPronto } = useAuth();
   const { colors } = useTheme();
   const navigation = useNavigation();
   const [refreshing, setRefreshing] = useState(false);
   const [fotoSelecionada, setFotoSelecionada] = useState(null);
 
   useEffect(() => {
+    if (!authPronto) return;
+    if (!uid) return;
     carregarDados();
-  }, []);
+  }, [authPronto, uid]);
 
   async function carregarDados() {
     setLoad(true);
@@ -146,6 +165,7 @@ export default function Historico() {
   }
 
   const onRefresh = async () => {
+    if (!uid) return;
     setRefreshing(true);
     await HistoricoMovimentos();
     setRefreshing(false);
@@ -201,7 +221,7 @@ export default function Historico() {
     [dadosFinancas]
   );
 
-  if (load && !refreshing) return <Load />;
+  if ((!authPronto || load) && !refreshing) return <Load />;
 
   return (
     <View style={styles.container}>
@@ -218,7 +238,9 @@ export default function Historico() {
             </View>
             <Text style={styles.emptyTitle}>Nenhum registro</Text>
             <Text style={styles.emptyText}>
-              Quando houver movimentações, elas aparecem aqui.
+              {!uid
+                ? "Faça login para ver seus registros."
+                : "Quando houver movimentações, elas aparecem aqui."}
             </Text>
           </View>
         }
@@ -232,8 +254,18 @@ export default function Historico() {
         renderItem={({ item }) => {
           const isPagamento = item.kind === "pagamento";
           const isRecebimento = item.kind === "recebimento";
-          const isParcela = isPagamento || isRecebimento;
+          const isParcelaLinha = isPagamento || isRecebimento;
           const isEntrada = item.tipoMovimento === "entrada";
+
+          const textoParcela =
+            item.parcelaNumero != null
+              ? item.parcelaTotal
+                ? `Parcela ${item.parcelaNumero}/${item.parcelaTotal}`
+                : `Parcela ${item.parcelaNumero}`
+              : null;
+
+
+          const isParcela = isPagamento || isRecebimento;
 
           const valor =
             item.valorRecebidoTotal ||
@@ -246,7 +278,7 @@ export default function Historico() {
             item.valorTotal &&
             (item.valorRecebidoTotal || item.valorPagoTotal) &&
             item.valorTotal !==
-              (item.valorRecebidoTotal || item.valorPagoTotal);
+            (item.valorRecebidoTotal || item.valorPagoTotal);
 
           const quitado = item.status === "quitada";
           const temRecibo = !!item.reciboUrl && !isParcela;
@@ -256,10 +288,10 @@ export default function Historico() {
           const badgeLabel = isPagamento
             ? "Pagamento"
             : isRecebimento
-            ? "Recebimento"
-            : isEntrada
-            ? "Entrada"
-            : "Saída";
+              ? "Recebimento"
+              : isEntrada
+                ? "Entrada"
+                : "Saída";
 
           const badgeBg = isEntrada ? "#E8F5E9" : "#FFEBEE";
           const badgeColor = isEntrada ? "#2E7D32" : "#C62828";
@@ -275,11 +307,19 @@ export default function Historico() {
                 }
               }}
             >
-              {/* Linha 1: badge + valor */}
               <View style={styles.topRow}>
-                <View style={[styles.badge, { backgroundColor: badgeBg }]}>
-                  <Text style={[styles.badgeText, { color: badgeColor }]}>
-                    {badgeLabel}
+                <View style={{flexDirection:"row", alignItems:'center', gap: 14}}>
+
+                  <View style={[styles.badge, { backgroundColor: badgeBg }]}>
+                    <Text style={[styles.badgeText, { color: badgeColor }]}>
+                      {badgeLabel}
+                    </Text>
+
+                  </View>
+                  <Text style={styles.meta}>
+                    {item.data
+                      ? new Date(item.data).toLocaleDateString("pt-BR")
+                      : "-"}
                   </Text>
                 </View>
 
@@ -288,28 +328,21 @@ export default function Historico() {
                 </Text>
               </View>
 
-              {/* Linha 2: descrição */}
               <Text style={styles.descricao} numberOfLines={2}>
                 {item.descricao || "Sem descrição"}
               </Text>
 
-              {/* Linha 3: meta */}
               <View style={styles.metaRow}>
-                <Text style={styles.meta}>
-                  {item.data
-                    ? new Date(item.data).toLocaleDateString("pt-BR")
-                    : "-"}
-                </Text>
 
-                {!isParcela && (
+
+                {!isParcelaLinha && (
                   <>
-                    <Text style={styles.dot}>·</Text>
-                    <Text style={styles.meta}>{item.tipo || "Sem tipo"}</Text>
-                    <Text style={styles.dot}>·</Text>
+                    {/* <Text style={styles.meta}>{item.tipo || "Sem tipo"}</Text> */}
+                    {/* <Text style={styles.dot}>·</Text> */}
                     <Text
                       style={[
                         styles.meta,
-                        { color: quitado ? colors.principal : "#e6a23c" },
+                        { backgroundColor: quitado ? '#E8F5E9' : "#e6a23c", paddingHorizontal:4 },
                       ]}
                     >
                       {quitado ? "Quitado" : "Aberto"}
@@ -317,15 +350,16 @@ export default function Historico() {
                   </>
                 )}
 
-                {isParcela && item.tipo ? (
+                {isParcelaLinha && (
                   <>
                     <Text style={styles.dot}>·</Text>
-                    <Text style={styles.meta}>{item.tipo}</Text>
+                    <Text style={styles.meta}>
+                      {textoParcela || item.tipo || "Pagamento"}
+                    </Text>
                   </>
-                ) : null}
+                )}
               </View>
 
-              {/* Extras só se existirem */}
               {!!origem && (
                 <Text style={styles.extra}>Pago com: {origem}</Text>
               )}
@@ -339,7 +373,6 @@ export default function Historico() {
                 </Text>
               )}
 
-              {/* Ações */}
               {(temRecibo || editavel) && (
                 <View style={styles.actions}>
                   {temRecibo && (
@@ -358,10 +391,9 @@ export default function Historico() {
                       <Ionicons
                         name="create-outline"
                         size={15}
-                        color={colors.principal}
                       />
                       <Text
-                        style={[styles.actionText, { color: colors.principal }]}
+                        style={[styles.actionText]}
                       >
                         Editar
                       </Text>
@@ -415,13 +447,11 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 100,
   },
-
   card: {
     backgroundColor: "#fff",
     borderRadius: 16,
     padding: 14,
   },
-
   topRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -438,17 +468,15 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Medium",
   },
   valor: {
-    fontSize: 16,
-    fontFamily: "Roboto-Bold",
+    fontSize: 14,
+    fontFamily: "Roboto-Medium",
   },
-
   descricao: {
     fontSize: 15,
     fontFamily: "Roboto-Medium",
     color: "#1f2933",
     marginBottom: 6,
   },
-
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -457,21 +485,18 @@ const styles = StyleSheet.create({
   meta: {
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    color: "#8a8f98",
   },
   dot: {
     marginHorizontal: 6,
     color: "#ccc",
     fontSize: 12,
   },
-
   extra: {
     marginTop: 6,
     fontSize: 12,
     fontFamily: "Roboto-Regular",
     color: "#6b7280",
   },
-
   actions: {
     marginTop: 12,
     paddingTop: 10,
@@ -490,7 +515,6 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Medium",
     color: "#666",
   },
-
   emptyContainer: {
     marginTop: 80,
     alignItems: "center",
@@ -517,7 +541,6 @@ const styles = StyleSheet.create({
     color: "#999",
     textAlign: "center",
   },
-
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.85)",

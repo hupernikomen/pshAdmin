@@ -6,11 +6,17 @@ import {
   FlatList,
   RefreshControl,
   TouchableOpacity,
+  Image,
+  Modal,
+  Pressable,
+  Alert,
 } from "react-native";
 import { useNavigation, useTheme } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../../context/AppContext";
+import { useAuth } from "../../context/AuthContext";
 import Load from "../../componentes/Load";
+import Saldo from "../../componentes/Saldo";
 
 export default function Home() {
   const {
@@ -26,9 +32,15 @@ export default function Home() {
     formatoMoeda,
   } = useContext(AppContext);
 
+  const { user, logout } = useAuth();
   const { colors } = useTheme();
   const navigation = useNavigation();
   const [refreshing, setRefreshing] = useState(false);
+  const [menuAberto, setMenuAberto] = useState(false);
+
+  const foto = user?.photoURL || null;
+  const nome = user?.displayName || "Conta";
+  const email = user?.email || "";
 
   useEffect(() => {
     carregar();
@@ -38,15 +50,21 @@ export default function Home() {
     navigation.setOptions({
       headerRight: () => (
         <TouchableOpacity
-          onPress={() => navigation.navigate("Registro")}
-          style={{ marginRight: 12, padding: 6 }}
-          activeOpacity={0.7}
+          onPress={() => setMenuAberto(true)}
+          style={{ marginRight: 12 }}
+          activeOpacity={0.8}
         >
-          <Ionicons name="add-outline" size={24} color="#222" />
+          {foto ? (
+            <Image source={{ uri: foto }} style={styles.avatar} />
+          ) : (
+            <View style={[styles.avatar, styles.avatarFallback]}>
+              <Ionicons name="person" size={16} color="#fff" />
+            </View>
+          )}
         </TouchableOpacity>
       ),
     });
-  }, [navigation]);
+  }, [navigation, foto]);
 
   async function carregar() {
     setLoad(true);
@@ -60,9 +78,18 @@ export default function Home() {
     setRefreshing(false);
   };
 
+  async function handleLogout() {
+    setMenuAberto(false);
+    try {
+      await logout();
+    } catch (e) {
+      Alert.alert("Erro", "Não foi possível sair.");
+    }
+  }
+
   const lista = dadosFinancas || [];
   const agora = new Date();
-  const mesAtual = agora.getMonth();
+  const mesAtual = agora.getMonth(); // 0–11
   const anoAtual = agora.getFullYear();
 
   const entradasMesAtual = lista
@@ -104,6 +131,7 @@ export default function Home() {
   const projecaoFutura = saldoAtual + entradasFuturas - despesasFuturas;
   const abertos = lista.filter((i) => i.status === "aberta").length;
 
+  // Dízimos do mês vigente
   const dizimosMes = lista.filter((i) => {
     if (i.tipoMovimento !== "entrada" || i.tipo !== "Dízimo" || !i.data) {
       return false;
@@ -117,8 +145,62 @@ export default function Home() {
     0
   );
 
-  const mediaDizimosMes =
-    dizimosMes.length > 0 ? totalDizimosMes / dizimosMes.length : 0;
+  // Saldo inicial (início do período)
+  const saldoInicialReg = lista.find(
+    (i) => i.tipo === "Saldo inicial" && i.data
+  );
+
+  // Média de dízimos:
+  // meses = do mês do saldo inicial até o mês ATUAL (inclusive)
+  // média = total de dízimos no período ÷ quantidade de meses
+  // Ex.: SI em jul + dízimo em set → 3 meses (jul, ago, set) → 650 / 3
+  let mediaDizimosAnual = 0;
+
+  if (saldoInicialReg) {
+    const dSi = new Date(saldoInicialReg.data);
+    const siAno = dSi.getFullYear();
+    const siMes = dSi.getMonth(); // 0–11
+
+    let meses =
+      (anoAtual - siAno) * 12 + (mesAtual - siMes) + 1; // inclui mês atual
+
+    if (meses < 1) meses = 1;
+
+    const totalDizimosPeriodo = lista
+      .filter((i) => {
+        if (i.tipoMovimento !== "entrada" || i.tipo !== "Dízimo" || !i.data) {
+          return false;
+        }
+        // dízimos a partir do mês do saldo inicial
+        const d = new Date(i.data);
+        const idx = d.getFullYear() * 12 + d.getMonth();
+        const idxSi = siAno * 12 + siMes;
+        return idx >= idxSi;
+      })
+      .reduce(
+        (acc, i) => acc + (i.valorRecebidoTotal || i.valorTotal || 0),
+        0
+      );
+
+    mediaDizimosAnual = totalDizimosPeriodo / meses;
+  } else {
+    // Sem saldo inicial: total do ano ÷ mês atual (1–12)
+    const totalDizimosAno = lista
+      .filter((i) => {
+        if (i.tipoMovimento !== "entrada" || i.tipo !== "Dízimo" || !i.data) {
+          return false;
+        }
+        const d = new Date(i.data);
+        return d.getFullYear() === anoAtual;
+      })
+      .reduce(
+        (acc, i) => acc + (i.valorRecebidoTotal || i.valorTotal || 0),
+        0
+      );
+
+    const mesNumero = mesAtual + 1;
+    mediaDizimosAnual = mesNumero > 0 ? totalDizimosAno / mesNumero : 0;
+  }
 
   const resumoItens = useMemo(
     () => [
@@ -130,6 +212,7 @@ export default function Home() {
         icon: "arrow-down-outline",
         tint: "#E8F5E9",
         iconColor: "#2E7D32",
+        route: "AReceber",
       },
       {
         id: "2",
@@ -144,7 +227,7 @@ export default function Home() {
       {
         id: "3",
         label: "Dízimos no mês",
-        sub: "Total arrecadado",
+        sub: "Arrecadado neste mês",
         value: `R$ ${formatoMoeda.format(totalDizimosMes)}`,
         icon: "hand-left-outline",
         tint: "#E3F2FD",
@@ -153,28 +236,18 @@ export default function Home() {
       {
         id: "4",
         label: "Média de dízimos",
-        sub: "Por lançamento no mês",
-        value: `R$ ${formatoMoeda.format(mediaDizimosMes)}`,
+        sub: "Desde o saldo inicial",
+        value: `R$ ${formatoMoeda.format(mediaDizimosAnual)}`,
         icon: "stats-chart-outline",
         tint: "#FFF3E0",
         iconColor: "#EF6C00",
-      },
-      {
-        id: "5",
-        label: "Registros pendentes",
-        sub: "Ainda em aberto",
-        value: `${abertos}`,
-        icon: "time-outline",
-        tint: "#F3E5F5",
-        iconColor: "#6A1B9A",
       },
     ],
     [
       entradasFuturas,
       despesasFuturas,
       totalDizimosMes,
-      mediaDizimosMes,
-      abertos,
+      mediaDizimosAnual,
       formatoMoeda,
     ]
   );
@@ -196,73 +269,22 @@ export default function Home() {
           />
         }
         ListHeaderComponent={
-          <View>
-            {/* Card de saldo */}
-            <View style={styles.balanceCard}>
-              <Text style={styles.balanceLabel}>Saldo atual</Text>
-
-              <Text style={styles.balanceValue}>
-                R$ {formatoMoeda.format(saldoAtual)}
-              </Text>
-
-              <View style={styles.balanceBottom}>
-                <View>
-                  <Text style={styles.miniLabel}>Caixa geral</Text>
-                  <Text style={styles.miniValue}>
-                    R$ {formatoMoeda.format(caixaGeral)}
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => navigation.navigate("Caixinhas")}
-                  style={styles.caixinhasBtn}
-                >
-                  <View style={styles.caixinhasTitleRow}>
-                    <Text style={styles.miniLabel}>Caixinhas</Text>
-                    <Ionicons name="chevron-forward" size={14} />
-                  </View>
-                  <Text style={styles.miniValue}>
-                    R$ {formatoMoeda.format(emCaixinhas)}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Chips secundários */}
-            <View style={styles.chipsRow}>
-              <View style={styles.chip}>
-                <Text style={styles.chipLabel}>Anterior</Text>
-                <Text style={styles.chipValue}>
-                  R$ {formatoMoeda.format(saldoAnterior)}
-                </Text>
-              </View>
-              <View style={styles.chip}>
-                <Text style={styles.chipLabel}>Projeção</Text>
-                <Text style={styles.chipValue}>
-                  R$ {formatoMoeda.format(projecaoFutura)}
-                </Text>
-              </View>
-              <View style={styles.chip}>
-                <Text style={styles.chipLabel}>Ministérios</Text>
-                <Text style={styles.chipValue}>{qtdCaixinhas}</Text>
-              </View>
-            </View>
-
-            <Text style={styles.sectionTitle}>Resumo geral</Text>
-          </View>
+          <Saldo
+            caixaGeral={caixaGeral}
+            saldoAtual={saldoAtual}
+            saldoAnterior={saldoAnterior}
+            projecaoFutura={projecaoFutura}
+            qtdCaixinhas={qtdCaixinhas}
+            emCaixinhas={emCaixinhas}
+          />
         }
         renderItem={({ item }) => (
-
-
-
-
-
           <TouchableOpacity
             activeOpacity={item.route ? 0.75 : 1}
             disabled={!item.route}
             onPress={() => item.route && navigation.navigate(item.route)}
-            style={styles.itemCard}>
+            style={styles.itemCard}
+          >
             <View style={[styles.iconCircle, { backgroundColor: item.tint }]}>
               <Ionicons name={item.icon} size={18} color={item.iconColor} />
             </View>
@@ -276,8 +298,51 @@ export default function Home() {
           </TouchableOpacity>
         )}
         ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-        ListFooterComponent={<View style={{ height: 68 }} />}
+        ListFooterComponent={<View style={{ height: 100 }} />}
       />
+
+      <Modal
+        visible={menuAberto}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMenuAberto(false)}
+      >
+        <Pressable
+          style={styles.menuOverlay}
+          onPress={() => setMenuAberto(false)}
+        >
+          <Pressable style={styles.menuCard} onPress={() => {}}>
+            <View style={styles.menuUser}>
+              {foto ? (
+                <Image source={{ uri: foto }} style={styles.menuAvatar} />
+              ) : (
+                <View style={[styles.menuAvatar, styles.avatarFallback]}>
+                  <Ionicons name="person" size={18} color="#fff" />
+                </View>
+              )}
+              <View style={{ flex: 1 }}>
+                <Text style={styles.menuNome} numberOfLines={1}>
+                  {nome}
+                </Text>
+                {!!email && (
+                  <Text style={styles.menuEmail} numberOfLines={1}>
+                    {email}
+                  </Text>
+                )}
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={handleLogout}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="log-out-outline" size={18} />
+              <Text style={styles.menuSair}>Sair</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -285,80 +350,23 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f4f5f7",
+    backgroundColor: "#f7f7f7ff",
   },
   content: {
     paddingHorizontal: 18,
     paddingTop: 10,
-    paddingBottom: 20,
   },
-
-  balanceCard: {
-    backgroundColor: "#fff",
-    borderRadius: 22,
-    padding: 18,
-    marginBottom: 12,
-  },
-  balanceTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  balanceLabel: {
-    fontSize: 13,
-    fontFamily: "Roboto-Regular",
-    color: '#000'
-  },
-  balanceValue: {
-    fontSize: 30,
-    fontFamily: "Roboto-Bold",
-    letterSpacing: -0.8,
-    marginBottom: 16,
-  },
-  balanceBottom: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  miniLabel: {
-    fontSize: 12,
-    fontFamily: "Roboto-Light",
-    marginBottom: 3,
-  },
-  miniValue: {
-    fontSize: 14,
-    fontFamily: "Roboto-Medium",
-  },
-
-  chipsRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 18,
-  },
-  chip: {
-    flex: 1,
-    backgroundColor: "#fff",
+  avatar: {
+    width: 32,
+    height: 32,
     borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 10,
+    backgroundColor: "#ddd",
   },
-  chipLabel: {
-    fontSize: 12,
-    fontFamily: "Roboto-Light",
-    marginBottom: 3,
+  avatarFallback: {
+    backgroundColor: "#66796b",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  chipValue: {
-    fontSize: 13,
-    fontFamily: "Roboto-Medium",
-    color: "#222",
-  },
-
-  sectionTitle: {
-    fontSize: 16,
-    fontFamily: "Roboto-Medium",
-    marginBottom: 12,
-  },
-
   itemCard: {
     backgroundColor: "#fff",
     borderRadius: 18,
@@ -393,14 +401,55 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Roboto-Medium",
   },
-
-  caixinhasBtn: {
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.25)",
     alignItems: "flex-end",
+    paddingTop: 56,
+    paddingRight: 12,
   },
-  caixinhasTitleRow: {
+  menuCard: {
+    width: 240,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 12,
+    elevation: 6,
+  },
+  menuUser: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 2,
-    marginBottom: 3,
+    gap: 10,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#eee",
+    marginBottom: 8,
+  },
+  menuAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#ddd",
+  },
+  menuNome: {
+    fontSize: 14,
+    fontFamily: "Roboto-Medium",
+    color: "#1f2933",
+  },
+  menuEmail: {
+    fontSize: 12,
+    fontFamily: "Roboto-Regular",
+    color: "#888",
+    marginTop: 2,
+  },
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+  },
+  menuSair: {
+    fontSize: 14,
+    fontFamily: "Roboto-Medium",
   },
 });

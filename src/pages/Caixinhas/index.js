@@ -198,34 +198,7 @@ export default function Caixinhas() {
             colors={[colors.principal]}
           />
         }
-        ListHeaderComponent={
-          <View>
-            {/* Card escuro de resumo */}
-            <View style={styles.balanceCard}>
-              <Text style={styles.balanceLabel}>Saldo total</Text>
-              <Text style={styles.balanceValue}>
-                R$ {formatoMoeda.format(saldo || 0)}
-              </Text>
-
-              <View style={styles.balanceBottom}>
-                <View>
-                  <Text style={styles.miniLabel}>Caixa geral</Text>
-                  <Text style={styles.miniValue}>
-                    R$ {formatoMoeda.format(saldoDisponivel || 0)}
-                  </Text>
-                </View>
-                <View style={{ alignItems: "flex-end" }}>
-                  <Text style={styles.miniLabel}>Nas caixinhas</Text>
-                  <Text style={styles.miniValue}>
-                    R$ {formatoMoeda.format(totalReservado || 0)}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            <Text style={styles.sectionTitle}>Ministérios</Text>
-          </View>
-        }
+        
         ListEmptyComponent={
           <View style={styles.emptyBox}>
             <View style={styles.emptyIcon}>
@@ -304,7 +277,7 @@ export default function Caixinhas() {
                   activeOpacity={0.8}
                 >
                   <Ionicons
-                    name="arrow-down-outline"
+                    name="arrow-up-outline"
                     size={16}
                     color={colors.principal}
                   />
@@ -317,7 +290,7 @@ export default function Caixinhas() {
                   activeOpacity={0.8}
                 >
                   <Ionicons
-                    name="arrow-up-outline"
+                    name="arrow-down-outline"
                     size={16}
                     color={colors.destaque || "#d7a184"}
                   />
@@ -347,7 +320,7 @@ export default function Caixinhas() {
 
               {modoModal === "criar" && (
                 <>
-                  <Text style={styles.inputLabel}>Nome do ministério</Text>
+                  <Text style={styles.inputLabel}>Nome da caixinha</Text>
                   <TextInput
                     style={styles.input}
                     value={nome}

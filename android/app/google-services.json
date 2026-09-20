@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "53234150017-1r2a3v4iiilr1aqbtq7j4qm4b4n4eh77.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pshadmin",
+            "certificate_hash": "04dea642bb00447383b95a1f092d296b81850959"
+          }
+        },
+        {
           "client_id": "53234150017-qaq5ml6vj7cirk141fajmi50tejr861g.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

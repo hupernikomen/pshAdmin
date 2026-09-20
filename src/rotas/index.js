@@ -4,6 +4,7 @@ import Tabs from './tabs';
 import Registro from '../pages/Registro'
 import Caixinhas from '../pages/Caixinhas'
 import APagar from "../pages/APagar";
+import AReceber from "../pages/AReceber"; // ajuste o caminho
 import EditarRegistro from "../pages/EditarRegistro";
 
 
@@ -26,6 +27,12 @@ export default function Rotas() {
         }}
       />
 
+
+<Stack.Screen
+  name="AReceber"
+  component={AReceber}
+  options={{ title: "A receber" }}
+/>
 
       <Stack.Screen
         name="EditarRegistro"
