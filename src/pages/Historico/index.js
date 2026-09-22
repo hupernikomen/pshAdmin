@@ -144,6 +144,7 @@ export default function Historico() {
     setLoad,
     HistoricoMovimentos,
     formatoMoeda,
+    podeEditarFinanceiro,
   } = useContext(AppContext);
 
   const { uid, authPronto } = useAuth();
@@ -227,45 +228,12 @@ export default function Historico() {
     [linhas, limite]
   );
 
-  if ((!authPronto || load) && !refreshing) return <Load />;
+  const podeEditarPapel = podeEditarFinanceiro?.() !== false;
+
+  if ((!authPronto || load) && !refreshing) return <Load />
 
   return (
     <View style={styles.container}>
-      <View style={styles.filtroWrap}>
-        <Text style={styles.filtroLabel}>Mostrar</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filtroRow}
-        >
-          {LIMITES.map((n) => {
-            const ativo = limite === n;
-            return (
-              <TouchableOpacity
-                key={n}
-                style={[
-                  styles.filtroChip,
-                  ativo && { backgroundColor: colors.principal },
-                ]}
-                onPress={() => setLimite(n)}
-                activeOpacity={0.8}
-              >
-                <Text
-                  style={[
-                    styles.filtroChipText,
-                    ativo && { color: "#fff" },
-                  ]}
-                >
-                  {n}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-        <Text style={styles.filtroInfo}>
-          {Math.min(limite, linhas.length)} de {linhas.length}
-        </Text>
-      </View>
 
       <FlatList
         data={linhasLimitadas}
@@ -285,6 +253,42 @@ export default function Historico() {
                 : "Quando houver movimentações, elas aparecem aqui."}
             </Text>
           </View>
+        }
+        ListHeaderComponent={
+          <View style={styles.filtroWrap}>
+            <Text style={styles.filtroLabel}>Mostrar</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filtroRow}
+            >
+              {LIMITES.map((n) => {
+                const ativo = limite === n;
+                return (
+                  <TouchableOpacity
+                    key={n}
+                    style={[
+                      styles.filtroChip,
+                      ativo && { backgroundColor: colors.principal },
+                    ]}
+                    onPress={() => setLimite(n)}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.filtroChipText,
+                        ativo && { color: "#fff" },
+                      ]}
+                    >
+                      {n}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+          </View>
+
         }
         refreshControl={
           <RefreshControl
@@ -319,21 +323,15 @@ export default function Historico() {
             item.valorTotal &&
             (item.valorRecebidoTotal || item.valorPagoTotal) &&
             item.valorTotal !==
-              (item.valorRecebidoTotal || item.valorPagoTotal);
+            (item.valorRecebidoTotal || item.valorPagoTotal);
 
           const temRecibo = !!item.reciboUrl && !isParcela;
           const origem = textoOrigem(item);
-          const editavel = !isParcela && podeEditarRegistro(item);
 
-          const badgeLabel = isPagamento
-            ? "Pagamento"
-            : isRecebimento
-            ? "Recebimento"
-            : isEntrada
-            ? "Entrada"
-            : "Saída";
+          const editavel =
+            podeEditarPapel && !isParcela && podeEditarRegistro(item);
 
-          const badgeBg = isEntrada ? "#E8F5E9" : "#FFEBEE";
+
           const badgeColor = isEntrada ? "#2E7D32" : "#C62828";
 
           return (
@@ -352,14 +350,10 @@ export default function Historico() {
                   style={{
                     flexDirection: "row",
                     alignItems: "center",
-                    gap: 14,
+                    gap: 7,
                   }}
                 >
-                  <View style={[styles.badge, { backgroundColor: badgeBg }]}>
-                    <Text style={[styles.badgeText, { color: badgeColor }]}>
-                      {badgeLabel}
-                    </Text>
-                  </View>
+
                   <Text style={styles.meta}>
                     {item.data
                       ? new Date(item.data).toLocaleDateString("pt-BR")
@@ -368,7 +362,7 @@ export default function Historico() {
                 </View>
 
                 <Text style={[styles.valor, { color: badgeColor }]}>
-                  {isEntrada ? "+" : "−"} {formatoMoeda.format(valor)}
+                  {isEntrada ? "+" : "-"} {formatoMoeda.format(valor)}
                 </Text>
               </View>
 
@@ -460,15 +454,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#f4f5f7",
   },
   filtroWrap: {
-    paddingHorizontal: 16,
     paddingTop: 10,
-    paddingBottom: 8,
+    paddingBottom: 14,
     backgroundColor: "#f4f5f7",
   },
   filtroLabel: {
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    color: "#8a8f98",
     marginBottom: 8,
   },
   filtroRow: {
@@ -491,7 +483,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 11,
     fontFamily: "Roboto-Regular",
-    color: "#9aa0a6",
   },
   listContent: {
     paddingHorizontal: 16,
@@ -507,7 +498,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: 7,
   },
   badge: {
     paddingHorizontal: 10,
@@ -524,7 +515,7 @@ const styles = StyleSheet.create({
   },
   descricao: {
     fontSize: 15,
-    fontFamily: "Roboto-Medium",
+    fontFamily: "Roboto-Regular",
     marginBottom: 2,
   },
   metaRow: {
@@ -533,13 +524,14 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   meta: {
-    fontSize: 12,
-    fontFamily: "Roboto-Regular",
+    fontSize: 13,
+    fontFamily: "Roboto-Light",
+    color: '#000'
   },
   extra: {
     marginTop: 6,
-    fontSize: 12,
-    fontFamily: "Roboto-Regular",
+    fontSize: 13,
+    fontFamily: "Roboto-Light",
   },
   actions: {
     marginTop: 12,

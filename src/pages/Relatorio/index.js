@@ -19,8 +19,33 @@ import { useAuth } from "../../context/AuthContext";
 import Load from "../../componentes/Load";
 
 const MESES = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+];
+
+const MESES_CURTO = [
+  "Jan",
+  "Fev",
+  "Mar",
+  "Abr",
+  "Mai",
+  "Jun",
+  "Jul",
+  "Ago",
+  "Set",
+  "Out",
+  "Nov",
+  "Dez",
 ];
 
 function inicioDoDia(d) {
@@ -42,20 +67,127 @@ function calcularMes(mesIndex, ano) {
   };
 }
 
-// Cores do app (suaves)
+function arred(v) {
+  return Math.round((Number(v) || 0) * 100) / 100;
+}
+
+function valorEntrada(item) {
+  return Number(item.valorRecebidoTotal) || 0;
+}
+
+function valorSaida(item) {
+  return Number(item.valorPagoTotal) || 0;
+}
+
+function isDizimo(item) {
+  const t = String(item.tipo || "").toLowerCase();
+  return t.includes("dizimo") || t.includes("dízimo");
+}
+
+/** Desenha gráfico de linha(s) no pdf-lib */
+function desenharLinhaChart(page, font, opts) {
+  const {
+    x,
+    y, // topo do box
+    width,
+    height,
+    series, // [{ label, values: number[] }]  values alinhados por índice
+    labels, // ['Jan', 'Fev', ...]
+    colors,
+    lineColor = C.line,
+    mutedColor = C.muted,
+  } = opts;
+
+  const padL = 8;
+  const padR = 8;
+  const padT = 14;
+  const padB = 18;
+  const plotW = width - padL - padR;
+  const plotH = height - padT - padB;
+  const baseY = y - height + padB;
+
+  page.drawRectangle({
+    x,
+    y: y - height,
+    width,
+    height,
+    borderColor: lineColor,
+    borderWidth: 0.5,
+    color: rgb(1, 1, 1),
+  });
+
+  // eixo base
+  page.drawLine({
+    start: { x: x + padL, y: baseY },
+    end: { x: x + width - padR, y: baseY },
+    thickness: 0.5,
+    color: lineColor,
+  });
+
+  const allVals = series.flatMap((s) => s.values);
+  const maxV = Math.max(...allVals, 1);
+  const n = Math.max(labels.length, 1);
+  const stepX = n === 1 ? plotW / 2 : plotW / (n - 1);
+
+  const pointsFor = (values) =>
+    values.map((v, i) => ({
+      px: x + padL + i * stepX,
+      py: baseY + (Number(v) / maxV) * plotH,
+    }));
+
+  series.forEach((s, si) => {
+    const pts = pointsFor(s.values);
+    const col = colors[si] || C.ink;
+
+    for (let i = 0; i < pts.length - 1; i++) {
+      page.drawLine({
+        start: { x: pts[i].px, y: pts[i].py },
+        end: { x: pts[i + 1].px, y: pts[i + 1].py },
+        thickness: 1.5,
+        color: col,
+      });
+    }
+
+    pts.forEach((p) => {
+      page.drawCircle({
+        x: p.px,
+        y: p.py,
+        size: 2.2,
+        color: col,
+      });
+    });
+  });
+
+  labels.forEach((lab, i) => {
+    const px = x + padL + i * stepX;
+    page.drawText(String(lab), {
+      x: px - 8,
+      y: y - height + 4,
+      size: 7,
+      font,
+      color: mutedColor,
+    });
+  });
+}
+
 const C = {
-  ink: rgb(0.12, 0.16, 0.2),       // #1f2933
-  muted: rgb(0.55, 0.58, 0.62),    // cinza texto
-  line: rgb(0.92, 0.93, 0.94),     // #ececec
-  card: rgb(0.96, 0.96, 0.97),     // #f4f5f7
-  green: rgb(0.18, 0.49, 0.2),     // entrada
-  red: rgb(0.78, 0.16, 0.16),      // saída
+  ink: rgb(0.12, 0.16, 0.2),
+  muted: rgb(0.55, 0.58, 0.62),
+  line: rgb(0.9, 0.91, 0.92),
+  card: rgb(0.96, 0.96, 0.97),
+  green: rgb(0.18, 0.42, 0.31),
+  red: rgb(0.61, 0.13, 0.15),
   white: rgb(1, 1, 1),
 };
 
 export default function Relatorio() {
-  const { dadosFinancas, load, HistoricoMovimentos, formatoMoeda } =
-    useContext(AppContext);
+  const {
+    dadosFinancas,
+    load,
+    HistoricoMovimentos,
+    formatoMoeda,
+    igrejaAtiva,
+  } = useContext(AppContext);
   const { uid, authPronto } = useAuth();
   const { colors } = useTheme();
   const navigation = useNavigation();
@@ -77,7 +209,7 @@ export default function Relatorio() {
   useEffect(() => {
     if (!authPronto || !uid) return;
     HistoricoMovimentos();
-  }, [authPronto, uid]);
+  }, [authPronto, uid, igrejaAtiva?.id]);
 
   const { inicio, fim } = useMemo(() => {
     if (modoFiltro === "mes") {
@@ -101,38 +233,82 @@ export default function Relatorio() {
   const resumo = useMemo(() => {
     let entradas = 0;
     let saidas = 0;
+    let dizimos = 0;
     const porTipoEntrada = {};
     const porTipoSaida = {};
 
     filtrados.forEach((item) => {
-      const valor =
-        item.valorRecebidoTotal || item.valorPagoTotal || item.valorTotal || 0;
       const tipo = item.tipo || "Outros";
 
       if (item.tipoMovimento === "entrada") {
-        entradas += valor;
-        porTipoEntrada[tipo] = (porTipoEntrada[tipo] || 0) + valor;
+        const v = valorEntrada(item);
+        entradas += v;
+        porTipoEntrada[tipo] = (porTipoEntrada[tipo] || 0) + v;
+        if (isDizimo(item)) dizimos += v;
       } else if (item.tipoMovimento === "saida") {
-        saidas += valor;
-        porTipoSaida[tipo] = (porTipoSaida[tipo] || 0) + valor;
+        const v = valorSaida(item);
+        saidas += v;
+        porTipoSaida[tipo] = (porTipoSaida[tipo] || 0) + v;
       }
     });
 
     return {
-      entradas,
-      saidas,
-      saldo: entradas - saidas,
+      entradas: arred(entradas),
+      saidas: arred(saidas),
+      saldo: arred(entradas - saidas),
+      dizimos: arred(dizimos),
       porTipoEntrada,
       porTipoSaida,
       quantidade: filtrados.length,
     };
   }, [filtrados]);
 
+  const seriesGraficos = useMemo(() => {
+  const lista = dadosFinancas || [];
+  const pontos = [];
+
+  for (let i = 11; i >= 0; i--) {
+    const ref = new Date(agora.getFullYear(), agora.getMonth() - i, 1);
+    const m = ref.getMonth();
+    const a = ref.getFullYear();
+    const ini = new Date(a, m, 1, 0, 0, 0, 0).getTime();
+    const fimM = new Date(a, m + 1, 0, 23, 59, 59, 999).getTime();
+
+    let receita = 0;
+    let despesa = 0;
+    let dizimo = 0;
+
+    lista.forEach((item) => {
+      const ts = item.data || item.createdAt || item.reg;
+      if (!ts || ts < ini || ts > fimM) return;
+
+      if (item.tipoMovimento === "entrada") {
+        const v = valorEntrada(item);
+        receita += v;
+        if (isDizimo(item)) dizimo += v;
+      } else if (item.tipoMovimento === "saida") {
+        despesa += valorSaida(item);
+      }
+    });
+
+    pontos.push({
+      label: MESES_CURTO[m],
+      receita: arred(receita),
+      despesa: arred(despesa),
+      dizimo: arred(dizimo),
+    });
+  }
+
+  return pontos;
+}, [dadosFinancas]);
+
   const labelPeriodo = useMemo(() => {
     if (modoFiltro === "mes") {
       return `${MESES[mesSelecionado]} de ${anoSelecionado}`;
     }
-    return `${inicio.toLocaleDateString("pt-BR")} ate ${fim.toLocaleDateString("pt-BR")}`;
+    return `${inicio.toLocaleDateString("pt-BR")} até ${fim.toLocaleDateString(
+      "pt-BR"
+    )}`;
   }, [modoFiltro, mesSelecionado, anoSelecionado, inicio, fim]);
 
   async function exportarPDF() {
@@ -150,150 +326,227 @@ export default function Relatorio() {
 
       const pageWidth = 595;
       const pageHeight = 842;
-      const margin = 32;
-      const colGap = 18;
-      const leftW = 320;
-      const rightX = margin + leftW + colGap;
-      const rightW = pageWidth - rightX - margin;
+      const margin = 36;
 
       let page = pdfDoc.addPage([pageWidth, pageHeight]);
-      let yL = pageHeight - margin;
-      let yR = pageHeight - margin;
+      let y = pageHeight - margin;
 
       const safe = (t) =>
         String(t ?? "")
           .normalize("NFD")
           .replace(/[\u0300-\u036f]/g, "");
 
-      const newPage = () => {
-        page = pdfDoc.addPage([pageWidth, pageHeight]);
-        yL = pageHeight - margin;
-        yR = pageHeight - margin;
-        drawDivider();
+      const ensure = (h) => {
+        if (y - h < margin + 24) {
+          page = pdfDoc.addPage([pageWidth, pageHeight]);
+          y = pageHeight - margin;
+        }
       };
 
-      const drawDivider = () => {
+      const line = (x1, x2, yy) => {
         page.drawLine({
-          start: { x: rightX - colGap / 2, y: margin },
-          end: { x: rightX - colGap / 2, y: pageHeight - margin },
-          thickness: 0.5,
+          start: { x: x1, y: yy },
+          end: { x: x2, y: yy },
+          thickness: 0.6,
           color: C.line,
         });
       };
 
-      const needL = (h) => {
-        if (yL - h < margin + 20) newPage();
-      };
-      const needR = (h) => {
-        if (yR - h < margin + 20) newPage();
-      };
+      const nomeIgreja = igrejaAtiva?.nome || "Tesouraria";
+      const pctDiz =
+        resumo.entradas > 0
+          ? ((resumo.dizimos / resumo.entradas) * 100).toFixed(1)
+          : "0.0";
 
-      drawDivider();
-
-      // ===== CABEÇALHO ESQUERDA =====
-      page.drawText(safe("Relatorio Financeiro"), {
+      // Cabeçalho
+      page.drawText(safe(nomeIgreja), {
         x: margin,
-        y: yL,
-        size: 15,
+        y,
+        size: 16,
         font: fontBold,
         color: C.ink,
       });
-      yL -= 16;
-
-      page.drawText(safe(labelPeriodo), {
+      y -= 14;
+      page.drawText(safe("RELATORIO FINANCEIRO"), {
         x: margin,
-        y: yL,
+        y,
         size: 9,
         font,
         color: C.muted,
       });
-      yL -= 8;
-
-      page.drawLine({
-        start: { x: margin, y: yL },
-        end: { x: margin + leftW, y: yL },
-        thickness: 0.5,
-        color: C.line,
+      y -= 12;
+      page.drawText(safe(labelPeriodo), {
+        x: margin,
+        y,
+        size: 10,
+        font: fontBold,
+        color: C.ink,
       });
-      yL -= 16;
+      y -= 6;
+      line(margin, pageWidth - margin, y);
+      y -= 16;
 
-      // Cards resumo
-      const cardH = 40;
-      const cardGap = 6;
-      const cardW = (leftW - cardGap * 2) / 3;
-      needL(cardH + 16);
+      const textoExec = safe(
+        `No periodo, as receitas realizadas somaram R$ ${formatoMoeda.format(
+          resumo.entradas
+        )} e as despesas pagas R$ ${formatoMoeda.format(
+          resumo.saidas
+        )}, com resultado de R$ ${formatoMoeda.format(
+          resumo.saldo
+        )}. Os dizimos totalizaram R$ ${formatoMoeda.format(
+          resumo.dizimos
+        )} (${pctDiz}% das receitas). Valores a receber ou a pagar nao entram neste resultado ate a baixa.`
+      );
 
-      const cards = [
-        { label: "Receitas", value: resumo.entradas, tone: C.green },
-        { label: "Despesas", value: resumo.saidas, tone: C.red },
-        { label: "Saldo", value: resumo.saldo, tone: C.ink },
+      let resto = textoExec;
+      const maxChars = 95;
+      while (resto.length > 0) {
+        ensure(12);
+        let chunk = resto.slice(0, maxChars);
+        if (resto.length > maxChars) {
+          const sp = chunk.lastIndexOf(" ");
+          if (sp > 40) chunk = chunk.slice(0, sp);
+        }
+        page.drawText(chunk, {
+          x: margin,
+          y,
+          size: 9,
+          font,
+          color: C.ink,
+          maxWidth: pageWidth - margin * 2,
+        });
+        y -= 12;
+        resto = resto.slice(chunk.length).trim();
+      }
+      y -= 10;
+
+      // KPIs
+      const cardW = (pageWidth - margin * 2 - 18) / 4;
+      const cardH = 44;
+      ensure(cardH + 12);
+
+      const kpis = [
+        { label: "RECEITAS", value: resumo.entradas, color: C.green },
+        { label: "DESPESAS", value: resumo.saidas, color: C.red },
+        { label: "RESULTADO", value: resumo.saldo, color: C.ink },
+        { label: "DIZIMOS", value: resumo.dizimos, color: C.green },
       ];
 
-      cards.forEach((c, i) => {
-        const x = margin + i * (cardW + cardGap);
+      kpis.forEach((k, i) => {
+        const x = margin + i * (cardW + 6);
         page.drawRectangle({
           x,
-          y: yL - cardH,
+          y: y - cardH,
           width: cardW,
           height: cardH,
           color: C.card,
           borderColor: C.line,
           borderWidth: 0.5,
         });
-        page.drawText(safe(c.label.toUpperCase()), {
+        page.drawText(safe(k.label), {
           x: x + 8,
-          y: yL - 14,
+          y: y - 14,
           size: 7,
           font,
           color: C.muted,
         });
-        page.drawText(safe(`R$ ${formatoMoeda.format(c.value)}`), {
+        page.drawText(safe(`R$ ${formatoMoeda.format(k.value)}`), {
           x: x + 8,
-          y: yL - 30,
+          y: y - 32,
           size: 9,
           font: fontBold,
-          color: c.tone,
+          color: k.color,
           maxWidth: cardW - 12,
         });
       });
-      yL -= cardH + 18;
+      y -= cardH + 20;
 
-      // Seções por tipo
-      const drawTipoSection = (titulo, lista, sinal, cor) => {
-        if (!lista.length) return;
-        needL(20);
-        page.drawText(safe(titulo), {
-          x: margin,
-          y: yL,
-          size: 11,
-          font: fontBold,
-          color: C.ink,
-        });
-        yL -= 14;
+      const labels = seriesGraficos.map((s) => s.label);
+      const chartW = pageWidth - margin * 2;
 
-        lista.forEach(([tipo, total]) => {
-          needL(14);
-          page.drawText(safe(String(tipo)), {
-            x: margin,
-            y: yL,
-            size: 9,
-            font,
-            color: C.ink,
-            maxWidth: leftW * 0.55,
-          });
-          page.drawText(safe(`${sinal} R$ ${formatoMoeda.format(total)}`), {
-            x: margin + leftW * 0.58,
-            y: yL,
-            size: 9,
-            font: fontBold,
-            color: cor,
-            maxWidth: leftW * 0.42,
-          });
-          yL -= 13;
-        });
-        yL -= 10;
-      };
+      // --- Linha: dízimos ---
+      ensure(130);
+      page.drawText(safe("Evolucao dos dizimos (6 meses)"), {
+        x: margin,
+        y,
+        size: 10,
+        font: fontBold,
+        color: C.ink,
+      });
+      y -= 8;
+      line(margin, pageWidth - margin, y);
+      y -= 6;
 
+      const chartH1 = 100;
+      desenharLinhaChart(page, font, {
+        x: margin,
+        y,
+        width: chartW,
+        height: chartH1,
+        labels,
+        series: [{ values: seriesGraficos.map((s) => s.dizimo) }],
+        colors: [C.green],
+      });
+      y -= chartH1 + 16;
+
+      // --- Linhas: receitas x despesas ---
+      ensure(150);
+      page.drawText(safe("Receitas e despesas (6 meses)"), {
+        x: margin,
+        y,
+        size: 10,
+        font: fontBold,
+        color: C.ink,
+      });
+      y -= 8;
+      line(margin, pageWidth - margin, y);
+      y -= 4;
+
+      // legenda
+      page.drawCircle({
+        x: pageWidth - margin - 105,
+        y: y - 2,
+        size: 2.5,
+        color: C.green,
+      });
+      page.drawText(safe("Receitas"), {
+        x: pageWidth - margin - 98,
+        y: y - 5,
+        size: 7,
+        font,
+        color: C.muted,
+      });
+      page.drawCircle({
+        x: pageWidth - margin - 50,
+        y: y - 2,
+        size: 2.5,
+        color: C.red,
+      });
+      page.drawText(safe("Despesas"), {
+        x: pageWidth - margin - 43,
+        y: y - 5,
+        size: 7,
+        font,
+        color: C.muted,
+      });
+      y -= 8;
+
+      const chartH2 = 110;
+      desenharLinhaChart(page, font, {
+        x: margin,
+        y,
+        width: chartW,
+        height: chartH2,
+        labels,
+        series: [
+          { values: seriesGraficos.map((s) => s.receita) },
+          { values: seriesGraficos.map((s) => s.despesa) },
+        ],
+        colors: [C.green, C.red],
+      });
+      y -= chartH2 + 18;
+
+      // Tabelas
       const entradas = Object.entries(resumo.porTipoEntrada).sort(
         (a, b) => b[1] - a[1]
       );
@@ -301,144 +554,89 @@ export default function Relatorio() {
         (a, b) => b[1] - a[1]
       );
 
-      drawTipoSection("Entradas por tipo", entradas, "+", C.green);
-      drawTipoSection("Saidas por tipo", saidas, "-", C.red);
+      const drawTabela = (titulo, lista, cor) => {
+        ensure(20);
+        page.drawText(safe(titulo), {
+          x: margin,
+          y,
+          size: 10,
+          font: fontBold,
+          color: C.ink,
+        });
+        y -= 8;
+        line(margin, pageWidth - margin, y);
+        y -= 12;
 
-      // Rodapé esquerda
-      needL(28);
-      yL -= 4;
-      page.drawLine({
-        start: { x: margin, y: yL },
-        end: { x: margin + leftW, y: yL },
-        thickness: 0.5,
-        color: C.line,
-      });
-      yL -= 12;
+        if (!lista.length) {
+          page.drawText(safe("Sem dados no periodo."), {
+            x: margin,
+            y,
+            size: 9,
+            font,
+            color: C.muted,
+          });
+          y -= 14;
+          return;
+        }
+
+        lista.forEach(([tipo, total]) => {
+          ensure(12);
+          page.drawText(safe(String(tipo)), {
+            x: margin,
+            y,
+            size: 9,
+            font,
+            color: C.ink,
+            maxWidth: 320,
+          });
+          page.drawText(safe(`R$ ${formatoMoeda.format(total)}`), {
+            x: pageWidth - margin - 90,
+            y,
+            size: 9,
+            font: fontBold,
+            color: cor,
+          });
+          y -= 12;
+        });
+        y -= 8;
+      };
+
+      drawTabela("Receitas por tipo (realizadas)", entradas, C.green);
+      drawTabela("Despesas por tipo (pagas)", saidas, C.red);
+
+      ensure(30);
+      y -= 4;
+      line(margin, pageWidth - margin, y);
+      y -= 12;
       page.drawText(
         safe(
-          `Gerado em ${new Date().toLocaleDateString("pt-BR")} ${new Date().toLocaleTimeString("pt-BR")}`
+          `Gerado em ${new Date().toLocaleDateString(
+            "pt-BR"
+          )} ${new Date().toLocaleTimeString("pt-BR")} · ${
+            resumo.quantidade
+          } registro(s) no filtro`
         ),
         {
           x: margin,
-          y: yL,
+          y,
           size: 8,
           font,
           color: C.muted,
         }
       );
-      yL -= 12;
-      page.drawText(safe(`${resumo.quantidade} registro(s) no periodo`), {
-        x: margin,
-        y: yL,
-        size: 8,
-        font,
-        color: C.muted,
-      });
-
-      // ===== COLUNA DIREITA: movimentações =====
-      page.drawText(safe("Movimentacoes"), {
-        x: rightX,
-        y: yR,
-        size: 12,
-        font: fontBold,
-        color: C.ink,
-      });
-      yR -= 8;
-      page.drawLine({
-        start: { x: rightX, y: yR },
-        end: { x: rightX + rightW, y: yR },
-        thickness: 0.5,
-        color: C.line,
-      });
-      yR -= 14;
-
-      const lista = [...filtrados].sort((a, b) => (a.data || 0) - (b.data || 0));
-
-      lista.forEach((item) => {
-        const isEntrada = item.tipoMovimento === "entrada";
-        const valor =
-          item.valorRecebidoTotal ||
-          item.valorPagoTotal ||
-          item.valorTotal ||
-          0;
-
-        const dataStr = item.data
-          ? new Date(item.data).toLocaleDateString("pt-BR")
-          : "--/--/----";
-
-        const isDizimo = String(item.tipo || "")
-          .toLowerCase()
-          .includes("dizimo") ||
-          String(item.tipo || "")
-            .toLowerCase()
-            .includes("dízimo");
-
-        const desc = isDizimo
-          ? "********"
-          : item.descricao || item.tipo || "-";
-
-        let origemTxt = "";
-        if (!isEntrada) {
-          if (item.origemPagamento === "caixinha") {
-            origemTxt = ` · ${item.caixinhaNome || "Caixinha"}`;
-          } else if (item.origemPagamento === "geral") {
-            origemTxt = " · Caixa geral";
-          } else {
-            const pagos = item.valoresPagos || [];
-            const ultimo = pagos[pagos.length - 1];
-            if (ultimo?.origemPagamento === "caixinha") {
-              origemTxt = ` · ${ultimo.caixinhaNome || "Caixinha"}`;
-            } else if (ultimo?.origemPagamento === "geral") {
-              origemTxt = " · Caixa geral";
-            }
-          }
-        }
-
-        needR(22);
-
-        // data + tipo
-        page.drawText(safe(`${dataStr}  ·  ${item.tipo || "-"}`), {
-          x: rightX,
-          y: yR,
+      y -= 11;
+      page.drawText(
+        safe(
+          "Documento informativo com base nos lancamentos do aplicativo de tesouraria."
+        ),
+        {
+          x: margin,
+          y,
           size: 7,
           font,
           color: C.muted,
-          maxWidth: rightW,
-        });
-        yR -= 10;
-
-        // descrição
-        page.drawText(safe(`${desc}${origemTxt}`), {
-          x: rightX,
-          y: yR,
-          size: 8,
-          font,
-          color: C.ink,
-          maxWidth: rightW * 0.62,
-        });
-
-        // valor
-        page.drawText(
-          safe(`${isEntrada ? "+" : "-"} R$ ${formatoMoeda.format(valor)}`),
-          {
-            x: rightX + rightW * 0.64,
-            y: yR,
-            size: 8,
-            font: fontBold,
-            color: isEntrada ? C.green : C.red,
-            maxWidth: rightW * 0.36,
-          }
-        );
-        yR -= 8;
-
-        page.drawLine({
-          start: { x: rightX, y: yR },
-          end: { x: rightX + rightW, y: yR },
-          thickness: 0.4,
-          color: C.line,
-        });
-        yR -= 8;
-      });
+        }
+      );
 
       const base64 = await pdfDoc.saveAsBase64();
       if (!base64) throw new Error("Falha ao gerar o conteudo do PDF.");
@@ -490,7 +688,16 @@ export default function Relatorio() {
         </TouchableOpacity>
       ),
     });
-  }, [navigation, colors, gerando, filtrados, resumo, labelPeriodo]);
+  }, [
+    navigation,
+    colors,
+    gerando,
+    filtrados,
+    resumo,
+    labelPeriodo,
+    seriesGraficos,
+    igrejaAtiva?.nome,
+  ]);
 
   if ((!authPronto || load) && !(dadosFinancas || []).length) return <Load />;
 
@@ -617,7 +824,7 @@ export default function Relatorio() {
               mode="date"
               display="default"
               maximumDate={dataAte}
-              onValueChange={(e, selected) => {
+              onChange={(e, selected) => {
                 setShowDe(false);
                 if (selected) setDataDe(selected);
               }}
@@ -631,7 +838,7 @@ export default function Relatorio() {
               display="default"
               minimumDate={dataDe}
               maximumDate={new Date()}
-              onValueChange={(e, selected) => {
+              onChange={(e, selected) => {
                 setShowAte(false);
                 if (selected) setDataAte(selected);
               }}
@@ -644,6 +851,40 @@ export default function Relatorio() {
             <Text style={styles.filtroQtd}>{resumo.quantidade} reg.</Text>
           </View>
         </View>
+
+        <View style={styles.kpiRow}>
+          <View style={styles.kpiCard}>
+            <Text style={styles.kpiLabel}>Receitas</Text>
+            <Text style={[styles.kpiValue, { color: "#2E7D32" }]}>
+              {formatoMoeda.format(resumo.entradas)}
+            </Text>
+          </View>
+          <View style={styles.kpiCard}>
+            <Text style={styles.kpiLabel}>Despesas</Text>
+            <Text style={[styles.kpiValue, { color: "#C62828" }]}>
+              {formatoMoeda.format(resumo.saidas)}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.kpiRow}>
+          <View style={styles.kpiCard}>
+            <Text style={styles.kpiLabel}>Saldo</Text>
+            <Text style={styles.kpiValue}>
+              {formatoMoeda.format(resumo.saldo)}
+            </Text>
+          </View>
+          <View style={styles.kpiCard}>
+            <Text style={styles.kpiLabel}>Dízimos</Text>
+            <Text style={[styles.kpiValue, { color: "#2E7D32" }]}>
+              {formatoMoeda.format(resumo.dizimos)}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.hintPdf}>
+          Exporte o PDF no ícone do cabeçalho para o relatório com gráficos de
+          linha (dízimos e receitas × despesas).
+        </Text>
 
         <Text style={styles.sectionTitle}>Entradas por tipo</Text>
         <View style={styles.listCard}>
@@ -658,8 +899,14 @@ export default function Relatorio() {
                   index === listaEntradas.length - 1 && styles.itemRowLast,
                 ]}
               >
-                <View style={[styles.iconCircle, { backgroundColor: "#E8F5E9" }]}>
-                  <Ionicons name="arrow-down-outline" size={16} color="#2E7D32" />
+                <View
+                  style={[styles.iconCircle, { backgroundColor: "#E8F5E9" }]}
+                >
+                  <Ionicons
+                    name="arrow-down-outline"
+                    size={16}
+                    color="#2E7D32"
+                  />
                 </View>
                 <Text style={styles.itemLabel}>{item.tipo}</Text>
                 <Text style={[styles.itemValue, { color: "#2E7D32" }]}>
@@ -683,7 +930,9 @@ export default function Relatorio() {
                   index === listaSaidas.length - 1 && styles.itemRowLast,
                 ]}
               >
-                <View style={[styles.iconCircle, { backgroundColor: "#FFEBEE" }]}>
+                <View
+                  style={[styles.iconCircle, { backgroundColor: "#FFEBEE" }]}
+                >
                   <Ionicons name="arrow-up-outline" size={16} color="#C62828" />
                 </View>
                 <Text style={styles.itemLabel}>{item.tipo}</Text>
@@ -717,7 +966,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 18,
     padding: 14,
-    marginBottom: 18,
+    marginBottom: 14,
   },
   segment: {
     flexDirection: "row",
@@ -817,6 +1066,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Roboto-Medium",
     color: "#9aa0a6",
+  },
+  kpiRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 10,
+  },
+  kpiCard: {
+    flex: 1,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 14,
+  },
+  kpiLabel: {
+    fontSize: 11,
+    fontFamily: "Roboto-Regular",
+    color: "#9aa0a6",
+    marginBottom: 4,
+  },
+  kpiValue: {
+    fontSize: 15,
+    fontFamily: "Roboto-Bold",
+    color: "#1f2933",
+  },
+  hintPdf: {
+    fontSize: 12,
+    fontFamily: "Roboto-Regular",
+    color: "#888",
+    marginBottom: 16,
+    marginTop: 4,
   },
   sectionTitle: {
     fontSize: 16,

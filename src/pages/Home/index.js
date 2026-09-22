@@ -11,12 +11,10 @@ import {
   Pressable,
   Alert,
 } from "react-native";
-
 import { useNavigation, useTheme } from "@react-navigation/native";
+import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../../context/AppContext";
 import { useAuth } from "../../context/AuthContext";
-
-import Ionicons from "react-native-vector-icons/Ionicons";
 import Load from "../../componentes/Load";
 import Saldo from "../../componentes/Saldo";
 
@@ -32,6 +30,9 @@ export default function Home() {
     HistoricoMovimentos,
     CarregarCaixinhas,
     formatoMoeda,
+    igrejaAtiva,
+    igrejasDoUsuario,
+    selecionarIgreja,
   } = useContext(AppContext);
 
   const { user, logout } = useAuth();
@@ -39,21 +40,25 @@ export default function Home() {
   const navigation = useNavigation();
   const [refreshing, setRefreshing] = useState(false);
   const [menuAberto, setMenuAberto] = useState(false);
+  const [modalIgrejas, setModalIgrejas] = useState(false);
 
   const foto = user?.photoURL || null;
   const nome = user?.displayName || "Conta";
   const email = user?.email || "";
+  const isAdmin = igrejaAtiva?.papel === "admin";
+  const variasIgrejas = (igrejasDoUsuario || []).length > 1;
 
   useEffect(() => {
     carregar();
-  }, []);
+  }, [igrejaAtiva?.id]);
 
   useEffect(() => {
     navigation.setOptions({
+      title: igrejaAtiva?.nome || "Início",
       headerRight: () => (
         <TouchableOpacity
           onPress={() => setMenuAberto(true)}
-          style={{ marginRight: 16 }}
+          style={{ marginRight: 12 }}
           activeOpacity={0.8}
         >
           {foto ? (
@@ -66,7 +71,7 @@ export default function Home() {
         </TouchableOpacity>
       ),
     });
-  }, [navigation, foto]);
+  }, [navigation, foto, igrejaAtiva?.nome]);
 
   async function carregar() {
     setLoad(true);
@@ -89,9 +94,25 @@ export default function Home() {
     }
   }
 
+  function abrirMembros() {
+    setMenuAberto(false);
+    navigation.navigate("Membros");
+  }
+
+  function abrirTrocarIgreja() {
+    setMenuAberto(false);
+    setModalIgrejas(true);
+  }
+
+  async function escolherIgreja(igrejaId) {
+    setModalIgrejas(false);
+    if (igrejaId === igrejaAtiva?.id) return;
+    await selecionarIgreja(igrejaId);
+  }
+
   const lista = dadosFinancas || [];
   const agora = new Date();
-  const mesAtual = agora.getMonth(); // 0–11
+  const mesAtual = agora.getMonth();
   const anoAtual = agora.getFullYear();
 
   const entradasMesAtual = lista
@@ -131,9 +152,7 @@ export default function Home() {
     }, 0);
 
   const projecaoFutura = saldoAtual + entradasFuturas - despesasFuturas;
-  const abertos = lista.filter((i) => i.status === "aberta").length;
 
-  // Dízimos do mês vigente
   const dizimosMes = lista.filter((i) => {
     if (i.tipoMovimento !== "entrada" || i.tipo !== "Dízimo" || !i.data) {
       return false;
@@ -147,29 +166,22 @@ export default function Home() {
     0
   );
 
-  // Saldo inicial (início do período)
   const saldoInicialReg = lista.find(
     (i) => i.tipo === "Saldo inicial" && i.data
   );
 
   let mediaDizimosAnual = 0;
-
   if (saldoInicialReg) {
     const dSi = new Date(saldoInicialReg.data);
     const siAno = dSi.getFullYear();
-    const siMes = dSi.getMonth(); // 0–11
-
-    let meses =
-      (anoAtual - siAno) * 12 + (mesAtual - siMes) + 1; // inclui mês atual
-
+    const siMes = dSi.getMonth();
+    let meses = (anoAtual - siAno) * 12 + (mesAtual - siMes) + 1;
     if (meses < 1) meses = 1;
-
     const totalDizimosPeriodo = lista
       .filter((i) => {
         if (i.tipoMovimento !== "entrada" || i.tipo !== "Dízimo" || !i.data) {
           return false;
         }
-        // dízimos a partir do mês do saldo inicial
         const d = new Date(i.data);
         const idx = d.getFullYear() * 12 + d.getMonth();
         const idxSi = siAno * 12 + siMes;
@@ -179,10 +191,8 @@ export default function Home() {
         (acc, i) => acc + (i.valorRecebidoTotal || i.valorTotal || 0),
         0
       );
-
     mediaDizimosAnual = totalDizimosPeriodo / meses;
   } else {
-    // Sem saldo inicial: total do ano ÷ mês atual (1–12)
     const totalDizimosAno = lista
       .filter((i) => {
         if (i.tipoMovimento !== "entrada" || i.tipo !== "Dízimo" || !i.data) {
@@ -195,9 +205,8 @@ export default function Home() {
         (acc, i) => acc + (i.valorRecebidoTotal || i.valorTotal || 0),
         0
       );
-
-    const mesNumero = mesAtual + 1;
-    mediaDizimosAnual = mesNumero > 0 ? totalDizimosAno / mesNumero : 0;
+    mediaDizimosAnual =
+      mesAtual + 1 > 0 ? totalDizimosAno / (mesAtual + 1) : 0;
   }
 
   const resumoItens = useMemo(
@@ -286,12 +295,10 @@ export default function Home() {
             <View style={[styles.iconCircle, { backgroundColor: item.tint }]}>
               <Ionicons name={item.icon} size={18} color={item.iconColor} />
             </View>
-
             <View style={styles.itemCenter}>
               <Text style={styles.itemTitle}>{item.label}</Text>
               <Text style={styles.itemSub}>{item.sub}</Text>
             </View>
-
             <Text style={styles.itemValue}>{item.value}</Text>
           </TouchableOpacity>
         )}
@@ -322,23 +329,92 @@ export default function Home() {
                 <Text style={styles.menuNome} numberOfLines={1}>
                   {nome}
                 </Text>
-                {!!email && (
+                {/* {!!email && (
                   <Text style={styles.menuEmail} numberOfLines={1}>
                     {email}
+                  </Text>
+                )} */}
+                {!!igrejaAtiva?.nome && (
+                  <Text style={styles.menuIgreja} numberOfLines={1}>
+                    {/* {igrejaAtiva.nome} */}
+                   {igrejaAtiva.papel}
                   </Text>
                 )}
               </View>
             </View>
+
+            {isAdmin && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={abrirMembros}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="people-outline" size={18} color="#333" />
+                <Text style={styles.menuItemText}>Membros</Text>
+              </TouchableOpacity>
+            )}
+
+            {variasIgrejas && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={abrirTrocarIgreja}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="swap-horizontal-outline" size={18} color="#333" />
+                <Text style={styles.menuItemText}>Trocar igreja</Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={styles.menuItem}
               onPress={handleLogout}
               activeOpacity={0.8}
             >
-              <Ionicons name="log-out-outline" size={18} />
-              <Text style={styles.menuSair}>Sair</Text>
-
+              <Ionicons name="log-out-outline" size={18}/>
+              <Text style={styles.menuItemText}>
+                Sair
+              </Text>
             </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Escolher igreja */}
+      <Modal
+        visible={modalIgrejas}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalIgrejas(false)}
+      >
+        <Pressable
+          style={styles.menuOverlay}
+          onPress={() => setModalIgrejas(false)}
+        >
+          <Pressable style={[styles.menuCard, { width: 280 }]} onPress={() => {}}>
+            <Text style={styles.modalIgrejaTitulo}>Suas igrejas</Text>
+            {(igrejasDoUsuario || []).map((ig) => {
+              const ativa = ig.igrejaId === igrejaAtiva?.id;
+              return (
+                <TouchableOpacity
+                  key={ig.igrejaId}
+                  style={[styles.igrejaItem, ativa && styles.igrejaItemAtiva]}
+                  onPress={() => escolherIgreja(ig.igrejaId)}
+                  activeOpacity={0.8}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.igrejaItemNome}>{ig.nome}</Text>
+                    <Text style={styles.igrejaItemPapel}>{ig.papel}</Text>
+                  </View>
+                  {ativa && (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={20}
+                      color={colors.principal}
+                    />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </Pressable>
         </Pressable>
       </Modal>
@@ -356,9 +432,9 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: "#ddd",
   },
   avatarFallback: {
@@ -408,7 +484,7 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   menuCard: {
-    width: 240,
+    width: 260,
     backgroundColor: "#fff",
     borderRadius: 16,
     padding: 12,
@@ -436,19 +512,55 @@ const styles = StyleSheet.create({
   },
   menuEmail: {
     fontSize: 12,
-    fontFamily: "Roboto-Regular",
-    color: "#888",
+    fontFamily: "Roboto-Light",
     marginTop: 2,
+  },
+  menuIgreja: {
+    fontSize: 12,
+    fontFamily: "Roboto-Light",
+    marginTop: 2,
+    textTransform: "capitalize",
   },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingVertical: 10,
+    gap: 10,
+    paddingVertical: 12,
     paddingHorizontal: 4,
   },
-  menuSair: {
+  menuItemText: {
     fontSize: 14,
     fontFamily: "Roboto-Medium",
+    color: "#333",
+  },
+  modalIgrejaTitulo: {
+    fontSize: 15,
+    fontFamily: "Roboto-Bold",
+    color: "#1f2933",
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
+  igrejaItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  igrejaItemAtiva: {
+    backgroundColor: "#f4f5f7",
+  },
+  igrejaItemNome: {
+    fontSize: 14,
+    fontFamily: "Roboto-Medium",
+    color: "#1f2933",
+  },
+  igrejaItemPapel: {
+    fontSize: 12,
+    fontFamily: "Roboto-Regular",
+    color: "#888",
+    marginTop: 2,
+    textTransform: "capitalize",
   },
 });

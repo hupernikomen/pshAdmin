@@ -139,7 +139,6 @@ const styles = StyleSheet.create({
     borderRadius: 35,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#ececec",
-    elevation: 3,
   },
   pill: {
     position: "absolute",

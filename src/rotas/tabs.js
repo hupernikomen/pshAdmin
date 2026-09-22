@@ -1,5 +1,4 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import TabBar from '../componentes/TabBar';
 
@@ -15,44 +14,45 @@ const Tab = createBottomTabNavigator();
 export default function Tabs() {
   return (
 
-    <SafeAreaView style={{ flex: 1 }} edges={['bottom', 'left', 'right']}>
 
-      <Tab.Navigator
-        initialRouteName='Home'
-        tabBar={(props) => <TabBar {...props} />}
-        screenOptions={{
+    <Tab.Navigator
+      initialRouteName='Home'
+      tabBar={(props) => <TabBar {...props} />}
+      screenOptions={{
+        headerTitleStyle: {
+
+          fontFamily: 'Roboto-Medium',
+          color: '#000'
+        },
+        headerShadowVisible: false
+      }}>
+
+      <Tab.Screen
+        name="Home"
+        component={Home}
+        options={{
           headerTitleStyle: {
-            fontSize: 18,
-            fontFamily: 'Roboto-Medium',
+            fontSize: 18
           },
-          headerShadowVisible: false
-        }}>
-
-        <Tab.Screen
-          name="Home"
-          component={Home}
-          options={{
-            title: 'Tesouraria PSH',
-            tabBarIcon: 'pie-chart-outline',
-          }}
-        />
-        <Tab.Screen
-          name="Histórico"
-          component={Historico}
-          options={{
-            tabBarIcon: 'folder-open-outline',
-          }}
-        />
-        <Tab.Screen
-          name="Relatório"
-          component={Relatorio}
-          options={{
-            tabBarIcon: 'reader-outline',
-          }}
-        />
+          tabBarIcon: 'pie-chart-outline',
+        }}
+      />
+      <Tab.Screen
+        name="Histórico"
+        component={Historico}
+        options={{
+          tabBarIcon: 'folder-open-outline',
+        }}
+      />
+      <Tab.Screen
+        name="Relatório"
+        component={Relatorio}
+        options={{
+          tabBarIcon: 'reader-outline',
+        }}
+      />
 
 
-      </Tab.Navigator>
-    </SafeAreaView>
+    </Tab.Navigator>
   );
 }

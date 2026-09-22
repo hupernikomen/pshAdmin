@@ -53,8 +53,15 @@ function arred(v) {
   return Math.round((Number(v) || 0) * 100) / 100;
 }
 
-/** Gera parcelas mensais a partir da data base */
-function montarParcelas({ valorTotal, qtd, dataBase, valorPagoAgora, origemPagamento, caixinhaId, caixinhaNome }) {
+function montarParcelas({
+  valorTotal,
+  qtd,
+  dataBase,
+  valorPagoAgora,
+  origemPagamento,
+  caixinhaId,
+  caixinhaNome,
+}) {
   const total = arred(valorTotal);
   const n = Math.max(1, parseInt(qtd, 10) || 1);
   const base = arred(total / n);
@@ -130,6 +137,9 @@ export default function Registro() {
     RetirarDaCaixinha,
     CarregarCaixinhas,
     formatoMoeda,
+    getIgrejaId,
+    podeEditarFinanceiro,
+    igrejaAtiva,
   } = useContext(AppContext);
 
   const { uid } = useAuth();
@@ -152,24 +162,25 @@ export default function Registro() {
   const [caixinhaId, setCaixinhaId] = useState(null);
   const [temSaldoInicial, setTemSaldoInicial] = useState(false);
 
-  const tiposEntrada = ["Saldo inicial", "Dízimo", "Oferta", "Bazar", "Rifa", "Propósito", "Doação", "Venda de Lanche"];
+  const tiposEntrada = ["Saldo inicial", "Dízimo", "Oferta", "Bazar"];
   const tiposSaida = ["Conta Fixa", "Parcelada"];
   const isSaldoInicial = tipo === "Saldo inicial";
-  const isParcelada = tipo === "Parcelada" || selecionado?.tipo === "Parcelada";
+
+  const igrejaId = getIgrejaId?.() || igrejaAtiva?.id || null;
 
   useEffect(() => {
     verificarSaldoInicial();
-  }, [uid]);
+  }, [uid, igrejaId]);
 
   useEffect(() => {
-    if (modo === "adicionar" && tipoMovimento && uid) {
+    if (modo === "adicionar" && tipoMovimento && uid && igrejaId) {
       carregarAbertos();
     } else {
       setAbertos([]);
       setSelecionado(null);
       setParcelaSel(null);
     }
-  }, [modo, tipoMovimento, uid]);
+  }, [modo, tipoMovimento, uid, igrejaId]);
 
   useEffect(() => {
     if (tipoMovimento !== "saida") {
@@ -179,14 +190,14 @@ export default function Registro() {
   }, [tipoMovimento]);
 
   async function verificarSaldoInicial() {
-    if (!uid) {
+    if (!uid || !igrejaId) {
       setTemSaldoInicial(false);
       return;
     }
     try {
       const q = query(
         collection(db, "registros"),
-        where("idUsuario", "==", uid),
+        where("igrejaId", "==", igrejaId),
         where("tipo", "==", "Saldo inicial")
       );
       const snap = await getDocs(q);
@@ -197,11 +208,11 @@ export default function Registro() {
   }
 
   async function carregarAbertos() {
-    if (!uid) return;
+    if (!uid || !igrejaId) return;
     try {
       const q = query(
         collection(db, "registros"),
-        where("idUsuario", "==", uid),
+        where("igrejaId", "==", igrejaId),
         where("tipoMovimento", "==", tipoMovimento),
         where("status", "==", "aberta")
       );
@@ -229,7 +240,10 @@ export default function Registro() {
           PermissionsAndroid.PERMISSIONS.CAMERA
         );
         if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-          Alert.alert("Permissão negada", "Precisamos da câmera para continuar.");
+          Alert.alert(
+            "Permissão negada",
+            "Precisamos da câmera para continuar."
+          );
           return;
         }
       }
@@ -253,7 +267,9 @@ export default function Registro() {
       if (valorPagoAgora > (Number(saldoDisponivel) || 0) + 0.001) {
         Alert.alert(
           "Saldo insuficiente",
-          `Caixa geral disponível: R$ ${formatoMoeda.format(saldoDisponivel || 0)}`
+          `Caixa geral disponível: R$ ${formatoMoeda.format(
+            saldoDisponivel || 0
+          )}`
         );
         return false;
       }
@@ -290,6 +306,17 @@ export default function Registro() {
       Alert.alert("Atenção", "Faça login novamente.");
       return;
     }
+    if (!igrejaId) {
+      Alert.alert("Atenção", "Nenhuma igreja selecionada.");
+      return;
+    }
+    if (podeEditarFinanceiro && !podeEditarFinanceiro()) {
+      Alert.alert(
+        "Sem permissão",
+        "Seu perfil é somente leitura nesta igreja."
+      );
+      return;
+    }
     if (!tipoMovimento) {
       Alert.alert("Atenção", "Selecione Entrada ou Saída.");
       return;
@@ -314,7 +341,8 @@ export default function Registro() {
 
     // --- ADICIONAR PAGAMENTO ---
     if (modo === "adicionar") {
-      const temParcelas = Array.isArray(selecionado.parcelas) && selecionado.parcelas.length > 0;
+      const temParcelas =
+        Array.isArray(selecionado.parcelas) && selecionado.parcelas.length > 0;
 
       if (temParcelas) {
         if (!parcelaSel) {
@@ -335,7 +363,9 @@ export default function Registro() {
               origemPagamento,
               caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
               caixinhaNome:
-                origemPagamento === "caixinha" ? caixinhaSel?.nome || null : null,
+                origemPagamento === "caixinha"
+                  ? caixinhaSel?.nome || null
+                  : null,
             };
           });
 
@@ -348,7 +378,9 @@ export default function Registro() {
             origemPagamento,
             caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
             caixinhaNome:
-              origemPagamento === "caixinha" ? caixinhaSel?.nome || null : null,
+              origemPagamento === "caixinha"
+                ? caixinhaSel?.nome || null
+                : null,
           };
 
           const novoTotal = arred((selecionado.valorPagoTotal || 0) + valor);
@@ -377,7 +409,6 @@ export default function Registro() {
         return;
       }
 
-      // fluxo antigo (sem array parcelas)
       if (!valorParcial) {
         Alert.alert("Atenção", "Informe o valor.");
         return;
@@ -390,7 +421,9 @@ export default function Registro() {
         const campoArray =
           tipoMovimento === "entrada" ? "valoresRecebidos" : "valoresPagos";
         const campoTotal =
-          tipoMovimento === "entrada" ? "valorRecebidoTotal" : "valorPagoTotal";
+          tipoMovimento === "entrada"
+            ? "valorRecebidoTotal"
+            : "valorPagoTotal";
         const listaAtual = selecionado[campoArray] || [];
         const novoTotal = arred((selecionado[campoTotal] || 0) + valor);
 
@@ -401,7 +434,8 @@ export default function Registro() {
               valor,
               data: data.getTime(),
               id: Date.now().toString(),
-              origemPagamento: tipoMovimento === "saida" ? origemPagamento : null,
+              origemPagamento:
+                tipoMovimento === "saida" ? origemPagamento : null,
               caixinhaId:
                 tipoMovimento === "saida" && origemPagamento === "caixinha"
                   ? caixinhaId
@@ -437,10 +471,10 @@ export default function Registro() {
     const parcial = isSaldoInicial
       ? valor
       : valorParcial
-        ? parseNumero(valorParcial)
-        : tipo === "Parcelada"
-          ? 0
-          : valor;
+      ? parseNumero(valorParcial)
+      : tipo === "Parcelada"
+      ? 0
+      : valor;
 
     if (tipo === "Parcelada") {
       const qtd = parseInt(qtdParcelas, 10) || 1;
@@ -463,6 +497,7 @@ export default function Registro() {
         });
 
         const base = {
+          igrejaId,
           idUsuario: uid,
           tipoMovimento: "saida",
           tipo: "Parcelada",
@@ -478,7 +513,9 @@ export default function Registro() {
           origemPagamento,
           caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
           caixinhaNome:
-            origemPagamento === "caixinha" ? caixinhaSel?.nome || null : null,
+            origemPagamento === "caixinha"
+              ? caixinhaSel?.nome || null
+              : null,
           reciboUrl: reciboUri ? await salvarImagemLocal(reciboUri) : null,
           reg: Date.now(),
           createdAt: Date.now(),
@@ -491,7 +528,10 @@ export default function Registro() {
           ResumoFinanceiro(),
           CarregarCaixinhas?.(),
         ]);
-        setAviso({ titulo: "Sucesso", mensagem: "Compra parcelada registrada!" });
+        setAviso({
+          titulo: "Sucesso",
+          mensagem: "Compra parcelada registrada!",
+        });
         navigation.goBack();
       } catch (e) {
         Alert.alert("Erro", e.message || "Não foi possível salvar");
@@ -501,11 +541,11 @@ export default function Registro() {
       return;
     }
 
-    // entrada / conta fixa
     if (!validarOrigemSaida(parcial)) return;
     setLoad(true);
     try {
       const base = {
+        igrejaId,
         idUsuario: uid,
         tipoMovimento,
         tipo,
@@ -532,16 +572,23 @@ export default function Registro() {
             origemPagamento,
             caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
             caixinhaNome:
-              origemPagamento === "caixinha" ? caixinhaSel?.nome || null : null,
+              origemPagamento === "caixinha"
+                ? caixinhaSel?.nome || null
+                : null,
           },
         ];
         base.valorPagoTotal = parcial;
         base.quantidadeParcelas = 1;
         base.origemPagamento = origemPagamento;
-        base.caixinhaId = origemPagamento === "caixinha" ? caixinhaId : null;
+        base.caixinhaId =
+          origemPagamento === "caixinha" ? caixinhaId : null;
         base.caixinhaNome =
-          origemPagamento === "caixinha" ? caixinhaSel?.nome || null : null;
-        base.reciboUrl = reciboUri ? await salvarImagemLocal(reciboUri) : null;
+          origemPagamento === "caixinha"
+            ? caixinhaSel?.nome || null
+            : null;
+        base.reciboUrl = reciboUri
+          ? await salvarImagemLocal(reciboUri)
+          : null;
       }
 
       await addDoc(collection(db, "registros"), base);
@@ -583,89 +630,102 @@ export default function Registro() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 24}
     >
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.segment}>
-        {["entrada", "saida"].map((item) => {
-          const ativo = tipoMovimento === item;
-          return (
-            <TouchableOpacity
-              key={item}
-              style={[
-                styles.segmentBtn,
-                ativo && { backgroundColor: colors.principal },
-              ]}
-              onPress={() => {
-                setTipoMovimento(item);
-                setTipo(null);
-                setModo("nova");
-                setSelecionado(null);
-                setParcelaSel(null);
-              }}
-            >
-              <Text style={[styles.segmentText, ativo && { color: "#fff" }]}>
-                {item === "entrada" ? "Entrada" : "Saída"}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {tipoMovimento && (
-        <>
-          <View style={styles.segment}>
-            {[
-              { id: "nova", label: "Nova" },
-              { id: "adicionar", label: "Adicionar Pagamento" },
-            ].map((opt) => {
-              const ativo = modo === opt.id;
-              return (
-                <TouchableOpacity
-                  key={opt.id}
-                  style={[
-                    styles.segmentBtn,
-                    ativo && { backgroundColor: colors.principal },
-                  ]}
-                  onPress={() => {
-                    setModo(opt.id);
-                    if (opt.id === "nova") {
-                      setSelecionado(null);
-                      setParcelaSel(null);
-                    }
-                  }}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        automaticallyAdjustKeyboardInsets
+      >
+        <View style={styles.segment}>
+          {["entrada", "saida"].map((item) => {
+            const ativo = tipoMovimento === item;
+            return (
+              <TouchableOpacity
+                key={item}
+                style={[
+                  styles.segmentBtn,
+                  ativo && { backgroundColor: colors.principal },
+                ]}
+                onPress={() => {
+                  setTipoMovimento(item);
+                  setTipo(null);
+                  setModo("nova");
+                  setSelecionado(null);
+                  setParcelaSel(null);
+                }}
+              >
+                <Text
+                  style={[styles.segmentText, ativo && { color: "#fff" }]}
                 >
-                  <Text style={[styles.segmentText, ativo && { color: "#fff" }]}>
-                    {opt.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+                  {item === "entrada" ? "Entrada" : "Saída"}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
 
-          {modo === "nova" && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Tipo</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chips}>
-                {(tipoMovimento === "entrada" ? tiposEntrada : tiposSaida).map(
-                  (t) => {
+        {tipoMovimento && (
+          <>
+            <View style={styles.segment}>
+              {[
+                { id: "nova", label: "Nova" },
+                { id: "adicionar", label: "Adicionar Pagamento" },
+              ].map((opt) => {
+                const ativo = modo === opt.id;
+                return (
+                  <TouchableOpacity
+                    key={opt.id}
+                    style={[
+                      styles.segmentBtn,
+                      ativo && { backgroundColor: colors.principal },
+                    ]}
+                    onPress={() => {
+                      setModo(opt.id);
+                      if (opt.id === "nova") {
+                        setSelecionado(null);
+                        setParcelaSel(null);
+                      }
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.segmentText,
+                        ativo && { color: "#fff" },
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {modo === "nova" && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Tipo</Text>
+                <View style={styles.chips}>
+                  {(tipoMovimento === "entrada"
+                    ? tiposEntrada
+                    : tiposSaida
+                  ).map((t) => {
                     const ativo = tipo === t;
-                    const bloqueado = t === "Saldo inicial" && temSaldoInicial;
-                    if (!bloqueado) {
+                    const bloqueado =
+                      t === "Saldo inicial" && temSaldoInicial;
                     return (
-                        
                       <TouchableOpacity
                         key={t}
+                        disabled={bloqueado}
                         style={[
                           styles.chip,
                           ativo && { backgroundColor: colors.principal },
+                          bloqueado && styles.chipDisabled,
                         ]}
                         onPress={() => {
                           setTipo(t);
-             
+                          if (t === "Saldo inicial" && !descricao) {
+                            setDescricao("Saldo inicial");
+                          }
                           if (t === "Parcelada" && !qtdParcelas) {
                             setQtdParcelas("2");
                           }
@@ -680,290 +740,284 @@ export default function Registro() {
                         >
                           {t}
                         </Text>
-                      </TouchableOpacity> 
-                    )}
-                  }
-                )}
-              </ScrollView>
-            </View>
-          )}
-
-          {modo === "adicionar" && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Selecione o registro</Text>
-              {abertos.length === 0 ? (
-                <Text style={styles.empty}>Nenhum registro em aberto</Text>
-              ) : (
-                abertos.map((item) => {
-                  const ativo = selecionado?.id === item.id;
-                  return (
-                    <TouchableOpacity
-                      key={item.id}
-                      style={[
-                        styles.selectCard,
-                        ativo && {
-                          borderColor: colors.principal,
-                          backgroundColor: "#fff",
-                        },
-                      ]}
-                      onPress={() => {
-                        setSelecionado(item);
-                        setParcelaSel(null);
-                        setValorParcial("");
-                      }}
-                    >
-                      <View style={styles.selectIcon}>
-                        <Ionicons
-                          name={
-                            tipoMovimento === "entrada"
-                              ? "arrow-down-outline"
-                              : "arrow-up-outline"
-                          }
-                          size={16}
-                          color={ativo ? colors.principal : "#9aa0a6"}
-                        />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.selectTitle}>
-                          {item.tipo} · {item.descricao}
-                        </Text>
-                        <Text style={styles.selectSub}>
-                          R${" "}
-                          {(
-                            item.valorRecebidoTotal ||
-                            item.valorPagoTotal ||
-                            0
-                          ).toFixed(2)}{" "}
-                          de R$ {item.valorTotal?.toFixed(2)}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })
-              )}
-
-              {selecionado &&
-                Array.isArray(selecionado.parcelas) &&
-                parcelasAbertasSel.length > 0 && (
-                  <View style={{ marginTop: 12 }}>
-                    <Text style={styles.sectionTitle}>Parcela a pagar</Text>
-                    {parcelasAbertasSel.map((p) => {
-                      const ativo = parcelaSel?.numero === p.numero;
-                      return (
-                        <TouchableOpacity
-                          key={p.numero}
-                          style={[
-                            styles.selectCard,
-                            ativo && {
-                              borderColor: colors.principal,
-                              backgroundColor: "#fff",
-                            },
-                          ]}
-                          onPress={() => {
-                            setParcelaSel(p);
-                            setValorParcial(String(p.valor).replace(".", ","));
-                          }}
-                        >
-                          <View style={styles.selectIcon}>
-                            <Ionicons
-                              name="calendar-outline"
-                              size={16}
-                              color={ativo ? colors.principal : "#9aa0a6"}
-                            />
-                          </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.selectTitle}>
-                              Parcela {p.numero}/{selecionado.quantidadeParcelas || selecionado.parcelas.length}
-                            </Text>
-                            <Text style={styles.selectSub}>
-                              Venc.{" "}
-                              {new Date(p.vencimento).toLocaleDateString("pt-BR")}{" "}
-                              · R$ {formatoMoeda.format(p.valor)}
-                            </Text>
-                          </View>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                )}
-            </View>
-          )}
-
-          {tipoMovimento === "saida" && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Pagar com</Text>
-              <View style={styles.segment}>
-                {[
-                  { id: "geral", label: "Caixa geral" },
-                  { id: "caixinha", label: "Caixinha" },
-                ].map((opt) => {
-                  const ativo = origemPagamento === opt.id;
-                  return (
-                    <TouchableOpacity
-                      key={opt.id}
-                      style={[
-                        styles.segmentBtn,
-                        ativo && { backgroundColor: colors.principal },
-                      ]}
-                      onPress={() => {
-                        setOrigemPagamento(opt.id);
-                        if (opt.id === "geral") setCaixinhaId(null);
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.segmentText,
-                          ativo && { color: "#fff" },
-                        ]}
-                      >
-                        {opt.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </View>
-
-              {origemPagamento === "geral" ? (
-                <Text style={styles.hint}>
-                  Disponível: R$ {formatoMoeda.format(saldoDisponivel || 0)}
-                </Text>
-              ) : caixinhasComSaldo.length === 0 ? (
-                <Text style={styles.empty}>Nenhuma caixinha com saldo</Text>
-              ) : (
-                caixinhasComSaldo.map((cx) => {
-                  const ativo = caixinhaId === cx.id;
-                  return (
-                    <TouchableOpacity
-                      key={cx.id}
-                      style={[
-                        styles.selectCard,
-                        ativo && {
-                          borderColor: colors.principal,
-                          backgroundColor: "#fff",
-                        },
-                      ]}
-                      onPress={() => setCaixinhaId(cx.id)}
-                    >
-                      <View style={styles.selectIcon}>
-                        <Ionicons
-                          name="wallet-outline"
-                          size={16}
-                          color={ativo ? colors.principal : "#9aa0a6"}
-                        />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.selectTitle}>{cx.nome}</Text>
-                        <Text style={styles.selectSub}>
-                          R$ {formatoMoeda.format(cx.valor || 0)}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })
-              )}
-            </View>
-          )}
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Dados</Text>
-
-            <TouchableOpacity
-              style={styles.field}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Text style={styles.fieldLabel}>Data</Text>
-              <Text style={styles.fieldValue}>
-                {data.toLocaleDateString("pt-BR")}
-              </Text>
-            </TouchableOpacity>
-
-            {showDatePicker && (
-              <DateTimePicker
-                value={data}
-                mode="date"
-                display="default"
-                onValueChange={(e, selected) => {
-                  setShowDatePicker(false);
-                  if (selected) setData(selected);
-                }}
-              />
             )}
 
-            {modo === "nova" && (
-              <>
-                <View style={styles.field}>
-                  <Text style={styles.fieldLabel}>Descrição</Text>
-                  <TextInput
-                    style={styles.fieldInput}
-                    value={descricao}
-                    onChangeText={setDescricao}
-                    placeholder="Descreva o registro"
-                    placeholderTextColor="#b0b5ba"
-                  />
+            {modo === "adicionar" && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Selecione o registro</Text>
+                {abertos.length === 0 ? (
+                  <Text style={styles.empty}>Nenhum registro em aberto</Text>
+                ) : (
+                  abertos.map((item) => {
+                    const ativo = selecionado?.id === item.id;
+                    return (
+                      <TouchableOpacity
+                        key={item.id}
+                        style={[
+                          styles.selectCard,
+                          ativo && {
+                            borderColor: colors.principal,
+                            backgroundColor: "#fff",
+                          },
+                        ]}
+                        onPress={() => {
+                          setSelecionado(item);
+                          setParcelaSel(null);
+                          setValorParcial("");
+                        }}
+                      >
+                        <View style={styles.selectIcon}>
+                          <Ionicons
+                            name={
+                              tipoMovimento === "entrada"
+                                ? "arrow-down-outline"
+                                : "arrow-up-outline"
+                            }
+                            size={16}
+                            color={ativo ? colors.principal : "#9aa0a6"}
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.selectTitle}>
+                            {item.tipo} · {item.descricao}
+                          </Text>
+                          <Text style={styles.selectSub}>
+                            R${" "}
+                            {(
+                              item.valorRecebidoTotal ||
+                              item.valorPagoTotal ||
+                              0
+                            ).toFixed(2)}{" "}
+                            de R$ {item.valorTotal?.toFixed(2)}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })
+                )}
+
+                {selecionado &&
+                  Array.isArray(selecionado.parcelas) &&
+                  parcelasAbertasSel.length > 0 && (
+                    <View style={{ marginTop: 12 }}>
+                      <Text style={styles.sectionTitle}>Parcela a pagar</Text>
+                      {parcelasAbertasSel.map((p) => {
+                        const ativo = parcelaSel?.numero === p.numero;
+                        return (
+                          <TouchableOpacity
+                            key={p.numero}
+                            style={[
+                              styles.selectCard,
+                              ativo && {
+                                borderColor: colors.principal,
+                                backgroundColor: "#fff",
+                              },
+                            ]}
+                            onPress={() => {
+                              setParcelaSel(p);
+                              setValorParcial(
+                                String(p.valor).replace(".", ",")
+                              );
+                            }}
+                          >
+                            <View style={styles.selectIcon}>
+                              <Ionicons
+                                name="calendar-outline"
+                                size={16}
+                                color={
+                                  ativo ? colors.principal : "#9aa0a6"
+                                }
+                              />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.selectTitle}>
+                                Parcela {p.numero}/
+                                {selecionado.quantidadeParcelas ||
+                                  selecionado.parcelas.length}
+                              </Text>
+                              <Text style={styles.selectSub}>
+                                Venc.{" "}
+                                {new Date(p.vencimento).toLocaleDateString(
+                                  "pt-BR"
+                                )}{" "}
+                                · R$ {formatoMoeda.format(p.valor)}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
+              </View>
+            )}
+
+            {tipoMovimento === "saida" && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Pagar com</Text>
+                <View style={styles.segment}>
+                  {[
+                    { id: "geral", label: "Caixa geral" },
+                    { id: "caixinha", label: "Caixinha" },
+                  ].map((opt) => {
+                    const ativo = origemPagamento === opt.id;
+                    return (
+                      <TouchableOpacity
+                        key={opt.id}
+                        style={[
+                          styles.segmentBtn,
+                          ativo && { backgroundColor: colors.principal },
+                        ]}
+                        onPress={() => {
+                          setOrigemPagamento(opt.id);
+                          if (opt.id === "geral") setCaixinhaId(null);
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.segmentText,
+                            ativo && { color: "#fff" },
+                          ]}
+                        >
+                          {opt.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
 
+                {origemPagamento === "geral" ? (
+                  <Text style={styles.hint}>
+                    Disponível: R${" "}
+                    {formatoMoeda.format(saldoDisponivel || 0)}
+                  </Text>
+                ) : caixinhasComSaldo.length === 0 ? (
+                  <Text style={styles.empty}>
+                    Nenhuma caixinha com saldo
+                  </Text>
+                ) : (
+                  caixinhasComSaldo.map((cx) => {
+                    const ativo = caixinhaId === cx.id;
+                    return (
+                      <TouchableOpacity
+                        key={cx.id}
+                        style={[
+                          styles.selectCard,
+                          ativo && {
+                            borderColor: colors.principal,
+                            backgroundColor: "#fff",
+                          },
+                        ]}
+                        onPress={() => setCaixinhaId(cx.id)}
+                      >
+                        <View style={styles.selectIcon}>
+                          <Ionicons
+                            name="wallet-outline"
+                            size={16}
+                            color={ativo ? colors.principal : "#9aa0a6"}
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.selectTitle}>{cx.nome}</Text>
+                          <Text style={styles.selectSub}>
+                            R$ {formatoMoeda.format(cx.valor || 0)}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })
+                )}
+              </View>
+            )}
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Dados</Text>
+
+              <TouchableOpacity
+                style={styles.field}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Text style={styles.fieldLabel}>Data</Text>
+                <Text style={styles.fieldValue}>
+                  {data.toLocaleDateString("pt-BR")}
+                </Text>
+              </TouchableOpacity>
+
+              {showDatePicker && (
+                <DateTimePicker
+                  value={data}
+                  mode="date"
+                  display="default"
+                  onChange={(e, selected) => {
+                    setShowDatePicker(false);
+                    if (selected) setData(selected);
+                  }}
+                />
+              )}
+
+              {modo === "nova" && (
+                <>
+                  <View style={styles.field}>
+                    <Text style={styles.fieldLabel}>Descrição</Text>
+                    <TextInput
+                      style={styles.fieldInput}
+                      value={descricao}
+                      onChangeText={setDescricao}
+                      placeholder="Descreva o registro"
+                      placeholderTextColor="#b0b5ba"
+                    />
+                  </View>
+
+                  <View style={styles.field}>
+                    <Text style={styles.fieldLabel}>
+                      {isSaldoInicial ? "Saldo inicial" : "Valor total"}
+                    </Text>
+                    <TextInput
+                      style={styles.fieldInput}
+                      value={valorTotal}
+                      onChangeText={setValorTotal}
+                      keyboardType="decimal-pad"
+                      placeholder="0,00"
+                      placeholderTextColor="#b0b5ba"
+                    />
+                  </View>
+                </>
+              )}
+
+              {modo === "nova" && tipo === "Parcelada" && (
+                <>
+                  <View style={styles.field}>
+                    <Text style={styles.fieldLabel}>
+                      Quantidade de parcelas
+                    </Text>
+                    <TextInput
+                      style={styles.fieldInput}
+                      value={qtdParcelas}
+                      onChangeText={setQtdParcelas}
+                      keyboardType="number-pad"
+                      placeholder="2"
+                      placeholderTextColor="#b0b5ba"
+                    />
+                  </View>
+                  {previewParcela > 0 && (
+                    <Text style={styles.hint}>
+                      {qtdNum}x de R$ {formatoMoeda.format(previewParcela)}
+                    </Text>
+                  )}
+                </>
+              )}
+
+              {modo === "nova" && !isSaldoInicial && (
                 <View style={styles.field}>
                   <Text style={styles.fieldLabel}>
-                    {isSaldoInicial ? "Saldo inicial" : "Valor total"}
+                    {tipo === "Parcelada"
+                      ? "Valor pago agora (parcelas iniciais)"
+                      : "Valor agora"}
                   </Text>
-                  <TextInput
-                    style={styles.fieldInput}
-                    value={valorTotal}
-                    onChangeText={setValorTotal}
-                    keyboardType="decimal-pad"
-                    placeholder="0,00"
-                    placeholderTextColor="#b0b5ba"
-                  />
-                </View>
-              </>
-            )}
-
-            {modo === "nova" && tipo === "Parcelada" && (
-              <>
-                <View style={styles.field}>
-                  <Text style={styles.fieldLabel}>Quantidade de parcelas</Text>
-                  <TextInput
-                    style={styles.fieldInput}
-                    value={qtdParcelas}
-                    onChangeText={setQtdParcelas}
-                    keyboardType="number-pad"
-                    placeholder="2"
-                    placeholderTextColor="#b0b5ba"
-                  />
-                </View>
-                {previewParcela > 0 && (
-                  <Text style={styles.hint}>
-                    {qtdNum}x de R$ {formatoMoeda.format(previewParcela)}
-                  </Text>
-                )}
-              </>
-            )}
-
-            {modo === "nova" && !isSaldoInicial && (
-              <View style={styles.field}>
-                <Text style={styles.fieldLabel}>
-                  {tipo === "Parcelada"
-                    ? "Valor pago agora (parcelas iniciais)"
-                    : "Valor agora"}
-                </Text>
-                <TextInput
-                  style={styles.fieldInput}
-                  value={valorParcial}
-                  onChangeText={setValorParcial}
-                  keyboardType="decimal-pad"
-                  placeholder="0,00"
-                  placeholderTextColor="#b0b5ba"
-                />
-              </View>
-            )}
-
-            {modo === "adicionar" &&
-              !(
-                Array.isArray(selecionado?.parcelas) &&
-                selecionado.parcelas.length > 0
-              ) && (
-                <View style={styles.field}>
-                  <Text style={styles.fieldLabel}>Valor deste pagamento</Text>
                   <TextInput
                     style={styles.fieldInput}
                     value={valorParcial}
@@ -975,52 +1029,85 @@ export default function Registro() {
                 </View>
               )}
 
-            {tipoMovimento === "saida" && modo === "nova" && (
-              <View style={styles.reciboRow}>
-                <TouchableOpacity style={styles.reciboBtn} onPress={tirarFoto}>
-                  <Ionicons
-                    name={reciboUri ? "camera" : "camera-outline"}
-                    size={22}
-                    color={reciboUri ? colors.principal : "#9aa0a6"}
-                  />
-                  <Text style={styles.reciboLabel}>Recibo</Text>
-                </TouchableOpacity>
-                {reciboUri && (
-                  <Image source={{ uri: reciboUri }} style={styles.preview} />
+              {modo === "adicionar" &&
+                !(
+                  Array.isArray(selecionado?.parcelas) &&
+                  selecionado.parcelas.length > 0
+                ) && (
+                  <View style={styles.field}>
+                    <Text style={styles.fieldLabel}>
+                      Valor deste pagamento
+                    </Text>
+                    <TextInput
+                      style={styles.fieldInput}
+                      value={valorParcial}
+                      onChangeText={setValorParcial}
+                      keyboardType="decimal-pad"
+                      placeholder="0,00"
+                      placeholderTextColor="#b0b5ba"
+                    />
+                  </View>
                 )}
+
+              {tipoMovimento === "saida" && modo === "nova" && (
+                <View style={styles.reciboRow}>
+                  <TouchableOpacity
+                    style={styles.reciboBtn}
+                    onPress={tirarFoto}
+                  >
+                    <Ionicons
+                      name={reciboUri ? "camera" : "camera-outline"}
+                      size={22}
+                      color={reciboUri ? colors.principal : "#9aa0a6"}
+                    />
+                    <Text style={styles.reciboLabel}>Recibo</Text>
+                  </TouchableOpacity>
+                  {reciboUri && (
+                    <Image
+                      source={{ uri: reciboUri }}
+                      style={styles.preview}
+                    />
+                  )}
+                </View>
+              )}
+
+              <View style={[styles.field, { minHeight: 88 }]}>
+                <Text style={styles.fieldLabel}>Observação</Text>
+                <TextInput
+                  style={[styles.fieldInput, { minHeight: 48 }]}
+                  value={observacao}
+                  onChangeText={setObservacao}
+                  multiline
+                  placeholder="Opcional"
+                  placeholderTextColor="#b0b5ba"
+                />
               </View>
-            )}
-
-            <View style={[styles.field, { minHeight: 88 }]}>
-              <Text style={styles.fieldLabel}>Observação</Text>
-              <TextInput
-                style={[styles.fieldInput, { minHeight: 48 }]}
-                value={observacao}
-                onChangeText={setObservacao}
-                multiline
-                placeholder="Opcional"
-                placeholderTextColor="#b0b5ba"
-              />
             </View>
-          </View>
 
-          <TouchableOpacity
-            style={[styles.saveBtn, { backgroundColor: colors.principal }]}
-            onPress={salvar}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.saveText}>Salvar</Text>
-          </TouchableOpacity>
-        </>
-      )}
-    </ScrollView>
+            <TouchableOpacity
+              style={[
+                styles.saveBtn,
+                { backgroundColor: colors.principal },
+              ]}
+              onPress={salvar}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.saveText}>Salvar</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f4f5f7" },
-  content: { paddingHorizontal: 18, paddingTop: 12, paddingBottom: 120, },
+  content: {
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 120,
+  },
   segment: {
     flexDirection: "row",
     backgroundColor: "#fff",
@@ -1051,7 +1138,6 @@ const styles = StyleSheet.create({
   chip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    marginHorizontal:2,
     borderRadius: 16,
     backgroundColor: "#fff",
   },

@@ -55,6 +55,8 @@ export default function APagar() {
     RetirarDaCaixinha,
     CarregarCaixinhas,
     ResumoFinanceiro,
+    podeEditarFinanceiro,
+    igrejaAtiva,
   } = useContext(AppContext);
 
   const { colors } = useTheme();
@@ -68,21 +70,23 @@ export default function APagar() {
   const [caixinhaId, setCaixinhaId] = useState(null);
   const [salvando, setSalvando] = useState(false);
 
+  const podeEditar = podeEditarFinanceiro?.() !== false;
+
   useEffect(() => {
     if (!authPronto || !uid) return;
     carregar();
-  }, [authPronto, uid]);
+  }, [authPronto, uid, igrejaAtiva?.id]);
 
   async function carregar() {
     setLoad(true);
-    await HistoricoMovimentos();
+    await Promise.all([HistoricoMovimentos(), CarregarCaixinhas?.()]);
     setLoad(false);
   }
 
   const onRefresh = async () => {
     if (!uid) return;
     setRefreshing(true);
-    await HistoricoMovimentos();
+    await Promise.all([HistoricoMovimentos(), CarregarCaixinhas?.()]);
     setRefreshing(false);
   };
 
@@ -93,20 +97,22 @@ export default function APagar() {
       if (i.tipoMovimento !== "saida") return;
       if (i.status === "quitada") return;
 
-      if (Array.isArray(i.parcelas) && i.parcelas.length > 0) {
-        i.parcelas
-          .filter((p) => p.status === "aberta")
-          .forEach((p) => {
-            lista.push({
-              ...i,
-              rowId: `${i.id}_p${p.numero}`,
-              isParcela: true,
-              parcelaNumero: p.numero,
-              parcelaTotal: i.quantidadeParcelas || i.parcelas.length,
-              falta: arred(p.valor),
-              vencimento: p.vencimento,
-            });
+      const parcelas = Array.isArray(i.parcelas) ? i.parcelas : [];
+
+      if (parcelas.length > 0) {
+        parcelas.forEach((p) => {
+          if (p.status !== "aberta") return;
+          lista.push({
+            ...i,
+            isParcela: true,
+            rowId: `${i.id}_p${p.numero}`,
+            parcelaNumero: p.numero,
+            parcelaTotal: i.quantidadeParcelas || parcelas.length,
+            falta: arred(p.valor),
+            vencimento: p.vencimento,
+            parcelaRef: p,
           });
+        });
         return;
       }
 
@@ -115,16 +121,18 @@ export default function APagar() {
       if (total > pago) {
         lista.push({
           ...i,
-          rowId: i.id,
           isParcela: false,
+          rowId: i.id,
           falta: arred(total - pago),
         });
       }
     });
 
-    return lista.sort(
-      (a, b) => (a.vencimento || a.data || 0) - (b.vencimento || b.data || 0)
-    );
+    return lista.sort((a, b) => {
+      const da = a.vencimento || a.data || 0;
+      const db_ = b.vencimento || b.data || 0;
+      return da - db_;
+    });
   }, [dadosFinancas]);
 
   const totalAPagar = useMemo(
@@ -133,8 +141,19 @@ export default function APagar() {
   );
 
   function abrirPagar(item) {
+    if (!podeEditar) {
+      Alert.alert(
+        "Somente leitura",
+        "Seu perfil não permite registrar pagamentos."
+      );
+      return;
+    }
     setItemSel(item);
-    setValorPago(String(item.falta).replace(".", ","));
+    setValorPago(
+      item.isParcela
+        ? String(item.falta).replace(".", ",")
+        : String(item.falta).replace(".", ",")
+    );
     setOrigemPagamento("geral");
     setCaixinhaId(null);
     setModalVisible(true);
@@ -152,6 +171,10 @@ export default function APagar() {
       Alert.alert("Atenção", "Faça login novamente.");
       return;
     }
+    if (!podeEditar) {
+      Alert.alert("Somente leitura", "Sem permissão para pagar.");
+      return;
+    }
     if (!itemSel) return;
 
     const valor = itemSel.isParcela
@@ -165,7 +188,7 @@ export default function APagar() {
     if (!itemSel.isParcela && valor > itemSel.falta + 0.001) {
       Alert.alert(
         "Atenção",
-        `O valor não pode ser maior que R$ ${formatoMoeda.format(itemSel.falta)}`
+        `Máximo: R$ ${formatoMoeda.format(itemSel.falta)}`
       );
       return;
     }
@@ -185,16 +208,15 @@ export default function APagar() {
       }
       const cx = (caixinhas || []).find((c) => c.id === caixinhaId);
       if (!cx || valor > (Number(cx.valor) || 0) + 0.001) {
-        Alert.alert("Saldo insuficiente", "Valor maior que o da caixinha.");
+        Alert.alert("Saldo insuficiente na caixinha.");
         return;
       }
     }
 
+    const cxSel = (caixinhas || []).find((c) => c.id === caixinhaId);
+
     setSalvando(true);
     try {
-      const cx = (caixinhas || []).find((c) => c.id === caixinhaId);
-      const listaAtual = itemSel.valoresPagos || [];
-
       if (itemSel.isParcela) {
         const parcelas = (itemSel.parcelas || []).map((p) => {
           if (p.numero !== itemSel.parcelaNumero) return p;
@@ -205,10 +227,11 @@ export default function APagar() {
             origemPagamento,
             caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
             caixinhaNome:
-              origemPagamento === "caixinha" ? cx?.nome || null : null,
+              origemPagamento === "caixinha" ? cxSel?.nome || null : null,
           };
         });
 
+        const listaAtual = itemSel.valoresPagos || [];
         const novoTotal = arred((Number(itemSel.valorPagoTotal) || 0) + valor);
         const todasPagas = parcelas.every((p) => p.status === "paga");
 
@@ -224,14 +247,16 @@ export default function APagar() {
               origemPagamento,
               caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
               caixinhaNome:
-                origemPagamento === "caixinha" ? cx?.nome || null : null,
+                origemPagamento === "caixinha" ? cxSel?.nome || null : null,
             },
           ],
           valorPagoTotal: novoTotal,
           status: todasPagas ? "quitada" : "aberta",
         });
       } else {
+        const listaAtual = itemSel.valoresPagos || [];
         const novoTotal = arred((Number(itemSel.valorPagoTotal) || 0) + valor);
+
         await updateDoc(doc(db, "registros", itemSel.id), {
           valoresPagos: [
             ...listaAtual,
@@ -242,7 +267,7 @@ export default function APagar() {
               origemPagamento,
               caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
               caixinhaNome:
-                origemPagamento === "caixinha" ? cx?.nome || null : null,
+                origemPagamento === "caixinha" ? cxSel?.nome || null : null,
             },
           ],
           valorPagoTotal: novoTotal,
@@ -250,10 +275,6 @@ export default function APagar() {
             novoTotal >= (Number(itemSel.valorTotal) || 0)
               ? "quitada"
               : "aberta",
-          origemPagamento,
-          caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
-          caixinhaNome:
-            origemPagamento === "caixinha" ? cx?.nome || null : null,
         });
       }
 
@@ -270,7 +291,7 @@ export default function APagar() {
       fecharModal();
       Alert.alert("Sucesso", "Pagamento registrado.");
     } catch (e) {
-      Alert.alert("Erro", e?.message || "Não foi possível pagar.");
+      Alert.alert("Erro", e?.message || "Não foi possível registrar.");
     } finally {
       setSalvando(false);
     }
@@ -280,7 +301,7 @@ export default function APagar() {
     (c) => (Number(c.valor) || 0) > 0
   );
 
-  if ((!authPronto || load) && !refreshing) return <Load />
+  if ((!authPronto || load) && !refreshing) return <Load />;
 
   return (
     <View style={styles.container}>
@@ -306,56 +327,56 @@ export default function APagar() {
                 color="#9aa3ad"
               />
             </View>
-            <Text style={styles.emptyTitle}>Nada pendente</Text>
+            <Text style={styles.emptyTitle}>Nada a pagar</Text>
             <Text style={styles.emptyText}>
               {!uid
-                ? "Faça login para ver as despesas."
+                ? "Faça login para ver os valores."
                 : "Quando houver despesas em aberto, elas aparecem aqui."}
             </Text>
           </View>
         }
         renderItem={({ item }) => {
+          const dataRef = item.vencimento || item.data;
+          const dataStr = dataRef
+            ? new Date(dataRef).toLocaleDateString("pt-BR", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "2-digit",
+              })
+            : "--/--/--";
+
+          const esquerda = item.isParcela
+            ? `${item.parcelaNumero}/${item.parcelaTotal}`
+            : item.tipo || "Saída";
+
           return (
             <View style={styles.card}>
-              <View style={styles.topRow}>
-                <View style={{flexDirection:'row', alignItems:'center'}}>
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>
-                    {item.isParcela
-                      ? `${item.parcelaNumero}/${item.parcelaTotal}`
-                      : "A pagar"}
-                  </Text>
-                </View>
-                <Text style={styles.dot}>·</Text>
+              <View style={styles.linha1}>
                 <Text style={styles.meta}>
-                  {item.vencimento || item.data
-                    ? new Date(item.vencimento || item.data).toLocaleDateString("pt-BR")
-                    : "-"}
+                  {esquerda}
+                  {"  "}
+                  {dataStr}
                 </Text>
-                  </View>
                 <Text style={styles.valor}>
                   R$ {formatoMoeda.format(item.falta)}
                 </Text>
               </View>
 
-              <Text style={styles.descricao} numberOfLines={2}>
+              <Text style={styles.nome} numberOfLines={1}>
                 {item.descricao || "Sem descrição"}
               </Text>
 
- 
-
-              <TouchableOpacity
-                style={styles.payBtn}
-                onPress={() => abrirPagar(item)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.payBtnText}>
-                  {item.isParcela
-                    ? `Pagar parcela ${item.parcelaNumero}`
-                    : "Registrar pagamento"}
-                </Text>
-
-              </TouchableOpacity>
+              {podeEditar ? (
+                <TouchableOpacity
+                  style={[styles.btn, { backgroundColor: colors.principal }]}
+                  onPress={() => abrirPagar(item)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.btnText}>
+                    {item.isParcela ? "Pagar parcela" : "Registrar pagamento"}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           );
         }}
@@ -374,15 +395,16 @@ export default function APagar() {
             behavior={Platform.OS === "ios" ? "padding" : undefined}
             style={{ width: "100%", alignItems: "center" }}
           >
-            <Pressable style={styles.modalCard} onPress={() => { }}>
+            <Pressable style={styles.modalCard} onPress={() => {}}>
               <Text style={styles.modalTitle}>
-                {itemSel?.isParcela
-                  ? `Pagar parcela ${itemSel?.parcelaNumero}`
-                  : "Registrar pagamento"}
+                {itemSel?.isParcela ? "Pagar parcela" : "Registrar pagamento"}
               </Text>
               <Text style={styles.modalSub}>
-                {itemSel?.descricao || ""} · R${" "}
-                {formatoMoeda.format(itemSel?.falta || 0)}
+                {itemSel?.descricao || ""}
+                {itemSel?.isParcela
+                  ? ` · Parcela ${itemSel.parcelaNumero}/${itemSel.parcelaTotal}`
+                  : ""}{" "}
+                · R$ {formatoMoeda.format(itemSel?.falta || 0)}
               </Text>
 
               {!itemSel?.isParcela && (
@@ -401,78 +423,69 @@ export default function APagar() {
 
               <Text style={styles.inputLabel}>Pagar com</Text>
               <View style={styles.segment}>
-                <TouchableOpacity
-                  style={[
-                    styles.segmentBtn,
-                    origemPagamento === "geral" && {
-                      backgroundColor: colors.principal,
-                    },
-                  ]}
-                  onPress={() => {
-                    setOrigemPagamento("geral");
-                    setCaixinhaId(null);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.segmentText,
-                      origemPagamento === "geral" && { color: "#fff" },
-                    ]}
-                  >
-                    Caixa geral
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.segmentBtn,
-                    origemPagamento === "caixinha" && {
-                      backgroundColor: colors.principal,
-                    },
-                  ]}
-                  onPress={() => setOrigemPagamento("caixinha")}
-                >
-                  <Text
-                    style={[
-                      styles.segmentText,
-                      origemPagamento === "caixinha" && { color: "#fff" },
-                    ]}
-                  >
-                    Caixinha
-                  </Text>
-                </TouchableOpacity>
+                {[
+                  { id: "geral", label: "Caixa geral" },
+                  { id: "caixinha", label: "Caixinha" },
+                ].map((opt) => {
+                  const ativo = origemPagamento === opt.id;
+                  return (
+                    <TouchableOpacity
+                      key={opt.id}
+                      style={[
+                        styles.segmentBtn,
+                        ativo && { backgroundColor: colors.principal },
+                      ]}
+                      onPress={() => {
+                        setOrigemPagamento(opt.id);
+                        if (opt.id === "geral") setCaixinhaId(null);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.segmentText,
+                          ativo && { color: "#fff" },
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
               {origemPagamento === "geral" ? (
                 <Text style={styles.hint}>
                   Disponível: R$ {formatoMoeda.format(saldoDisponivel || 0)}
                 </Text>
-              ) : caixinhasComSaldo.length === 0 ? (
-                <Text style={styles.hint}>Nenhuma caixinha com saldo</Text>
               ) : (
-                caixinhasComSaldo.map((cx) => (
-                  <TouchableOpacity
-                    key={cx.id}
-                    style={[
-                      styles.cxItem,
-                      caixinhaId === cx.id && {
-                        borderColor: colors.principal,
-                      },
-                    ]}
-                    onPress={() => setCaixinhaId(cx.id)}
-                  >
-                    <Text style={styles.cxNome}>{cx.nome}</Text>
-                    <Text style={styles.cxValor}>
-                      R$ {formatoMoeda.format(cx.valor || 0)}
-                    </Text>
-                  </TouchableOpacity>
-                ))
+                <>
+                  {caixinhasComSaldo.length === 0 ? (
+                    <Text style={styles.hint}>Nenhuma caixinha com saldo</Text>
+                  ) : (
+                    caixinhasComSaldo.map((cx) => {
+                      const ativo = caixinhaId === cx.id;
+                      return (
+                        <TouchableOpacity
+                          key={cx.id}
+                          style={[
+                            styles.cxItem,
+                            ativo && { borderColor: colors.principal },
+                          ]}
+                          onPress={() => setCaixinhaId(cx.id)}
+                        >
+                          <Text style={styles.cxNome}>{cx.nome}</Text>
+                          <Text style={styles.cxValor}>
+                            R$ {formatoMoeda.format(cx.valor || 0)}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })
+                  )}
+                </>
               )}
 
               <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={styles.btnCancel}
-                  onPress={fecharModal}
-                >
+                <TouchableOpacity style={styles.btnCancel} onPress={fecharModal}>
                   <Text style={styles.btnCancelText}>Cancelar</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -522,66 +535,46 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 12,
     fontFamily: "Roboto-Regular",
+    color: "#8b949e",
   },
   card: {
     backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 14,
+    borderRadius: 14,
+    padding: 12,
   },
-  topRow: {
+  linha1: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: "#FFEBEE",
-  },
-  badgeText: {
-    fontSize: 11,
-    fontFamily: "Roboto-Medium",
-    color: "#C62828",
-  },
-  valor: {
-    fontFamily: "Roboto-Medium",
-    color: "#C62828",
-  },
-  descricao: {
-    fontSize: 14,
-    fontFamily: "Roboto-Regular",
-    marginBottom: 8,
-  },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    marginBottom: 12,
+    marginBottom: 4,
   },
   meta: {
     fontSize: 12,
     fontFamily: "Roboto-Regular",
+    color: "#8a8f98",
   },
-  dot: {
-    marginHorizontal: 6,
-    color: "#aaa",
-    fontSize: 12,
+  valor: {
+    fontSize: 14,
+    fontFamily: "Roboto-Bold",
+    color: "#C62828",
   },
-  payBtn: {
-    flexDirection: "row",
+  nome: {
+    fontSize: 15,
+    fontFamily: "Roboto-Medium",
+    color: "#1f2933",
+    marginBottom: 10,
+  },
+  btn: {
+    height: 40,
+    borderRadius: 10,
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#eee",
+    justifyContent: "center",
   },
-  payBtnText: {
+  btnText: {
+    color: "#fff",
     fontSize: 13,
     fontFamily: "Roboto-Medium",
   },
-
   emptyBox: {
     marginTop: 40,
     alignItems: "center",
@@ -599,11 +592,13 @@ const styles = StyleSheet.create({
     marginTop: 14,
     fontSize: 16,
     fontFamily: "Roboto-Medium",
+    color: "#666",
   },
   emptyText: {
     marginTop: 6,
     fontSize: 13,
     fontFamily: "Roboto-Regular",
+    color: "#999",
     textAlign: "center",
   },
   modalOverlay: {
@@ -635,6 +630,7 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 12,
     fontFamily: "Roboto-Regular",
+    color: "#777",
     marginBottom: 4,
   },
   input: {

@@ -37,8 +37,14 @@ export default function EditarRegistro() {
   const { id } = useRoute().params || {};
   const navigation = useNavigation();
   const { colors } = useTheme();
-  const { HistoricoMovimentos, ResumoFinanceiro, formatoMoeda } =
-    useContext(AppContext);
+  const {
+    HistoricoMovimentos,
+    ResumoFinanceiro,
+    formatoMoeda,
+    getIgrejaId,
+    igrejaAtiva,
+    podeEditarFinanceiro,
+  } = useContext(AppContext);
 
   const [load, setLoad] = useState(true);
   const [salvando, setSalvando] = useState(false);
@@ -47,13 +53,32 @@ export default function EditarRegistro() {
   const [observacao, setObservacao] = useState("");
   const [valorTotal, setValorTotal] = useState("");
 
+  const igrejaId = getIgrejaId?.() || igrejaAtiva?.id || null;
+  const podeEditar = podeEditarFinanceiro?.() !== false;
+
   useEffect(() => {
     carregar();
-  }, [id]);
+  }, [id, igrejaId]);
 
   async function carregar() {
     try {
       setLoad(true);
+
+      if (!podeEditar) {
+        Alert.alert(
+          "Somente leitura",
+          "Seu perfil não permite editar registros."
+        );
+        navigation.goBack();
+        return;
+      }
+
+      if (!id) {
+        Alert.alert("Erro", "Registro inválido.");
+        navigation.goBack();
+        return;
+      }
+
       const snap = await getDoc(doc(db, "registros", id));
       if (!snap.exists()) {
         Alert.alert("Erro", "Registro não encontrado.");
@@ -62,8 +87,18 @@ export default function EditarRegistro() {
       }
 
       const data = { id: snap.id, ...snap.data() };
-      const criado = data.createdAt || data.reg || 0;
 
+      // Garante que o registro é da igreja ativa
+      if (igrejaId && data.igrejaId && data.igrejaId !== igrejaId) {
+        Alert.alert(
+          "Acesso negado",
+          "Este registro não pertence à igreja selecionada."
+        );
+        navigation.goBack();
+        return;
+      }
+
+      const criado = data.createdAt || data.reg || 0;
       if (Date.now() - Number(criado) > LIMITE_MS) {
         Alert.alert(
           "Edição bloqueada",
@@ -87,6 +122,22 @@ export default function EditarRegistro() {
 
   async function salvar() {
     if (!item) return;
+
+    if (!podeEditar) {
+      Alert.alert(
+        "Somente leitura",
+        "Seu perfil não permite editar registros."
+      );
+      return;
+    }
+
+    if (igrejaId && item.igrejaId && item.igrejaId !== igrejaId) {
+      Alert.alert(
+        "Acesso negado",
+        "Este registro não pertence à igreja selecionada."
+      );
+      return;
+    }
 
     const criado = item.createdAt || item.reg || 0;
     if (Date.now() - Number(criado) > LIMITE_MS) {
@@ -146,8 +197,7 @@ export default function EditarRegistro() {
   const horasRestantes = item
     ? Math.max(
         0,
-        (Number(item.createdAt || item.reg) + LIMITE_MS - Date.now()) /
-          3600000
+        (Number(item.createdAt || item.reg) + LIMITE_MS - Date.now()) / 3600000
       )
     : 0;
 

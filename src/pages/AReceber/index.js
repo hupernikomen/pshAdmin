@@ -51,6 +51,8 @@ export default function AReceber() {
     HistoricoMovimentos,
     formatoMoeda,
     ResumoFinanceiro,
+    podeEditarFinanceiro,
+    igrejaAtiva,
   } = useContext(AppContext);
 
   const { colors } = useTheme();
@@ -62,10 +64,12 @@ export default function AReceber() {
   const [valorRecebido, setValorRecebido] = useState("");
   const [salvando, setSalvando] = useState(false);
 
+  const podeEditar = podeEditarFinanceiro?.() !== false;
+
   useEffect(() => {
     if (!authPronto || !uid) return;
     carregar();
-  }, [authPronto, uid]);
+  }, [authPronto, uid, igrejaAtiva?.id]);
 
   async function carregar() {
     setLoad(true);
@@ -82,7 +86,6 @@ export default function AReceber() {
 
   const pendentes = useMemo(() => {
     const lista = [];
-
     (dadosFinancas || []).forEach((i) => {
       if (i.tipoMovimento !== "entrada") return;
       if (i.status === "quitada") return;
@@ -98,7 +101,6 @@ export default function AReceber() {
         });
       }
     });
-
     return lista.sort((a, b) => (b.data || 0) - (a.data || 0));
   }, [dadosFinancas]);
 
@@ -108,6 +110,13 @@ export default function AReceber() {
   );
 
   function abrirReceber(item) {
+    if (!podeEditar) {
+      Alert.alert(
+        "Somente leitura",
+        "Seu perfil não permite registrar recebimentos."
+      );
+      return;
+    }
     setItemSel(item);
     setValorRecebido(String(item.falta).replace(".", ","));
     setModalVisible(true);
@@ -124,10 +133,13 @@ export default function AReceber() {
       Alert.alert("Atenção", "Faça login novamente.");
       return;
     }
+    if (!podeEditar) {
+      Alert.alert("Somente leitura", "Sem permissão.");
+      return;
+    }
     if (!itemSel) return;
 
     const valor = parseNumero(valorRecebido);
-
     if (valor <= 0) {
       Alert.alert("Atenção", "Informe um valor válido.");
       return;
@@ -135,7 +147,7 @@ export default function AReceber() {
     if (valor > itemSel.falta + 0.001) {
       Alert.alert(
         "Atenção",
-        `O valor não pode ser maior que R$ ${formatoMoeda.format(itemSel.falta)}`
+        `Máximo: R$ ${formatoMoeda.format(itemSel.falta)}`
       );
       return;
     }
@@ -143,7 +155,9 @@ export default function AReceber() {
     setSalvando(true);
     try {
       const listaAtual = itemSel.valoresRecebidos || [];
-      const novoTotal = arred((Number(itemSel.valorRecebidoTotal) || 0) + valor);
+      const novoTotal = arred(
+        (Number(itemSel.valorRecebidoTotal) || 0) + valor
+      );
 
       await updateDoc(doc(db, "registros", itemSel.id), {
         valoresRecebidos: [
@@ -156,11 +170,12 @@ export default function AReceber() {
         ],
         valorRecebidoTotal: novoTotal,
         status:
-          novoTotal >= (Number(itemSel.valorTotal) || 0) ? "quitada" : "aberta",
+          novoTotal >= (Number(itemSel.valorTotal) || 0)
+            ? "quitada"
+            : "aberta",
       });
 
       await Promise.all([HistoricoMovimentos(), ResumoFinanceiro?.()]);
-
       fecharModal();
       Alert.alert("Sucesso", "Recebimento registrado.");
     } catch (e) {
@@ -230,13 +245,15 @@ export default function AReceber() {
                 {item.descricao || "Sem descrição"}
               </Text>
 
-              <TouchableOpacity
-                style={[styles.btn, { backgroundColor: colors.principal }]}
-                onPress={() => abrirReceber(item)}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.btnText}>Registrar recebimento</Text>
-              </TouchableOpacity>
+              {podeEditar ? (
+                <TouchableOpacity
+                  style={[styles.btn, { backgroundColor: colors.principal }]}
+                  onPress={() => abrirReceber(item)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.btnText}>Registrar recebimento</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           );
         }}

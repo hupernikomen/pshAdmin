@@ -16,10 +16,11 @@ export default function Saldo({
   qtdCaixinhas,
 }) {
   const { colors } = useTheme();
-  const { formatoMoeda } = useContext(AppContext);
+  const { formatoMoeda, podeEditarFinanceiro } = useContext(AppContext);
   const navigation = useNavigation();
   const [oculto, setOculto] = useState(false);
-  const [pronto, setPronto] = useState(false);
+
+  const podeEditar = podeEditarFinanceiro?.() !== false;
 
   useEffect(() => {
     AsyncStorage.getItem(KEY_SALDO_OCULTO)
@@ -27,7 +28,7 @@ export default function Saldo({
         if (v === "1") setOculto(true);
         if (v === "0") setOculto(false);
       })
-      .finally(() => setPronto(true));
+      .catch(() => {});
   }, []);
 
   async function alternarOculto() {
@@ -65,20 +66,22 @@ export default function Saldo({
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            onPress={() => navigation.navigate("Registro")}
-            style={[styles.addBtn, { backgroundColor: colors.principal }]}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="add" size={22} color="#fff" />
-          </TouchableOpacity>
+          {podeEditar && (
+            <TouchableOpacity
+              onPress={() => navigation.navigate("Registro")}
+              style={[styles.addBtn, { backgroundColor: colors.principal }]}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="add" size={22} color="#fff" />
+            </TouchableOpacity>
+          )}
         </View>
 
         <Text style={styles.balanceValue}>{mask(saldoAtual)}</Text>
 
         <View style={styles.balanceBottom}>
           <View>
-            <Text style={styles.miniLabel}>Caixa geral</Text>
+            <Text style={styles.miniLabel}>Caixa livre</Text>
             <Text style={styles.miniValue}>{mask(caixaGeral)}</Text>
           </View>
 
@@ -107,9 +110,7 @@ export default function Saldo({
         </View>
         <View style={styles.chip}>
           <Text style={styles.chipLabel}>Caixinhas</Text>
-          <Text style={styles.chipValue}>
-            {oculto ? "•" : qtdCaixinhas}
-          </Text>
+          <Text style={styles.chipValue}>{oculto ? "•" : qtdCaixinhas}</Text>
         </View>
       </View>
 
