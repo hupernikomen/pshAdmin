@@ -8,7 +8,6 @@ import {
 } from 'firebase/auth';
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 
-// Use a MESMA config que você já tem no projeto
 const firebaseConfig = {
   apiKey: "AIzaSyDJFnhKXoUqKSIzsffYWkJ7qGIuEUhlUFs",
   authDomain: "psh-admin-8c0f7.firebaseapp.com",
@@ -26,7 +25,6 @@ try {
     persistence: getReactNativePersistence(ReactNativeAsyncStorage),
   });
 } catch (e) {
-  // Se o Auth já foi criado (hot reload), reutiliza
   auth = getAuth(app);
 }
 

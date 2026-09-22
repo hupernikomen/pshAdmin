@@ -399,7 +399,7 @@ export default function Historico() {
                       onPress={() => abrirRecibo(item.reciboUrl)}
                       activeOpacity={0.75}
                     >
-                      <Ionicons name="image-outline" size={15} color="#666" />
+                      <Ionicons name="image-outline" size={15} color="#777" />
                       <Text style={styles.actionText}>Recibo</Text>
                     </TouchableOpacity>
                   )}
@@ -477,7 +477,6 @@ const styles = StyleSheet.create({
   filtroChipText: {
     fontSize: 13,
     fontFamily: "Roboto-Medium",
-    color: "#333",
   },
   filtroInfo: {
     marginTop: 8,
@@ -567,13 +566,11 @@ const styles = StyleSheet.create({
     marginTop: 14,
     fontSize: 16,
     fontFamily: "Roboto-Medium",
-    color: "#666",
   },
   emptyText: {
     marginTop: 6,
     fontSize: 13,
     fontFamily: "Roboto-Regular",
-    color: "#999",
     textAlign: "center",
   },
   modalOverlay: {

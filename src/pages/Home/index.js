@@ -44,7 +44,6 @@ export default function Home() {
 
   const foto = user?.photoURL || null;
   const nome = user?.displayName || "Conta";
-  const email = user?.email || "";
   const isAdmin = igrejaAtiva?.papel === "admin";
   const variasIgrejas = (igrejasDoUsuario || []).length > 1;
 
@@ -329,11 +328,6 @@ export default function Home() {
                 <Text style={styles.menuNome} numberOfLines={1}>
                   {nome}
                 </Text>
-                {/* {!!email && (
-                  <Text style={styles.menuEmail} numberOfLines={1}>
-                    {email}
-                  </Text>
-                )} */}
                 {!!igrejaAtiva?.nome && (
                   <Text style={styles.menuIgreja} numberOfLines={1}>
                     {/* {igrejaAtiva.nome} */}
@@ -379,7 +373,6 @@ export default function Home() {
         </Pressable>
       </Modal>
 
-      {/* Escolher igreja */}
       <Modal
         visible={modalIgrejas}
         transparent
@@ -432,9 +425,9 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 20,
     backgroundColor: "#ddd",
   },
   avatarFallback: {

@@ -9,7 +9,14 @@ import {
   Alert,
 } from "react-native";
 import { useNavigation, useRoute, useTheme } from "@react-navigation/native";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  updateDoc,
+  deleteDoc,
+  addDoc,
+  collection,
+} from "firebase/firestore";
 import { db } from "../../firebaseConnection";
 import { AppContext } from "../../context/AppContext";
 import Load from "../../componentes/Load";
@@ -33,6 +40,66 @@ function parseNumero(txt) {
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
 }
 
+function arred(v) {
+  return Math.round((Number(v) || 0) * 100) / 100;
+}
+
+/**
+ * Soma quanto foi tirado de cada caixinha neste registro
+ * (valoresPagos + parcelas pagas + origem no doc).
+ * Retorna Map: caixinhaId -> valor a devolver
+ */
+function montarDevolucoesCaixinha(item) {
+  const map = new Map();
+
+  const add = (cxId, valor) => {
+    if (!cxId || !(valor > 0)) return;
+    map.set(cxId, arred((map.get(cxId) || 0) + valor));
+  };
+
+  const pagos = Array.isArray(item.valoresPagos) ? item.valoresPagos : [];
+  pagos.forEach((p) => {
+    if (p?.origemPagamento === "caixinha" && p.caixinhaId) {
+      add(p.caixinhaId, Number(p.valor) || 0);
+    }
+  });
+
+  const parcelas = Array.isArray(item.parcelas) ? item.parcelas : [];
+  parcelas.forEach((p) => {
+    if (
+      p?.status === "paga" &&
+      p?.origemPagamento === "caixinha" &&
+      p.caixinhaId
+    ) {
+      // evita dobrar se o mesmo valor já estiver em valoresPagos com parcelaNumero
+      const jaNoPagos = pagos.some(
+        (vp) =>
+          vp.parcelaNumero === p.numero &&
+          vp.origemPagamento === "caixinha" &&
+          vp.caixinhaId === p.caixinhaId
+      );
+      if (!jaNoPagos) {
+        add(p.caixinhaId, Number(p.valor) || 0);
+      }
+    }
+  });
+
+  // fallback: saída única marcada no documento
+  if (
+    item.tipoMovimento === "saida" &&
+    item.origemPagamento === "caixinha" &&
+    item.caixinhaId &&
+    pagos.length === 0
+  ) {
+    add(
+      item.caixinhaId,
+      Number(item.valorPagoTotal) || Number(item.valorTotal) || 0
+    );
+  }
+
+  return map;
+}
+
 export default function EditarRegistro() {
   const { id } = useRoute().params || {};
   const navigation = useNavigation();
@@ -44,10 +111,13 @@ export default function EditarRegistro() {
     getIgrejaId,
     igrejaAtiva,
     podeEditarFinanceiro,
+    CarregarCaixinhas,
+    DepositarNaCaixinha,
   } = useContext(AppContext);
 
   const [load, setLoad] = useState(true);
   const [salvando, setSalvando] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
   const [item, setItem] = useState(null);
   const [descricao, setDescricao] = useState("");
   const [observacao, setObservacao] = useState("");
@@ -88,7 +158,6 @@ export default function EditarRegistro() {
 
       const data = { id: snap.id, ...snap.data() };
 
-      // Garante que o registro é da igreja ativa
       if (igrejaId && data.igrejaId && data.igrejaId !== igrejaId) {
         Alert.alert(
           "Acesso negado",
@@ -192,6 +261,102 @@ export default function EditarRegistro() {
     }
   }
 
+  function confirmarExcluir() {
+    if (!item || !podeEditar) return;
+
+    const criado = item.createdAt || item.reg || 0;
+    if (Date.now() - Number(criado) > LIMITE_MS) {
+      Alert.alert(
+        "Exclusão bloqueada",
+        "Só é possível excluir registros nas primeiras 24 horas."
+      );
+      return;
+    }
+
+    const devolucoes = montarDevolucoesCaixinha(item);
+    let extra = "";
+    if (devolucoes.size > 0) {
+      const totalDev = [...devolucoes.values()].reduce((a, b) => a + b, 0);
+      extra = `\n\nValores pagos com caixinha (R$ ${formatoMoeda.format(
+        totalDev
+      )}) serão devolvidos às caixinhas.`;
+    }
+
+    Alert.alert(
+      "Excluir registro",
+      `Tem certeza? O lançamento será removido e o saldo será recalculado.${extra}`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Excluir",
+          style: "destructive",
+          onPress: excluir,
+        },
+      ]
+    );
+  }
+
+  async function devolverParaCaixinhas(item) {
+    const devolucoes = montarDevolucoesCaixinha(item);
+    if (devolucoes.size === 0) return;
+
+    for (const [caixinhaId, valor] of devolucoes.entries()) {
+      if (typeof DepositarNaCaixinha === "function") {
+        await DepositarNaCaixinha(caixinhaId, valor);
+      } else {
+        // fallback: soma direto no doc da caixinha
+        const ref = doc(db, "caixinhas", caixinhaId);
+        const snap = await getDoc(ref);
+        if (!snap.exists()) continue;
+        const atual = Number(snap.data().valor) || 0;
+        await updateDoc(ref, {
+          valor: arred(atual + valor),
+          atualizadoEm: Date.now(),
+        });
+      }
+    }
+  }
+
+  async function excluir() {
+    if (!item) return;
+
+    setExcluindo(true);
+    try {
+      // 1) Devolve à caixinha o que foi debitado nela
+      await devolverParaCaixinhas(item);
+
+      // 2) Cópia na lixeira
+      try {
+        const { id: _id, ...resto } = item;
+        await addDoc(collection(db, "lixeira"), {
+          ...resto,
+          registroIdOriginal: item.id,
+          dataexclusao: Date.now(),
+          igrejaId: item.igrejaId || igrejaId || null,
+          idUsuario: item.idUsuario || null,
+        });
+      } catch (eLixo) {
+        console.log("Aviso lixeira:", eLixo);
+      }
+
+      // 3) Remove o registro
+      await deleteDoc(doc(db, "registros", item.id));
+
+      await Promise.all([
+        HistoricoMovimentos(),
+        ResumoFinanceiro?.(),
+        CarregarCaixinhas?.(),
+      ]);
+
+      Alert.alert("Excluído", "Registro removido e saldo atualizado.");
+      navigation.goBack();
+    } catch (e) {
+      Alert.alert("Erro", e?.message || "Não foi possível excluir.");
+    } finally {
+      setExcluindo(false);
+    }
+  }
+
   if (load) return <Load />;
 
   const horasRestantes = item
@@ -200,6 +365,8 @@ export default function EditarRegistro() {
         (Number(item.createdAt || item.reg) + LIMITE_MS - Date.now()) / 3600000
       )
     : 0;
+
+  const ocupado = salvando || excluindo;
 
   return (
     <ScrollView
@@ -221,6 +388,7 @@ export default function EditarRegistro() {
           onChangeText={setDescricao}
           placeholder="Descrição"
           placeholderTextColor="#aaa"
+          editable={!ocupado}
         />
       </View>
 
@@ -233,6 +401,7 @@ export default function EditarRegistro() {
           keyboardType="decimal-pad"
           placeholder="0,00"
           placeholderTextColor="#aaa"
+          editable={!ocupado}
         />
       </View>
 
@@ -245,6 +414,7 @@ export default function EditarRegistro() {
           multiline
           placeholder="Opcional"
           placeholderTextColor="#aaa"
+          editable={!ocupado}
         />
       </View>
 
@@ -252,13 +422,23 @@ export default function EditarRegistro() {
         style={[
           styles.saveBtn,
           { backgroundColor: colors.principal },
-          salvando && { opacity: 0.7 },
+          ocupado && { opacity: 0.7 },
         ]}
         onPress={salvar}
-        disabled={salvando}
+        disabled={ocupado}
       >
         <Text style={styles.saveText}>
           {salvando ? "Salvando..." : "Salvar alterações"}
+        </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.deleteBtn, ocupado && { opacity: 0.7 }]}
+        onPress={confirmarExcluir}
+        disabled={ocupado}
+      >
+        <Text style={styles.deleteText}>
+          {excluindo ? "Excluindo..." : "Excluir registro"}
         </Text>
       </TouchableOpacity>
     </ScrollView>
@@ -314,5 +494,20 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontFamily: "Roboto-Bold",
+  },
+  deleteBtn: {
+    height: 52,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 10,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#ffcdd2",
+  },
+  deleteText: {
+    color: "#C62828",
+    fontSize: 15,
+    fontFamily: "Roboto-Medium",
   },
 });

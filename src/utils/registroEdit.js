@@ -1,4 +1,4 @@
-const LIMITE_MS = 24 * 60 * 60 * 1000; // 24 horas
+const LIMITE_MS = 24 * 60 * 60 * 1000;
 
 export function podeEditarRegistro(item) {
   const criado = item?.createdAt || item?.reg;

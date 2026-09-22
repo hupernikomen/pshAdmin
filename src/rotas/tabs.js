@@ -20,7 +20,6 @@ export default function Tabs() {
       tabBar={(props) => <TabBar {...props} />}
       screenOptions={{
         headerTitleStyle: {
-
           fontFamily: 'Roboto-Medium',
           color: '#000'
         },
@@ -31,9 +30,6 @@ export default function Tabs() {
         name="Home"
         component={Home}
         options={{
-          headerTitleStyle: {
-            fontSize: 18
-          },
           tabBarIcon: 'pie-chart-outline',
         }}
       />

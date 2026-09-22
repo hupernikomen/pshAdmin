@@ -31,7 +31,6 @@ export default function CriarIgreja() {
     }
   }
 
-  // Se já tiver igrejas (ex.: voltou de um estado estranho), permite escolher
   if (igrejasDoUsuario?.length > 0) {
     return (
       <View style={styles.root}>
@@ -111,7 +110,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: "Roboto-Medium",
     letterSpacing: 2,
-    color: "#9aa0a6",
     marginBottom: 12,
   },
   titulo: {
