@@ -60,13 +60,6 @@ function fimDoDia(d) {
   return x;
 }
 
-function calcularMes(mesIndex, ano) {
-  return {
-    inicio: new Date(ano, mesIndex, 1, 0, 0, 0, 0),
-    fim: new Date(ano, mesIndex + 1, 0, 23, 59, 59, 999),
-  };
-}
-
 function arred(v) {
   return Math.round((Number(v) || 0) * 100) / 100;
 }
@@ -84,15 +77,56 @@ function isDizimo(item) {
   return t.includes("dizimo") || t.includes("dízimo");
 }
 
-/** Desenha gráfico de linha(s) no pdf-lib */
+function resumoDeLista(lista) {
+  let entradas = 0;
+  let saidas = 0;
+  let dizimos = 0;
+  const porTipoEntrada = {};
+  const porTipoSaida = {};
+
+  lista.forEach((item) => {
+    const tipo = item.tipo || "Outros";
+    if (item.tipoMovimento === "entrada") {
+      const v = valorEntrada(item);
+      entradas += v;
+      porTipoEntrada[tipo] = (porTipoEntrada[tipo] || 0) + v;
+      if (isDizimo(item)) dizimos += v;
+    } else if (item.tipoMovimento === "saida") {
+      const v = valorSaida(item);
+      saidas += v;
+      porTipoSaida[tipo] = (porTipoSaida[tipo] || 0) + v;
+    }
+  });
+
+  return {
+    entradas: arred(entradas),
+    saidas: arred(saidas),
+    saldo: arred(entradas - saidas),
+    dizimos: arred(dizimos),
+    porTipoEntrada,
+    porTipoSaida,
+    quantidade: lista.length,
+  };
+}
+
+const C = {
+  ink: rgb(0.12, 0.16, 0.2),
+  muted: rgb(0.55, 0.58, 0.62),
+  line: rgb(0.9, 0.91, 0.92),
+  card: rgb(0.96, 0.96, 0.97),
+  green: rgb(0.18, 0.42, 0.31),
+  red: rgb(0.61, 0.13, 0.15),
+  white: rgb(1, 1, 1),
+};
+
 function desenharLinhaChart(page, font, opts) {
   const {
     x,
-    y, // topo do box
+    y,
     width,
     height,
-    series, // [{ label, values: number[] }]  values alinhados por índice
-    labels, // ['Jan', 'Fev', ...]
+    series,
+    labels,
     colors,
     lineColor = C.line,
     mutedColor = C.muted,
@@ -116,7 +150,6 @@ function desenharLinhaChart(page, font, opts) {
     color: rgb(1, 1, 1),
   });
 
-  // eixo base
   page.drawLine({
     start: { x: x + padL, y: baseY },
     end: { x: x + width - padR, y: baseY },
@@ -138,7 +171,6 @@ function desenharLinhaChart(page, font, opts) {
   series.forEach((s, si) => {
     const pts = pointsFor(s.values);
     const col = colors[si] || C.ink;
-
     for (let i = 0; i < pts.length - 1; i++) {
       page.drawLine({
         start: { x: pts[i].px, y: pts[i].py },
@@ -147,18 +179,14 @@ function desenharLinhaChart(page, font, opts) {
         color: col,
       });
     }
-
     pts.forEach((p) => {
-      page.drawCircle({
-        x: p.px,
-        y: p.py,
-        size: 2.2,
-        color: col,
-      });
+      page.drawCircle({ x: p.px, y: p.py, size: 2.2, color: col });
     });
   });
 
+  const stepLabel = labels.length > 8 ? 2 : 1;
   labels.forEach((lab, i) => {
+    if (i % stepLabel !== 0 && i !== labels.length - 1) return;
     const px = x + padL + i * stepX;
     page.drawText(String(lab), {
       x: px - 8,
@@ -170,16 +198,6 @@ function desenharLinhaChart(page, font, opts) {
   });
 }
 
-const C = {
-  ink: rgb(0.12, 0.16, 0.2),
-  muted: rgb(0.55, 0.58, 0.62),
-  line: rgb(0.9, 0.91, 0.92),
-  card: rgb(0.96, 0.96, 0.97),
-  green: rgb(0.18, 0.42, 0.31),
-  red: rgb(0.61, 0.13, 0.15),
-  white: rgb(1, 1, 1),
-};
-
 export default function Relatorio() {
   const {
     dadosFinancas,
@@ -187,6 +205,7 @@ export default function Relatorio() {
     HistoricoMovimentos,
     formatoMoeda,
     igrejaAtiva,
+    saldo,
   } = useContext(AppContext);
   const { uid, authPronto } = useAuth();
   const { colors } = useTheme();
@@ -194,7 +213,9 @@ export default function Relatorio() {
 
   const agora = new Date();
   const [modoFiltro, setModoFiltro] = useState("mes");
-  const [mesSelecionado, setMesSelecionado] = useState(agora.getMonth());
+  const [mesesSelecionados, setMesesSelecionados] = useState([
+    agora.getMonth(),
+  ]);
   const [anoSelecionado, setAnoSelecionado] = useState(agora.getFullYear());
   const [dataDe, setDataDe] = useState(() => {
     const d = new Date();
@@ -211,105 +232,154 @@ export default function Relatorio() {
     HistoricoMovimentos();
   }, [authPronto, uid, igrejaAtiva?.id]);
 
-  const { inicio, fim } = useMemo(() => {
-    if (modoFiltro === "mes") {
-      return calcularMes(mesSelecionado, anoSelecionado);
-    }
-    return {
-      inicio: inicioDoDia(dataDe),
-      fim: fimDoDia(dataAte),
-    };
-  }, [modoFiltro, dataDe, dataAte, mesSelecionado, anoSelecionado]);
-
-  const filtrados = useMemo(() => {
-    return (dadosFinancas || []).filter((item) => {
-      const ts = item.data || item.createdAt || item.reg;
-      if (!ts) return false;
-      const d = new Date(ts);
-      return d >= inicio && d <= fim;
-    });
-  }, [dadosFinancas, inicio, fim]);
-
-  const resumo = useMemo(() => {
-    let entradas = 0;
-    let saidas = 0;
-    let dizimos = 0;
-    const porTipoEntrada = {};
-    const porTipoSaida = {};
-
-    filtrados.forEach((item) => {
-      const tipo = item.tipo || "Outros";
-
-      if (item.tipoMovimento === "entrada") {
-        const v = valorEntrada(item);
-        entradas += v;
-        porTipoEntrada[tipo] = (porTipoEntrada[tipo] || 0) + v;
-        if (isDizimo(item)) dizimos += v;
-      } else if (item.tipoMovimento === "saida") {
-        const v = valorSaida(item);
-        saidas += v;
-        porTipoSaida[tipo] = (porTipoSaida[tipo] || 0) + v;
+  function toggleMes(index) {
+    setMesesSelecionados((prev) => {
+      if (prev.includes(index)) {
+        if (prev.length === 1) return prev;
+        return prev.filter((m) => m !== index).sort((a, b) => a - b);
       }
-    });
-
-    return {
-      entradas: arred(entradas),
-      saidas: arred(saidas),
-      saldo: arred(entradas - saidas),
-      dizimos: arred(dizimos),
-      porTipoEntrada,
-      porTipoSaida,
-      quantidade: filtrados.length,
-    };
-  }, [filtrados]);
-
-  const seriesGraficos = useMemo(() => {
-  const lista = dadosFinancas || [];
-  const pontos = [];
-
-  for (let i = 11; i >= 0; i--) {
-    const ref = new Date(agora.getFullYear(), agora.getMonth() - i, 1);
-    const m = ref.getMonth();
-    const a = ref.getFullYear();
-    const ini = new Date(a, m, 1, 0, 0, 0, 0).getTime();
-    const fimM = new Date(a, m + 1, 0, 23, 59, 59, 999).getTime();
-
-    let receita = 0;
-    let despesa = 0;
-    let dizimo = 0;
-
-    lista.forEach((item) => {
-      const ts = item.data || item.createdAt || item.reg;
-      if (!ts || ts < ini || ts > fimM) return;
-
-      if (item.tipoMovimento === "entrada") {
-        const v = valorEntrada(item);
-        receita += v;
-        if (isDizimo(item)) dizimo += v;
-      } else if (item.tipoMovimento === "saida") {
-        despesa += valorSaida(item);
-      }
-    });
-
-    pontos.push({
-      label: MESES_CURTO[m],
-      receita: arred(receita),
-      despesa: arred(despesa),
-      dizimo: arred(dizimo),
+      return [...prev, index].sort((a, b) => a - b);
     });
   }
 
-  return pontos;
-}, [dadosFinancas]);
+  const filtrados = useMemo(() => {
+    const lista = dadosFinancas || [];
+
+    if (modoFiltro === "periodo") {
+      const ini = inicioDoDia(dataDe).getTime();
+      const fim = fimDoDia(dataAte).getTime();
+      return lista.filter((item) => {
+        const ts = item.data || item.createdAt || item.reg;
+        if (!ts) return false;
+        return ts >= ini && ts <= fim;
+      });
+    }
+
+    const setM = new Set(mesesSelecionados);
+    return lista.filter((item) => {
+      const ts = item.data || item.createdAt || item.reg;
+      if (!ts) return false;
+      const d = new Date(ts);
+      return d.getFullYear() === anoSelecionado && setM.has(d.getMonth());
+    });
+  }, [
+    dadosFinancas,
+    modoFiltro,
+    dataDe,
+    dataAte,
+    mesesSelecionados,
+    anoSelecionado,
+  ]);
+
+  const resumo = useMemo(() => resumoDeLista(filtrados), [filtrados]);
+
+  const resumoPorMes = useMemo(() => {
+    if (modoFiltro !== "mes") return [];
+
+    return [...mesesSelecionados]
+      .sort((a, b) => a - b)
+      .map((mesIdx) => {
+        const doMes = filtrados.filter((item) => {
+          const ts = item.data || item.createdAt || item.reg;
+          if (!ts) return false;
+          const d = new Date(ts);
+          return d.getMonth() === mesIdx && d.getFullYear() === anoSelecionado;
+        });
+        return {
+          mesIdx,
+          nome: MESES[mesIdx],
+          ...resumoDeLista(doMes),
+        };
+      });
+  }, [modoFiltro, mesesSelecionados, anoSelecionado, filtrados]);
+
+  const projecao = useMemo(() => {
+    const lista = dadosFinancas || [];
+    let aReceber = 0;
+    let aPagar = 0;
+
+    lista.forEach((i) => {
+      if (i.tipoMovimento === "entrada") {
+        if (i.tipo === "Saldo inicial") return;
+        if (i.status === "quitada") return;
+        const falta =
+          (Number(i.valorTotal) || 0) - (Number(i.valorRecebidoTotal) || 0);
+        if (falta > 0) aReceber += falta;
+        return;
+      }
+      if (i.tipoMovimento === "saida") {
+        if (i.status === "quitada") return;
+        const parcelas = Array.isArray(i.parcelas) ? i.parcelas : [];
+        if (parcelas.length > 0) {
+          parcelas.forEach((p) => {
+            if (p.status === "aberta") aPagar += Number(p.valor) || 0;
+          });
+          return;
+        }
+        const falta =
+          (Number(i.valorTotal) || 0) - (Number(i.valorPagoTotal) || 0);
+        if (falta > 0) aPagar += falta;
+      }
+    });
+
+    const saldoAtual = Number(saldo) || 0;
+    return {
+      saldoAtual: arred(saldoAtual),
+      aReceber: arred(aReceber),
+      aPagar: arred(aPagar),
+      saldoProjetado: arred(saldoAtual - aPagar + aReceber),
+    };
+  }, [dadosFinancas, saldo]);
+
+  const seriesGraficos = useMemo(() => {
+    const lista = dadosFinancas || [];
+    const pontos = [];
+    for (let i = 11; i >= 0; i--) {
+      const ref = new Date(agora.getFullYear(), agora.getMonth() - i, 1);
+      const m = ref.getMonth();
+      const a = ref.getFullYear();
+      const ini = new Date(a, m, 1, 0, 0, 0, 0).getTime();
+      const fimM = new Date(a, m + 1, 0, 23, 59, 59, 999).getTime();
+      let receita = 0;
+      let despesa = 0;
+      let dizimo = 0;
+      lista.forEach((item) => {
+        const ts = item.data || item.createdAt || item.reg;
+        if (!ts || ts < ini || ts > fimM) return;
+        if (item.tipoMovimento === "entrada") {
+          const v = valorEntrada(item);
+          receita += v;
+          if (isDizimo(item)) dizimo += v;
+        } else if (item.tipoMovimento === "saida") {
+          despesa += valorSaida(item);
+        }
+      });
+      pontos.push({
+        label: MESES_CURTO[m],
+        receita: arred(receita),
+        despesa: arred(despesa),
+        dizimo: arred(dizimo),
+      });
+    }
+    return pontos;
+  }, [dadosFinancas]);
 
   const labelPeriodo = useMemo(() => {
-    if (modoFiltro === "mes") {
-      return `${MESES[mesSelecionado]} de ${anoSelecionado}`;
+    if (modoFiltro === "periodo") {
+      return `${inicioDoDia(dataDe).toLocaleDateString(
+        "pt-BR"
+      )} até ${fimDoDia(dataAte).toLocaleDateString("pt-BR")}`;
     }
-    return `${inicio.toLocaleDateString("pt-BR")} até ${fim.toLocaleDateString(
-      "pt-BR"
-    )}`;
-  }, [modoFiltro, mesSelecionado, anoSelecionado, inicio, fim]);
+    const nomes = [...mesesSelecionados]
+      .sort((a, b) => a - b)
+      .map((i) => MESES[i]);
+    if (nomes.length === 1) return `${nomes[0]} de ${anoSelecionado}`;
+    if (nomes.length === 2)
+      return `${nomes[0]} e ${nomes[1]} de ${anoSelecionado}`;
+    return `${nomes.slice(0, -1).join(", ")} e ${
+      nomes[nomes.length - 1]
+    } de ${anoSelecionado}`;
+  }, [modoFiltro, dataDe, dataAte, mesesSelecionados, anoSelecionado]);
 
   async function exportarPDF() {
     if (filtrados.length === 0) {
@@ -333,11 +403,13 @@ export default function Relatorio() {
 
       const safe = (t) =>
         String(t ?? "")
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "");
+          .replace(/\u2013|\u2014/g, "-")
+          .replace(/\u2018|\u2019/g, "'")
+          .replace(/\u201c|\u201d/g, '"')
+          .replace(/\u2026/g, "...");
 
       const ensure = (h) => {
-        if (y - h < margin + 24) {
+        if (y - h < margin + 28) {
           page = pdfDoc.addPage([pageWidth, pageHeight]);
           y = pageHeight - margin;
         }
@@ -358,7 +430,7 @@ export default function Relatorio() {
           ? ((resumo.dizimos / resumo.entradas) * 100).toFixed(1)
           : "0.0";
 
-      // Cabeçalho
+      // ===== Cabeçalho =====
       page.drawText(safe(nomeIgreja), {
         x: margin,
         y,
@@ -366,15 +438,15 @@ export default function Relatorio() {
         font: fontBold,
         color: C.ink,
       });
-      y -= 14;
-      page.drawText(safe("RELATORIO FINANCEIRO"), {
+      y -= 16;
+      page.drawText(safe("RELATÓRIO FINANCEIRO"), {
         x: margin,
         y,
         size: 9,
         font,
         color: C.muted,
       });
-      y -= 12;
+      y -= 14;
       page.drawText(safe(labelPeriodo), {
         x: margin,
         y,
@@ -382,26 +454,33 @@ export default function Relatorio() {
         font: fontBold,
         color: C.ink,
       });
-      y -= 6;
+      y -= 10;
       line(margin, pageWidth - margin, y);
-      y -= 16;
+      y -= 20;
 
+      // ===== Texto executivo =====
       const textoExec = safe(
-        `No periodo, as receitas realizadas somaram R$ ${formatoMoeda.format(
-          resumo.entradas
-        )} e as despesas pagas R$ ${formatoMoeda.format(
-          resumo.saidas
-        )}, com resultado de R$ ${formatoMoeda.format(
-          resumo.saldo
-        )}. Os dizimos totalizaram R$ ${formatoMoeda.format(
-          resumo.dizimos
-        )} (${pctDiz}% das receitas). Valores a receber ou a pagar nao entram neste resultado ate a baixa.`
+        `Este relatório contempla exclusivamente os lançamentos do período referente a: ${labelPeriodo}. ` +
+          `Receitas realizadas R$ ${formatoMoeda.format(
+            resumo.entradas
+          )}, despesas pagas R$ ${formatoMoeda.format(
+            resumo.saidas
+          )}, saldo R$ ${formatoMoeda.format(resumo.saldo)}. ` +
+          `O saldo atual da tesouraria é de R$ ${formatoMoeda.format(
+            projecao.saldoAtual
+          )}. Considerando os valores a receber (R$ ${formatoMoeda.format(
+            projecao.aReceber
+          )}) e as obrigações a pagar (R$ ${formatoMoeda.format(
+            projecao.aPagar
+          )}), o saldo projetado é de R$ ${formatoMoeda.format(
+            projecao.saldoProjetado
+          )}.`
       );
 
       let resto = textoExec;
       const maxChars = 95;
       while (resto.length > 0) {
-        ensure(12);
+        ensure(14);
         let chunk = resto.slice(0, maxChars);
         if (resto.length > maxChars) {
           const sp = chunk.lastIndexOf(" ");
@@ -415,24 +494,22 @@ export default function Relatorio() {
           color: C.ink,
           maxWidth: pageWidth - margin * 2,
         });
-        y -= 12;
+        y -= 13;
         resto = resto.slice(chunk.length).trim();
       }
-      y -= 10;
+      y -= 22;
 
-      // KPIs
+      // ===== KPIs do período =====
       const cardW = (pageWidth - margin * 2 - 18) / 4;
       const cardH = 44;
-      ensure(cardH + 12);
+      ensure(cardH + 16);
 
-      const kpis = [
+      [
         { label: "RECEITAS", value: resumo.entradas, color: C.green },
         { label: "DESPESAS", value: resumo.saidas, color: C.red },
         { label: "RESULTADO", value: resumo.saldo, color: C.ink },
-        { label: "DIZIMOS", value: resumo.dizimos, color: C.green },
-      ];
-
-      kpis.forEach((k, i) => {
+        { label: "DÍZIMOS", value: resumo.dizimos, color: C.green },
+      ].forEach((k, i) => {
         const x = margin + i * (cardW + 6);
         page.drawRectangle({
           x,
@@ -459,24 +536,117 @@ export default function Relatorio() {
           maxWidth: cardW - 12,
         });
       });
-      y -= cardH + 20;
+      y -= cardH + 32;
 
-      const labels = seriesGraficos.map((s) => s.label);
-      const chartW = pageWidth - margin * 2;
+      // ===== Resultado por mês =====
+      if (modoFiltro === "mes" && resumoPorMes.length > 0) {
+        ensure(24);
+        page.drawText(safe("Resultado por mês"), {
+          x: margin,
+          y,
+          size: 10,
+          font: fontBold,
+          color: C.ink,
+        });
+        y -= 10;
+        line(margin, pageWidth - margin, y);
+        y -= 18;
 
-      // --- Linha: dízimos ---
-      ensure(130);
-      page.drawText(safe("Evolucao dos dizimos (6 meses)"), {
+        resumoPorMes.forEach((m) => {
+          ensure(52);
+          page.drawText(safe(`${m.nome} / ${anoSelecionado}`), {
+            x: margin,
+            y,
+            size: 10,
+            font: fontBold,
+            color: C.ink,
+          });
+          y -= 14;
+          page.drawText(
+            safe(
+              `Receitas R$ ${formatoMoeda.format(
+                m.entradas
+              )}  |  Despesas R$ ${formatoMoeda.format(
+                m.saidas
+              )}  |  Resultado R$ ${formatoMoeda.format(
+                m.saldo
+              )}  |  Dízimos R$ ${formatoMoeda.format(m.dizimos)}`
+            ),
+            {
+              x: margin,
+              y,
+              size: 8,
+              font,
+              color: C.muted,
+              maxWidth: pageWidth - margin * 2,
+            }
+          );
+          y -= 12;
+          line(margin, pageWidth - margin, y);
+          y -= 16;
+        });
+        y -= 12;
+      }
+
+      // ===== Projeção =====
+      ensure(cardH + 28);
+      page.drawText(safe("Posição e projeção (tesouraria)"), {
         x: margin,
         y,
         size: 10,
         font: fontBold,
         color: C.ink,
       });
-      y -= 8;
-      line(margin, pageWidth - margin, y);
-      y -= 6;
+      y -= 14;
+      [
+        { label: "SALDO ATUAL", value: projecao.saldoAtual, color: C.ink },
+        { label: "A RECEBER", value: projecao.aReceber, color: C.green },
+        { label: "A PAGAR", value: projecao.aPagar, color: C.red },
+        { label: "PROJETADO", value: projecao.saldoProjetado, color: C.ink },
+      ].forEach((k, i) => {
+        const x = margin + i * (cardW + 6);
+        page.drawRectangle({
+          x,
+          y: y - cardH,
+          width: cardW,
+          height: cardH,
+          color: C.card,
+          borderColor: C.line,
+          borderWidth: 0.5,
+        });
+        page.drawText(safe(k.label), {
+          x: x + 8,
+          y: y - 14,
+          size: 7,
+          font,
+          color: C.muted,
+        });
+        page.drawText(safe(`R$ ${formatoMoeda.format(k.value)}`), {
+          x: x + 8,
+          y: y - 32,
+          size: 9,
+          font: fontBold,
+          color: k.color,
+          maxWidth: cardW - 12,
+        });
+      });
+      y -= cardH + 32;
 
+      const labels = seriesGraficos.map((s) => s.label);
+      const chartW = pageWidth - margin * 2;
+
+      // ===== Gráfico dízimos =====
+      ensure(140);
+      page.drawText(safe("Evolução dos dízimos (12 meses)"), {
+        x: margin,
+        y,
+        size: 10,
+        font: fontBold,
+        color: C.ink,
+      });
+      y -= 10;
+      line(margin, pageWidth - margin, y);
+      y -= 12;
       const chartH1 = 100;
       desenharLinhaChart(page, font, {
         x: margin,
@@ -487,22 +657,20 @@ export default function Relatorio() {
         series: [{ values: seriesGraficos.map((s) => s.dizimo) }],
         colors: [C.green],
       });
-      y -= chartH1 + 16;
+      y -= chartH1 + 32;
 
-      // --- Linhas: receitas x despesas ---
-      ensure(150);
-      page.drawText(safe("Receitas e despesas (6 meses)"), {
+      // ===== Gráfico receitas x despesas =====
+      ensure(160);
+      page.drawText(safe("Receitas e despesas (12 meses)"), {
         x: margin,
         y,
         size: 10,
         font: fontBold,
         color: C.ink,
       });
-      y -= 8;
+      y -= 10;
       line(margin, pageWidth - margin, y);
-      y -= 4;
-
-      // legenda
+      y -= 8;
       page.drawCircle({
         x: pageWidth - margin - 105,
         y: y - 2,
@@ -529,8 +697,7 @@ export default function Relatorio() {
         font,
         color: C.muted,
       });
-      y -= 8;
-
+      y -= 12;
       const chartH2 = 110;
       desenharLinhaChart(page, font, {
         x: margin,
@@ -544,9 +711,9 @@ export default function Relatorio() {
         ],
         colors: [C.green, C.red],
       });
-      y -= chartH2 + 18;
+      y -= chartH2 + 32;
 
-      // Tabelas
+      // ===== Tabelas =====
       const entradas = Object.entries(resumo.porTipoEntrada).sort(
         (a, b) => b[1] - a[1]
       );
@@ -555,7 +722,7 @@ export default function Relatorio() {
       );
 
       const drawTabela = (titulo, lista, cor) => {
-        ensure(20);
+        ensure(24);
         page.drawText(safe(titulo), {
           x: margin,
           y,
@@ -563,24 +730,22 @@ export default function Relatorio() {
           font: fontBold,
           color: C.ink,
         });
-        y -= 8;
+        y -= 10;
         line(margin, pageWidth - margin, y);
-        y -= 12;
-
+        y -= 16;
         if (!lista.length) {
-          page.drawText(safe("Sem dados no periodo."), {
+          page.drawText(safe("Sem dados no período."), {
             x: margin,
             y,
             size: 9,
             font,
             color: C.muted,
           });
-          y -= 14;
+          y -= 20;
           return;
         }
-
         lista.forEach(([tipo, total]) => {
-          ensure(12);
+          ensure(14);
           page.drawText(safe(String(tipo)), {
             x: margin,
             y,
@@ -596,18 +761,19 @@ export default function Relatorio() {
             font: fontBold,
             color: cor,
           });
-          y -= 12;
+          y -= 14;
         });
-        y -= 8;
+        y -= 18;
       };
 
-      drawTabela("Receitas por tipo (realizadas)", entradas, C.green);
-      drawTabela("Despesas por tipo (pagas)", saidas, C.red);
+      drawTabela("Receitas por tipo (período filtrado)", entradas, C.green);
+      drawTabela("Despesas por tipo (período filtrado)", saidas, C.red);
 
-      ensure(30);
-      y -= 4;
-      line(margin, pageWidth - margin, y);
+      // ===== Rodapé =====
+      ensure(40);
       y -= 12;
+      line(margin, pageWidth - margin, y);
+      y -= 14;
       page.drawText(
         safe(
           `Gerado em ${new Date().toLocaleDateString(
@@ -616,30 +782,11 @@ export default function Relatorio() {
             resumo.quantidade
           } registro(s) no filtro`
         ),
-        {
-          x: margin,
-          y,
-          size: 8,
-          font,
-          color: C.muted,
-        }
-      );
-      y -= 11;
-      page.drawText(
-        safe(
-          "Documento informativo com base nos lancamentos do aplicativo de tesouraria."
-        ),
-        {
-          x: margin,
-          y,
-          size: 7,
-          font,
-          color: C.muted,
-        }
+        { x: margin, y, size: 8, font, color: C.muted }
       );
 
       const base64 = await pdfDoc.saveAsBase64();
-      if (!base64) throw new Error("Falha ao gerar o conteudo do PDF.");
+      if (!base64) throw new Error("Falha ao gerar o conteúdo do PDF.");
 
       const fileName = `relatorio_${Date.now()}.pdf`;
       const cachePath = `${RNFS.CachesDirectoryPath}/${fileName}`;
@@ -650,7 +797,7 @@ export default function Relatorio() {
 
       try {
         await Share.open({
-          title: "Relatorio Financeiro",
+          title: "Relatório Financeiro",
           url: fileUrl,
           type: "application/pdf",
           showAppsToView: true,
@@ -694,9 +841,13 @@ export default function Relatorio() {
     gerando,
     filtrados,
     resumo,
+    resumoPorMes,
+    projecao,
     labelPeriodo,
     seriesGraficos,
     igrejaAtiva?.nome,
+    modoFiltro,
+    anoSelecionado,
   ]);
 
   if ((!authPronto || load) && !(dadosFinancas || []).length) return <Load />;
@@ -756,6 +907,9 @@ export default function Relatorio() {
 
           {modoFiltro === "mes" ? (
             <>
+              <Text style={styles.hintSelect}>
+                Toque nos meses para combinar (ex.: Set, Out e Nov)
+              </Text>
               <View style={styles.anoRow}>
                 <TouchableOpacity
                   style={styles.anoBtn}
@@ -774,7 +928,7 @@ export default function Relatorio() {
 
               <View style={styles.mesesGrid}>
                 {MESES.map((nome, index) => {
-                  const ativo = mesSelecionado === index;
+                  const ativo = mesesSelecionados.includes(index);
                   return (
                     <TouchableOpacity
                       key={nome}
@@ -782,7 +936,7 @@ export default function Relatorio() {
                         styles.mesChip,
                         ativo && { backgroundColor: colors.principal },
                       ]}
-                      onPress={() => setMesSelecionado(index)}
+                      onPress={() => toggleMes(index)}
                     >
                       <Text
                         style={[styles.mesText, ativo && { color: "#fff" }]}
@@ -805,7 +959,6 @@ export default function Relatorio() {
                   {dataDe.toLocaleDateString("pt-BR")}
                 </Text>
               </TouchableOpacity>
-
               <TouchableOpacity
                 style={styles.dateBox}
                 onPress={() => setShowAte(true)}
@@ -830,7 +983,6 @@ export default function Relatorio() {
               }}
             />
           )}
-
           {showAte && (
             <DateTimePicker
               value={dataAte}
@@ -852,6 +1004,39 @@ export default function Relatorio() {
           </View>
         </View>
 
+        {modoFiltro === "mes" && resumoPorMes.length > 1 && (
+          <>
+            <Text style={styles.sectionTitle}>Por mês</Text>
+            <View style={styles.listCard}>
+              {resumoPorMes.map((m, index) => (
+                <View
+                  key={m.mesIdx}
+                  style={[
+                    styles.itemRow,
+                    index === resumoPorMes.length - 1 && styles.itemRowLast,
+                  ]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.itemLabel}>{m.nome}</Text>
+                    <Text style={styles.mesSub}>
+                      +{formatoMoeda.format(m.entradas)} · −
+                      {formatoMoeda.format(m.saidas)}
+                    </Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.itemValue,
+                      { color: m.saldo >= 0 ? "#2E7D32" : "#C62828" },
+                    ]}
+                  >
+                    {formatoMoeda.format(m.saldo)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+
         <View style={styles.kpiRow}>
           <View style={styles.kpiCard}>
             <Text style={styles.kpiLabel}>Receitas</Text>
@@ -868,7 +1053,7 @@ export default function Relatorio() {
         </View>
         <View style={styles.kpiRow}>
           <View style={styles.kpiCard}>
-            <Text style={styles.kpiLabel}>Saldo</Text>
+            <Text style={styles.kpiLabel}>Resultado</Text>
             <Text style={styles.kpiValue}>
               {formatoMoeda.format(resumo.saldo)}
             </Text>
@@ -880,10 +1065,38 @@ export default function Relatorio() {
             </Text>
           </View>
         </View>
+        <View style={styles.kpiRow}>
+          <View style={styles.kpiCard}>
+            <Text style={styles.kpiLabel}>Saldo atual</Text>
+            <Text style={styles.kpiValue}>
+              {formatoMoeda.format(projecao.saldoAtual)}
+            </Text>
+          </View>
+          <View style={styles.kpiCard}>
+            <Text style={styles.kpiLabel}>Projetado</Text>
+            <Text style={styles.kpiValue}>
+              {formatoMoeda.format(projecao.saldoProjetado)}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.kpiRow}>
+          <View style={styles.kpiCard}>
+            <Text style={styles.kpiLabel}>A receber</Text>
+            <Text style={[styles.kpiValue, { color: "#2E7D32" }]}>
+              {formatoMoeda.format(projecao.aReceber)}
+            </Text>
+          </View>
+          <View style={styles.kpiCard}>
+            <Text style={styles.kpiLabel}>A pagar</Text>
+            <Text style={[styles.kpiValue, { color: "#C62828" }]}>
+              {formatoMoeda.format(projecao.aPagar)}
+            </Text>
+          </View>
+        </View>
 
         <Text style={styles.hintPdf}>
-          Exporte o PDF no ícone do cabeçalho para o relatório com gráficos de
-          linha (dízimos e receitas × despesas).
+          Totais e tabelas = só o período/meses escolhidos. Projetado e gráficos
+          de 12 meses = visão geral da tesouraria.
         </Text>
 
         <Text style={styles.sectionTitle}>Entradas por tipo</Text>
@@ -949,19 +1162,13 @@ export default function Relatorio() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f4f5f7",
-  },
+  container: { flex: 1, backgroundColor: "#f4f5f7" },
   content: {
     paddingHorizontal: 18,
     paddingTop: 12,
     paddingBottom: 100,
   },
-  headerBtn: {
-    marginRight: 12,
-    padding: 6,
-  },
+  headerBtn: { marginRight: 12, padding: 6 },
   block: {
     backgroundColor: "#fff",
     borderRadius: 18,
@@ -985,6 +1192,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Roboto-Medium",
     color: "#555",
+  },
+  hintSelect: {
+    fontSize: 12,
+    fontFamily: "Roboto-Regular",
+    color: "#888",
+    marginBottom: 10,
   },
   anoRow: {
     flexDirection: "row",
@@ -1025,10 +1238,7 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Medium",
     color: "#333",
   },
-  customRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
+  customRow: { flexDirection: "row", gap: 10 },
   dateBox: {
     flex: 1,
     backgroundColor: "#f4f5f7",
@@ -1067,11 +1277,7 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Medium",
     color: "#9aa0a6",
   },
-  kpiRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 10,
-  },
+  kpiRow: { flexDirection: "row", gap: 10, marginBottom: 10 },
   kpiCard: {
     flex: 1,
     backgroundColor: "#fff",
@@ -1116,9 +1322,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "#f0f0f0",
   },
-  itemRowLast: {
-    borderBottomWidth: 0,
-  },
+  itemRowLast: { borderBottomWidth: 0 },
   iconCircle: {
     width: 34,
     height: 34,
@@ -1132,6 +1336,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Roboto-Medium",
     color: "#1f2933",
+  },
+  mesSub: {
+    fontSize: 11,
+    fontFamily: "Roboto-Regular",
+    color: "#888",
+    marginTop: 2,
   },
   itemValue: {
     fontSize: 14,
