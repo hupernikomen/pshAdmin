@@ -304,9 +304,8 @@ export default function Membros() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f4f5f7" },
+  container: { flex: 1 },
   headerInfo: {
-    paddingHorizontal: 18,
     paddingTop: 14,
     paddingBottom: 8,
   },
@@ -321,7 +320,7 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Regular",
     color: "#888",
   },
-  list: { paddingHorizontal: 18, paddingBottom: 100 },
+  list: { paddingBottom: 100 },
   card: {
     backgroundColor: "#fff",
     borderRadius: 14,

@@ -314,7 +314,6 @@ export default function Home() {
             }
           />
         )}
-        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
         ListFooterComponent={<View style={{ height: 100 }} />}
       />
 
@@ -431,11 +430,10 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f7f7f7ff",
   },
   content: {
-    paddingHorizontal: 18,
     paddingTop: 10,
+    gap:8
   },
   avatar: {
     width: 36,

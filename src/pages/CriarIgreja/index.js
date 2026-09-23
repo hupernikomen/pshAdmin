@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: "#fff",
-    paddingHorizontal: 24,
+    paddingHorizontal: 14,
     paddingTop: 72,
   },
   selo: {

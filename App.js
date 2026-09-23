@@ -27,7 +27,7 @@ function TelaCarregamento() {
         flex: 1,
         justifyContent: "center",
         alignItems: "center",
-        backgroundColor: "#fff",
+        backgroundColor: "#f4f5f7",
       }}
     >
       <ActivityIndicator size="large" color="#65C556" />

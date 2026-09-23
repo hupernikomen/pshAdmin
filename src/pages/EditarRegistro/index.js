@@ -374,11 +374,7 @@ export default function EditarRegistro() {
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
-      <View style={styles.banner}>
-        <Text style={styles.bannerText}>
-          Você pode editar por mais ~{horasRestantes.toFixed(1)} h
-        </Text>
-      </View>
+
 
       <View style={styles.field}>
         <Text style={styles.label}>Descrição</Text>
@@ -448,22 +444,9 @@ export default function EditarRegistro() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f4f5f7",
   },
   content: {
-    padding: 18,
-    paddingBottom: 40,
-  },
-  banner: {
-    backgroundColor: "#fff3e0",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-  },
-  bannerText: {
-    fontSize: 13,
-    fontFamily: "Roboto-Medium",
-    color: "#e65100",
+    paddingVertical: 14,
   },
   field: {
     backgroundColor: "#fff",

@@ -1102,9 +1102,8 @@ export default function Registro() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f4f5f7" },
+  container: { flex: 1 },
   content: {
-    paddingHorizontal: 18,
     paddingTop: 12,
     paddingBottom: 120,
   },

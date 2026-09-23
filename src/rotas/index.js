@@ -22,6 +22,11 @@ export default function Rotas() {
         headerTitleStyle: {
           fontSize: 18,
           fontFamily: 'Roboto-Bold',
+        },
+        contentStyle: {
+          backgroundColor: "#f4f5f7",
+          paddingHorizontal: 14
+
         }
       }}>
         <Stack.Screen

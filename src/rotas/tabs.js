@@ -23,7 +23,12 @@ export default function Tabs() {
           fontFamily: 'Roboto-Medium',
           color: '#000'
         },
-        headerShadowVisible: false
+        headerShadowVisible: false,
+        sceneStyle: {
+          backgroundColor: "#f4f5f7",
+
+        }
+
       }}>
 
       <Tab.Screen

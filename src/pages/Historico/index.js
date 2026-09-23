@@ -241,7 +241,6 @@ export default function Historico() {
         keyExtractor={(item) => item.rowId}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={{ height: 4 }} />}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIcon}>
@@ -257,7 +256,6 @@ export default function Historico() {
         }
         ListHeaderComponent={
           <View style={styles.filtroWrap}>
-            <Text style={styles.filtroLabel}>Mostrar</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -320,7 +318,7 @@ export default function Historico() {
             item.valorTotal &&
             (item.valorRecebidoTotal || item.valorPagoTotal) &&
             item.valorTotal !==
-              (item.valorRecebidoTotal || item.valorPagoTotal);
+            (item.valorRecebidoTotal || item.valorPagoTotal);
 
           const temRecibo = !!item.reciboUrl && !isParcela;
           const origem = textoOrigem(item);
@@ -339,8 +337,8 @@ export default function Historico() {
             origem ? `Pago: ${origem}` : null,
             temParcial
               ? `Total ${formatoMoeda.format(item.valorTotal)} · Pago ${formatoMoeda.format(
-                  item.valorRecebidoTotal || item.valorPagoTotal || 0
-                )}`
+                item.valorRecebidoTotal || item.valorPagoTotal || 0
+              )}`
               : null,
           ].filter(Boolean);
 
@@ -369,6 +367,8 @@ export default function Historico() {
 
           return (
             <SwipeCard
+              hasRecibo={temRecibo}
+              canEdit={editavel}
               icon={isEntrada ? "arrow-down-outline" : "arrow-up-outline"}
               iconColor={isEntrada ? "#2E7D32" : "#C62828"}
               tint={isEntrada ? "#E8F5E9" : "#FFEBEE"}
@@ -380,12 +380,7 @@ export default function Historico() {
               onOpenChange={(isOpen) =>
                 setAbertoId(isOpen ? item.rowId : null)
               }
-              onPress={
-                editavel
-                  ? () =>
-                      navigation.navigate("EditarRegistro", { id: item.id })
-                  : undefined
-              }
+
             />
           );
         }}
@@ -425,7 +420,6 @@ export default function Historico() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f4f5f7",
   },
   filtroWrap: {
     paddingTop: 10,
@@ -453,9 +447,9 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Medium",
   },
   listContent: {
-    paddingHorizontal: 16,
     paddingTop: 4,
     paddingBottom: 100,
+    gap:8
   },
   emptyContainer: {
     marginTop: 80,

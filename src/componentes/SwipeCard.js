@@ -15,21 +15,10 @@ const OPEN_THRESHOLD = 48;
 
 /**
  * Card com arraste para a esquerda revelando ações.
+ * Toque no card = abre/fecha os botões (não navega).
  *
- * props:
- * - icon, iconColor, tint, title, subtitle, value
- * - onPress?: clique no card (opcional)
- * - actions?: Array<{
- *     key: string,
- *     icon: string,           // Ionicons
- *     label?: string,
- *     backgroundColor: string,
- *     color?: string,         // cor do ícone (default #fff)
- *     onPress: () => void,
- *   }>
- * - open?: boolean            // controlado (opcional)
- * - onOpenChange?: (open) => void
- * - style?: object
+ * - hasRecibo?: boolean → ícone de anexo
+ * - canEdit?: boolean   → ícone de edição (ao lado do anexo se ambos)
  */
 export default function SwipeCard({
   icon = "ellipse-outline",
@@ -38,7 +27,8 @@ export default function SwipeCard({
   title,
   subtitle,
   value,
-  onPress,
+  hasRecibo = false,
+  canEdit = false,
   actions = [],
   open,
   onOpenChange,
@@ -78,6 +68,7 @@ export default function SwipeCard({
   }
 
   function toggle() {
+    if (maxOpen <= 0) return;
     if (openRef.current) close();
     else openActions();
   }
@@ -107,15 +98,14 @@ export default function SwipeCard({
 
   function handleAction(action) {
     close();
-    // pequeno delay para o card fechar antes da ação
     setTimeout(() => action.onPress?.(), 80);
   }
 
   const hasActions = actions.length > 0;
+  const showMetaIcons = hasRecibo || canEdit;
 
   return (
     <View style={[styles.wrap, style]}>
-      {/* Botões atrás */}
       {hasActions && (
         <View style={[styles.actionsRow, { width: maxOpen }]}>
           {actions.map((a) => (
@@ -123,18 +113,19 @@ export default function SwipeCard({
               key={a.key}
               style={[
                 styles.actionBtn,
-                { backgroundColor: a.backgroundColor || "#666", width: ACTION_WIDTH },
+                {
+                  backgroundColor: a.backgroundColor || "#666",
+                  width: ACTION_WIDTH,
+                },
               ]}
               activeOpacity={0.85}
               onPress={() => handleAction(a)}
             >
-              <Ionicons
-                name={a.icon}
-                size={20}
-                color={a.color || "#fff"}
-              />
+              <Ionicons name={a.icon} size={20} color={a.color || "#fff"} />
               {!!a.label && (
-                <Text style={[styles.actionLabel, { color: a.color || "#fff" }]}>
+                <Text
+                  style={[styles.actionLabel, { color: a.color || "#fff" }]}
+                >
                   {a.label}
                 </Text>
               )}
@@ -143,27 +134,11 @@ export default function SwipeCard({
         </View>
       )}
 
-      {/* Card */}
       <Animated.View
         style={[styles.card, { transform: [{ translateX: tx }] }]}
         {...(hasActions ? pan.panHandlers : {})}
       >
-        <Pressable
-          onPress={() => {
-            if (openRef.current) {
-              close();
-              return;
-            }
-            if (hasActions && !onPress) {
-              // só navegação/ações por swipe: toque alterna abrir
-              toggle();
-              return;
-            }
-            onPress?.();
-          }}
-          onLongPress={hasActions ? openActions : undefined}
-          style={styles.cardInner}
-        >
+        <Pressable onPress={toggle} style={styles.cardInner}>
           <View style={[styles.iconCircle, { backgroundColor: tint }]}>
             <Ionicons name={icon} size={18} color={iconColor} />
           </View>
@@ -173,28 +148,33 @@ export default function SwipeCard({
               {title}
             </Text>
             {!!subtitle && (
-              <Text style={styles.itemSub} numberOfLines={1}>
+              <Text style={styles.itemSub} numberOfLines={2}>
                 {subtitle}
               </Text>
             )}
           </View>
 
-          {value != null && value !== "" && (
-            <Text style={styles.itemValue} numberOfLines={1}>
-              {value}
-            </Text>
-          )}
+          <View style={styles.rightCol}>
+            <View style={styles.rightTop}>
+              {value != null && value !== "" && (
+                <Text style={styles.itemValue} numberOfLines={1}>
+                  {value}
+                </Text>
+              )}
+              
+            </View>
 
-          {/* setinha discreta quando há ações */}
-          {hasActions && (
-            <TouchableOpacity
-              hitSlop={10}
-              onPress={toggle}
-              style={styles.chevronHit}
-            >
-              <Ionicons name="chevron-back" size={16} color="#bbb" />
-            </TouchableOpacity>
-          )}
+            {showMetaIcons ? (
+              <View style={styles.metaIcons}>
+                {hasRecibo && (
+                  <Ionicons name="attach-outline" size={18} color="#888" />
+                )}
+                {canEdit && (
+                  <Ionicons name="create-outline" size={18} color="#888" />
+                )}
+              </View>
+            ) : null}
+          </View>
         </Pressable>
       </Animated.View>
     </View>
@@ -230,7 +210,7 @@ const styles = StyleSheet.create({
   },
   cardInner: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     paddingVertical: 14,
     paddingHorizontal: 12,
   },
@@ -245,6 +225,8 @@ const styles = StyleSheet.create({
   itemCenter: {
     flex: 1,
     paddingRight: 8,
+    minHeight: 40,
+    justifyContent: "center",
   },
   itemTitle: {
     fontSize: 14,
@@ -255,16 +237,29 @@ const styles = StyleSheet.create({
   itemSub: {
     fontSize: 12,
     fontFamily: "Roboto-Light",
-    color: "#888",
+  },
+  rightCol: {
+    alignItems: "flex-end",
+    justifyContent: "flex-start",
+    minWidth: 72,
+  },
+  rightTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 20,
   },
   itemValue: {
     fontSize: 14,
     fontFamily: "Roboto-Medium",
     color: "#1f2933",
-    marginRight: 4,
   },
-  chevronHit: {
-    paddingLeft: 4,
-    paddingVertical: 4,
+  chevron: {
+    marginLeft: 4,
+  },
+  metaIcons: {
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
 });

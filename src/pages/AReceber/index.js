@@ -19,6 +19,7 @@ import { AppContext } from "../../context/AppContext";
 import { db } from "../../firebaseConnection";
 import { doc, updateDoc } from "firebase/firestore";
 import Load from "../../componentes/Load";
+import SwipeCard from "../../componentes/SwipeCard";
 import { useAuth } from "../../context/AuthContext";
 
 function parseNumero(txt) {
@@ -58,6 +59,7 @@ export default function AReceber() {
   const { colors } = useTheme();
   const { uid, authPronto } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
+  const [abertoId, setAbertoId] = useState(null);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [itemSel, setItemSel] = useState(null);
@@ -103,11 +105,6 @@ export default function AReceber() {
     });
     return lista.sort((a, b) => (b.data || 0) - (a.data || 0));
   }, [dadosFinancas]);
-
-  const totalAReceber = useMemo(
-    () => pendentes.reduce((acc, i) => acc + (i.falta || 0), 0),
-    [pendentes]
-  );
 
   function abrirReceber(item) {
     if (!podeEditar) {
@@ -201,7 +198,6 @@ export default function AReceber() {
             colors={[colors.principal]}
           />
         }
-
         ListEmptyComponent={
           <View style={styles.emptyBox}>
             <View style={styles.emptyIcon}>
@@ -228,36 +224,37 @@ export default function AReceber() {
               })
             : "--/--/--";
 
+          const meta = `${item.tipo || "Entrada"} · ${dataStr}`;
+
+          const actions = podeEditar
+            ? [
+                {
+                  key: "receber",
+                  icon: "download-outline",
+                  label: "Receber",
+                  backgroundColor: colors.principal,
+                  onPress: () => abrirReceber(item),
+                },
+              ]
+            : [];
+
           return (
-            <View style={styles.card}>
-              <View style={styles.linha1}>
-                <Text style={styles.meta}>
-                  {item.tipo || "Entrada"}
-                  {"  "}
-                  {dataStr}
-                </Text>
-                <Text style={styles.valor}>
-                  R$ {formatoMoeda.format(item.falta)}
-                </Text>
-              </View>
-
-              <Text style={styles.nome} numberOfLines={1}>
-                {item.descricao || "Sem descrição"}
-              </Text>
-
-              {podeEditar ? (
-                <TouchableOpacity
-                  style={[styles.btn, { backgroundColor: colors.principal }]}
-                  onPress={() => abrirReceber(item)}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.btnText}>Registrar recebimento</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
+            <SwipeCard
+              icon="arrow-down-outline"
+              iconColor="#2E7D32"
+              tint="#E8F5E9"
+              title={item.descricao || "Sem descrição"}
+              subtitle={meta}
+              value={`R$ ${formatoMoeda.format(item.falta)}`}
+              actions={actions}
+              open={abertoId === item.rowId}
+              onOpenChange={(isOpen) =>
+                setAbertoId(isOpen ? item.rowId : null)
+              }
+            />
           );
         }}
-        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+        ItemSeparatorComponent={() => <View style={{ height: 2 }} />}
         ListFooterComponent={<View style={{ height: 28 }} />}
       />
 
@@ -316,70 +313,8 @@ export default function AReceber() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f4f5f7" },
-  content: { paddingHorizontal: 18, paddingTop: 12, paddingBottom: 20 },
-  balanceCard: {
-    backgroundColor: "#fff",
-    borderRadius: 22,
-    padding: 18,
-    marginBottom: 16,
-  },
-  balanceLabel: {
-    fontSize: 13,
-    fontFamily: "Roboto-Regular",
-    color: "#9aa3ad",
-    marginBottom: 6,
-  },
-  balanceValue: {
-    fontSize: 30,
-    fontFamily: "Roboto-Bold",
-    color: "#1f2933",
-    letterSpacing: -0.8,
-  },
-  balanceSub: {
-    marginTop: 8,
-    fontSize: 12,
-    fontFamily: "Roboto-Regular",
-    color: "#8b949e",
-  },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 12,
-  },
-  linha1: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 4,
-  },
-  meta: {
-    fontSize: 12,
-    fontFamily: "Roboto-Regular",
-    color: "#8a8f98",
-  },
-  valor: {
-    fontSize: 14,
-    fontFamily: "Roboto-Bold",
-    color: "#2E7D32",
-  },
-  nome: {
-    fontSize: 15,
-    fontFamily: "Roboto-Medium",
-    color: "#1f2933",
-    marginBottom: 10,
-  },
-  btn: {
-    height: 40,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  btnText: {
-    color: "#fff",
-    fontSize: 13,
-    fontFamily: "Roboto-Medium",
-  },
+  container: { flex: 1 },
+  content: { paddingTop: 12, paddingBottom: 20 },
   emptyBox: {
     marginTop: 40,
     alignItems: "center",

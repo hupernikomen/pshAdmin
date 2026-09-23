@@ -17,6 +17,7 @@ import { useNavigation, useTheme } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../../context/AppContext";
 import Load from "../../componentes/Load";
+import SwipeCard from "../../componentes/SwipeCard";
 
 function parseValor(txt) {
   if (txt === null || txt === undefined) return 0;
@@ -39,9 +40,7 @@ function parseValor(txt) {
 export default function Caixinhas() {
   const {
     caixinhas,
-    saldo,
     saldoDisponivel,
-    totalReservado,
     load,
     setLoad,
     CarregarCaixinhas,
@@ -57,6 +56,7 @@ export default function Caixinhas() {
   const { colors } = useTheme();
   const navigation = useNavigation();
   const [refreshing, setRefreshing] = useState(false);
+  const [abertoId, setAbertoId] = useState(null);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [modoModal, setModoModal] = useState("criar"); // criar | depositar | retirar
@@ -91,7 +91,10 @@ export default function Caixinhas() {
 
   function abrirCriar() {
     if (!podeEditar) {
-      Alert.alert("Somente leitura", "Seu perfil não permite alterar caixinhas.");
+      Alert.alert(
+        "Somente leitura",
+        "Seu perfil não permite alterar caixinhas."
+      );
       return;
     }
     setModoModal("criar");
@@ -218,8 +221,6 @@ export default function Caixinhas() {
 
   return (
     <View style={styles.container}>
-     
-
       <FlatList
         data={caixinhas || []}
         keyExtractor={(item) => item.id}
@@ -250,53 +251,48 @@ export default function Caixinhas() {
             )}
           </View>
         }
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={styles.cardTop}>
-              <View style={styles.iconCircle}>
-                <Ionicons name="wallet-outline" size={18} color="#555" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardNome}>{item.nome}</Text>
-                <Text style={styles.cardValor}>
-                  R$ {formatoMoeda.format(item.valor || 0)}
-                </Text>
-              </View>
-              {podeEditar && (
-                <TouchableOpacity
-                  onPress={() => confirmarExcluir(item)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons name="trash-outline" size={18} color="#C62828" />
-                </TouchableOpacity>
-              )}
-            </View>
+        renderItem={({ item }) => {
+          const actions = podeEditar
+            ? [
+                {
+                  key: "reservar",
+                  icon: "arrow-down-outline",
+                  label: "Reservar",
+                  backgroundColor: "#2E7D32",
+                  onPress: () => abrirDepositar(item),
+                },
+                {
+                  key: "retirar",
+                  icon: "arrow-up-outline",
+                  label: "Retirar",
+                  backgroundColor: "#E65100",
+                  onPress: () => abrirRetirar(item),
+                },
+                {
+                  key: "excluir",
+                  icon: "trash-outline",
+                  label: "Excluir",
+                  backgroundColor: "#C62828",
+                  onPress: () => confirmarExcluir(item),
+                },
+              ]
+            : [];
 
-            {podeEditar && (
-              <View style={styles.cardActions}>
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={() => abrirDepositar(item)}
-                >
-                  <Ionicons name="arrow-down-outline" size={16} color="#2E7D32" />
-                  <Text style={[styles.actionText, { color: "#2E7D32" }]}>
-                    Reservar
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={() => abrirRetirar(item)}
-                >
-                  <Ionicons name="arrow-up-outline" size={16} color="#C62828" />
-                  <Text style={[styles.actionText, { color: "#C62828" }]}>
-                    Retirar
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        )}
-        ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+          return (
+            <SwipeCard
+              icon="wallet-outline"
+              iconColor="#555"
+              tint="#f0f0f0"
+              title={item.nome}
+              subtitle="Reservado"
+              value={`R$ ${formatoMoeda.format(item.valor || 0)}`}
+              actions={actions}
+              open={abertoId === item.id}
+              onOpenChange={(isOpen) => setAbertoId(isOpen ? item.id : null)}
+            />
+          );
+        }}
+        ItemSeparatorComponent={() => <View style={{ height: 2 }} />}
         ListFooterComponent={<View style={{ height: 100 }} />}
       />
 
@@ -399,55 +395,8 @@ export default function Caixinhas() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f4f5f7", paddingTop:14 },
-
-  list: { paddingHorizontal: 18, paddingBottom: 20 },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 14,
-  },
-  cardTop: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: "#f4f5f7",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  cardNome: {
-    fontSize: 15,
-    fontFamily: "Roboto-Medium",
-    color: "#1f2933",
-  },
-  cardValor: {
-    marginTop: 2,
-    fontSize: 14,
-    fontFamily: "Roboto-Bold",
-    color: "#333",
-  },
-  cardActions: {
-    flexDirection: "row",
-    gap: 16,
-    marginTop: 12,
-    paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#eee",
-  },
-  actionBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  actionText: {
-    fontSize: 13,
-    fontFamily: "Roboto-Medium",
-  },
+  container: { flex: 1, paddingTop: 14 },
+  list: { paddingBottom: 20 },
   emptyBox: {
     marginTop: 48,
     alignItems: "center",

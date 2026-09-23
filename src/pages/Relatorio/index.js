@@ -213,9 +213,7 @@ export default function Relatorio() {
 
   const agora = new Date();
   const [modoFiltro, setModoFiltro] = useState("mes");
-  const [mesesSelecionados, setMesesSelecionados] = useState([
-    agora.getMonth(),
-  ]);
+  const [mesSelecionado, setMesSelecionado] = useState(agora.getMonth());
   const [anoSelecionado, setAnoSelecionado] = useState(agora.getFullYear());
   const [dataDe, setDataDe] = useState(() => {
     const d = new Date();
@@ -232,16 +230,6 @@ export default function Relatorio() {
     HistoricoMovimentos();
   }, [authPronto, uid, igrejaAtiva?.id]);
 
-  function toggleMes(index) {
-    setMesesSelecionados((prev) => {
-      if (prev.includes(index)) {
-        if (prev.length === 1) return prev;
-        return prev.filter((m) => m !== index).sort((a, b) => a - b);
-      }
-      return [...prev, index].sort((a, b) => a - b);
-    });
-  }
-
   const filtrados = useMemo(() => {
     const lista = dadosFinancas || [];
 
@@ -255,43 +243,24 @@ export default function Relatorio() {
       });
     }
 
-    const setM = new Set(mesesSelecionados);
     return lista.filter((item) => {
       const ts = item.data || item.createdAt || item.reg;
       if (!ts) return false;
       const d = new Date(ts);
-      return d.getFullYear() === anoSelecionado && setM.has(d.getMonth());
+      return (
+        d.getFullYear() === anoSelecionado && d.getMonth() === mesSelecionado
+      );
     });
   }, [
     dadosFinancas,
     modoFiltro,
     dataDe,
     dataAte,
-    mesesSelecionados,
+    mesSelecionado,
     anoSelecionado,
   ]);
 
   const resumo = useMemo(() => resumoDeLista(filtrados), [filtrados]);
-
-  const resumoPorMes = useMemo(() => {
-    if (modoFiltro !== "mes") return [];
-
-    return [...mesesSelecionados]
-      .sort((a, b) => a - b)
-      .map((mesIdx) => {
-        const doMes = filtrados.filter((item) => {
-          const ts = item.data || item.createdAt || item.reg;
-          if (!ts) return false;
-          const d = new Date(ts);
-          return d.getMonth() === mesIdx && d.getFullYear() === anoSelecionado;
-        });
-        return {
-          mesIdx,
-          nome: MESES[mesIdx],
-          ...resumoDeLista(doMes),
-        };
-      });
-  }, [modoFiltro, mesesSelecionados, anoSelecionado, filtrados]);
 
   const projecao = useMemo(() => {
     const lista = dadosFinancas || [];
@@ -370,16 +339,8 @@ export default function Relatorio() {
         "pt-BR"
       )} até ${fimDoDia(dataAte).toLocaleDateString("pt-BR")}`;
     }
-    const nomes = [...mesesSelecionados]
-      .sort((a, b) => a - b)
-      .map((i) => MESES[i]);
-    if (nomes.length === 1) return `${nomes[0]} de ${anoSelecionado}`;
-    if (nomes.length === 2)
-      return `${nomes[0]} e ${nomes[1]} de ${anoSelecionado}`;
-    return `${nomes.slice(0, -1).join(", ")} e ${
-      nomes[nomes.length - 1]
-    } de ${anoSelecionado}`;
-  }, [modoFiltro, dataDe, dataAte, mesesSelecionados, anoSelecionado]);
+    return `${MESES[mesSelecionado]} de ${anoSelecionado}`;
+  }, [modoFiltro, dataDe, dataAte, mesSelecionado, anoSelecionado]);
 
   async function exportarPDF() {
     if (filtrados.length === 0) {
@@ -425,12 +386,7 @@ export default function Relatorio() {
       };
 
       const nomeIgreja = igrejaAtiva?.nome || "Tesouraria";
-      const pctDiz =
-        resumo.entradas > 0
-          ? ((resumo.dizimos / resumo.entradas) * 100).toFixed(1)
-          : "0.0";
 
-      // ===== Cabeçalho =====
       page.drawText(safe(nomeIgreja), {
         x: margin,
         y,
@@ -458,7 +414,6 @@ export default function Relatorio() {
       line(margin, pageWidth - margin, y);
       y -= 20;
 
-      // ===== Texto executivo =====
       const textoExec = safe(
         `Este relatório contempla exclusivamente os lançamentos do período referente a: ${labelPeriodo}. ` +
           `Receitas realizadas R$ ${formatoMoeda.format(
@@ -499,7 +454,6 @@ export default function Relatorio() {
       }
       y -= 22;
 
-      // ===== KPIs do período =====
       const cardW = (pageWidth - margin * 2 - 18) / 4;
       const cardH = 44;
       ensure(cardH + 16);
@@ -538,57 +492,6 @@ export default function Relatorio() {
       });
       y -= cardH + 32;
 
-      // ===== Resultado por mês =====
-      if (modoFiltro === "mes" && resumoPorMes.length > 0) {
-        ensure(24);
-        page.drawText(safe("Resultado por mês"), {
-          x: margin,
-          y,
-          size: 10,
-          font: fontBold,
-          color: C.ink,
-        });
-        y -= 10;
-        line(margin, pageWidth - margin, y);
-        y -= 18;
-
-        resumoPorMes.forEach((m) => {
-          ensure(52);
-          page.drawText(safe(`${m.nome} / ${anoSelecionado}`), {
-            x: margin,
-            y,
-            size: 10,
-            font: fontBold,
-            color: C.ink,
-          });
-          y -= 14;
-          page.drawText(
-            safe(
-              `Receitas R$ ${formatoMoeda.format(
-                m.entradas
-              )}  |  Despesas R$ ${formatoMoeda.format(
-                m.saidas
-              )}  |  Resultado R$ ${formatoMoeda.format(
-                m.saldo
-              )}  |  Dízimos R$ ${formatoMoeda.format(m.dizimos)}`
-            ),
-            {
-              x: margin,
-              y,
-              size: 8,
-              font,
-              color: C.muted,
-              maxWidth: pageWidth - margin * 2,
-            }
-          );
-          y -= 12;
-          line(margin, pageWidth - margin, y);
-          y -= 16;
-        });
-        y -= 12;
-      }
-
-      // ===== Projeção =====
       ensure(cardH + 28);
       page.drawText(safe("Posição e projeção (tesouraria)"), {
         x: margin,
@@ -635,7 +538,6 @@ export default function Relatorio() {
       const labels = seriesGraficos.map((s) => s.label);
       const chartW = pageWidth - margin * 2;
 
-      // ===== Gráfico dízimos =====
       ensure(140);
       page.drawText(safe("Evolução dos dízimos (12 meses)"), {
         x: margin,
@@ -659,7 +561,6 @@ export default function Relatorio() {
       });
       y -= chartH1 + 32;
 
-      // ===== Gráfico receitas x despesas =====
       ensure(160);
       page.drawText(safe("Receitas e despesas (12 meses)"), {
         x: margin,
@@ -713,7 +614,6 @@ export default function Relatorio() {
       });
       y -= chartH2 + 32;
 
-      // ===== Tabelas =====
       const entradas = Object.entries(resumo.porTipoEntrada).sort(
         (a, b) => b[1] - a[1]
       );
@@ -769,7 +669,6 @@ export default function Relatorio() {
       drawTabela("Receitas por tipo (período filtrado)", entradas, C.green);
       drawTabela("Despesas por tipo (período filtrado)", saidas, C.red);
 
-      // ===== Rodapé =====
       ensure(40);
       y -= 12;
       line(margin, pageWidth - margin, y);
@@ -841,12 +740,12 @@ export default function Relatorio() {
     gerando,
     filtrados,
     resumo,
-    resumoPorMes,
     projecao,
     labelPeriodo,
     seriesGraficos,
     igrejaAtiva?.nome,
     modoFiltro,
+    mesSelecionado,
     anoSelecionado,
   ]);
 
@@ -907,9 +806,6 @@ export default function Relatorio() {
 
           {modoFiltro === "mes" ? (
             <>
-              <Text style={styles.hintSelect}>
-                Toque nos meses para combinar (ex.: Set, Out e Nov)
-              </Text>
               <View style={styles.anoRow}>
                 <TouchableOpacity
                   style={styles.anoBtn}
@@ -928,7 +824,7 @@ export default function Relatorio() {
 
               <View style={styles.mesesGrid}>
                 {MESES.map((nome, index) => {
-                  const ativo = mesesSelecionados.includes(index);
+                  const ativo = mesSelecionado === index;
                   return (
                     <TouchableOpacity
                       key={nome}
@@ -936,7 +832,7 @@ export default function Relatorio() {
                         styles.mesChip,
                         ativo && { backgroundColor: colors.principal },
                       ]}
-                      onPress={() => toggleMes(index)}
+                      onPress={() => setMesSelecionado(index)}
                     >
                       <Text
                         style={[styles.mesText, ativo && { color: "#fff" }]}
@@ -1004,40 +900,6 @@ export default function Relatorio() {
           </View>
         </View>
 
-        {modoFiltro === "mes" && resumoPorMes.length > 1 && (
-          <>
-            <Text style={styles.sectionTitle}>Por mês</Text>
-            <View style={styles.listCard}>
-              {resumoPorMes.map((m, index) => (
-                <View
-                  key={m.mesIdx}
-                  style={[
-                    styles.itemRow,
-                    index === resumoPorMes.length - 1 && styles.itemRowLast,
-                  ]}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.itemLabel}>{m.nome}</Text>
-                    <Text style={styles.mesSub}>
-                      +{formatoMoeda.format(m.entradas)} · −
-                      {formatoMoeda.format(m.saidas)}
-                    </Text>
-                  </View>
-                  <Text
-                    style={[
-                      styles.itemValue,
-                      { color: m.saldo >= 0 ? "#2E7D32" : "#C62828" },
-                    ]}
-                  >
-                    {formatoMoeda.format(m.saldo)}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          </>
-        )}
-
-      
         <Text style={styles.sectionTitle}>Entradas por tipo</Text>
         <View style={styles.listCard}>
           {listaEntradas.length === 0 ? (
@@ -1101,9 +963,8 @@ export default function Relatorio() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f4f5f7" },
+  container: { flex: 1 },
   content: {
-    paddingHorizontal: 18,
     paddingTop: 12,
     paddingBottom: 100,
   },
@@ -1131,12 +992,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Roboto-Medium",
     color: "#555",
-  },
-  hintSelect: {
-    fontSize: 12,
-    fontFamily: "Roboto-Regular",
-    color: "#888",
-    marginBottom: 10,
   },
   anoRow: {
     flexDirection: "row",
@@ -1216,31 +1071,6 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Medium",
     color: "#9aa0a6",
   },
-  kpiRow: { flexDirection: "row", gap: 10, marginBottom: 10 },
-  kpiCard: {
-    flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 14,
-  },
-  kpiLabel: {
-    fontSize: 11,
-    fontFamily: "Roboto-Regular",
-    color: "#9aa0a6",
-    marginBottom: 4,
-  },
-  kpiValue: {
-    fontSize: 15,
-    fontFamily: "Roboto-Bold",
-    color: "#1f2933",
-  },
-  hintPdf: {
-    fontSize: 12,
-    fontFamily: "Roboto-Regular",
-    color: "#888",
-    marginBottom: 16,
-    marginTop: 4,
-  },
   sectionTitle: {
     fontSize: 16,
     fontFamily: "Roboto-Medium",
@@ -1275,12 +1105,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Roboto-Medium",
     color: "#1f2933",
-  },
-  mesSub: {
-    fontSize: 11,
-    fontFamily: "Roboto-Regular",
-    color: "#888",
-    marginTop: 2,
   },
   itemValue: {
     fontSize: 14,
