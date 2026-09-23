@@ -18,6 +18,8 @@ import { useAuth } from "../../context/AuthContext";
 import Load from "../../componentes/Load";
 import Saldo from "../../componentes/Saldo";
 
+import SwipeCard from "../../componentes/SwipeCard";
+
 export default function Home() {
   const {
     saldo,
@@ -285,21 +287,32 @@ export default function Home() {
           />
         }
         renderItem={({ item }) => (
-          <TouchableOpacity
-            activeOpacity={item.route ? 0.75 : 1}
-            disabled={!item.route}
-            onPress={() => item.route && navigation.navigate(item.route)}
-            style={styles.itemCard}
-          >
-            <View style={[styles.iconCircle, { backgroundColor: item.tint }]}>
-              <Ionicons name={item.icon} size={18} color={item.iconColor} />
-            </View>
-            <View style={styles.itemCenter}>
-              <Text style={styles.itemTitle}>{item.label}</Text>
-              <Text style={styles.itemSub}>{item.sub}</Text>
-            </View>
-            <Text style={styles.itemValue}>{item.value}</Text>
-          </TouchableOpacity>
+
+          <SwipeCard
+            icon={item.icon}
+            iconColor={item.iconColor}
+            tint={item.tint}
+            title={item.label}
+            subtitle={item.sub}
+            value={item.value}
+            actions={
+              item.route
+                ? [
+                  {
+                    key: "go",
+                    icon: "arrow-forward",
+                    backgroundColor: colors.principal,
+                    onPress: () => navigation.navigate(item.route),
+                  },
+                ]
+                : []
+            }
+            onPress={
+              item.route
+                ? () => navigation.navigate(item.route)
+                : undefined
+            }
+          />
         )}
         ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
         ListFooterComponent={<View style={{ height: 100 }} />}
@@ -315,7 +328,7 @@ export default function Home() {
           style={styles.menuOverlay}
           onPress={() => setMenuAberto(false)}
         >
-          <Pressable style={styles.menuCard} onPress={() => {}}>
+          <Pressable style={styles.menuCard} onPress={() => { }}>
             <View style={styles.menuUser}>
               {foto ? (
                 <Image source={{ uri: foto }} style={styles.menuAvatar} />
@@ -331,7 +344,7 @@ export default function Home() {
                 {!!igrejaAtiva?.nome && (
                   <Text style={styles.menuIgreja} numberOfLines={1}>
                     {/* {igrejaAtiva.nome} */}
-                   {igrejaAtiva.papel}
+                    {igrejaAtiva.papel}
                   </Text>
                 )}
               </View>
@@ -364,7 +377,7 @@ export default function Home() {
               onPress={handleLogout}
               activeOpacity={0.8}
             >
-              <Ionicons name="log-out-outline" size={18}/>
+              <Ionicons name="log-out-outline" size={18} />
               <Text style={styles.menuItemText}>
                 Sair
               </Text>
@@ -383,7 +396,7 @@ export default function Home() {
           style={styles.menuOverlay}
           onPress={() => setModalIgrejas(false)}
         >
-          <Pressable style={[styles.menuCard, { width: 280 }]} onPress={() => {}}>
+          <Pressable style={[styles.menuCard, { width: 280 }]} onPress={() => { }}>
             <Text style={styles.modalIgrejaTitulo}>Suas igrejas</Text>
             {(igrejasDoUsuario || []).map((ig) => {
               const ativa = ig.igrejaId === igrejaAtiva?.id;

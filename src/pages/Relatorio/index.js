@@ -1037,68 +1037,7 @@ export default function Relatorio() {
           </>
         )}
 
-        <View style={styles.kpiRow}>
-          <View style={styles.kpiCard}>
-            <Text style={styles.kpiLabel}>Receitas</Text>
-            <Text style={[styles.kpiValue, { color: "#2E7D32" }]}>
-              {formatoMoeda.format(resumo.entradas)}
-            </Text>
-          </View>
-          <View style={styles.kpiCard}>
-            <Text style={styles.kpiLabel}>Despesas</Text>
-            <Text style={[styles.kpiValue, { color: "#C62828" }]}>
-              {formatoMoeda.format(resumo.saidas)}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.kpiRow}>
-          <View style={styles.kpiCard}>
-            <Text style={styles.kpiLabel}>Resultado</Text>
-            <Text style={styles.kpiValue}>
-              {formatoMoeda.format(resumo.saldo)}
-            </Text>
-          </View>
-          <View style={styles.kpiCard}>
-            <Text style={styles.kpiLabel}>Dízimos</Text>
-            <Text style={[styles.kpiValue, { color: "#2E7D32" }]}>
-              {formatoMoeda.format(resumo.dizimos)}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.kpiRow}>
-          <View style={styles.kpiCard}>
-            <Text style={styles.kpiLabel}>Saldo atual</Text>
-            <Text style={styles.kpiValue}>
-              {formatoMoeda.format(projecao.saldoAtual)}
-            </Text>
-          </View>
-          <View style={styles.kpiCard}>
-            <Text style={styles.kpiLabel}>Projetado</Text>
-            <Text style={styles.kpiValue}>
-              {formatoMoeda.format(projecao.saldoProjetado)}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.kpiRow}>
-          <View style={styles.kpiCard}>
-            <Text style={styles.kpiLabel}>A receber</Text>
-            <Text style={[styles.kpiValue, { color: "#2E7D32" }]}>
-              {formatoMoeda.format(projecao.aReceber)}
-            </Text>
-          </View>
-          <View style={styles.kpiCard}>
-            <Text style={styles.kpiLabel}>A pagar</Text>
-            <Text style={[styles.kpiValue, { color: "#C62828" }]}>
-              {formatoMoeda.format(projecao.aPagar)}
-            </Text>
-          </View>
-        </View>
-
-        <Text style={styles.hintPdf}>
-          Totais e tabelas = só o período/meses escolhidos. Projetado e gráficos
-          de 12 meses = visão geral da tesouraria.
-        </Text>
-
+      
         <Text style={styles.sectionTitle}>Entradas por tipo</Text>
         <View style={styles.listCard}>
           {listaEntradas.length === 0 ? (

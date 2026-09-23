@@ -20,6 +20,7 @@ import RNFS from "react-native-fs";
 import { AppContext } from "../../context/AppContext";
 import { useAuth } from "../../context/AuthContext";
 import Load from "../../componentes/Load";
+import SwipeCard from "../../componentes/SwipeCard";
 import { podeEditarRegistro } from "../../utils/registroEdit";
 
 const LIMITES = [30, 60, 90, 150];
@@ -153,6 +154,7 @@ export default function Historico() {
   const [refreshing, setRefreshing] = useState(false);
   const [fotoSelecionada, setFotoSelecionada] = useState(null);
   const [limite, setLimite] = useState(30);
+  const [abertoId, setAbertoId] = useState(null);
 
   useEffect(() => {
     if (!authPronto) return;
@@ -230,17 +232,16 @@ export default function Historico() {
 
   const podeEditarPapel = podeEditarFinanceiro?.() !== false;
 
-  if ((!authPronto || load) && !refreshing) return <Load />
+  if ((!authPronto || load) && !refreshing) return <Load />;
 
   return (
     <View style={styles.container}>
-
       <FlatList
         data={linhasLimitadas}
         keyExtractor={(item) => item.rowId}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+        ItemSeparatorComponent={() => <View style={{ height: 4 }} />}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIcon}>
@@ -286,9 +287,7 @@ export default function Historico() {
                 );
               })}
             </ScrollView>
-
           </View>
-
         }
         refreshControl={
           <RefreshControl
@@ -300,7 +299,7 @@ export default function Historico() {
         renderItem={({ item }) => {
           const isPagamento = item.kind === "pagamento";
           const isRecebimento = item.kind === "recebimento";
-          const isParcelaLinha = isPagamento || isRecebimento;
+          const isParcela = isPagamento || isRecebimento;
           const isEntrada = item.tipoMovimento === "entrada";
 
           const textoParcela =
@@ -309,8 +308,6 @@ export default function Historico() {
                 ? `Parcela ${item.parcelaNumero}/${item.parcelaTotal}`
                 : `Parcela ${item.parcelaNumero}`
               : null;
-
-          const isParcela = isPagamento || isRecebimento;
 
           const valor =
             item.valorRecebidoTotal ||
@@ -323,7 +320,7 @@ export default function Historico() {
             item.valorTotal &&
             (item.valorRecebidoTotal || item.valorPagoTotal) &&
             item.valorTotal !==
-            (item.valorRecebidoTotal || item.valorPagoTotal);
+              (item.valorRecebidoTotal || item.valorPagoTotal);
 
           const temRecibo = !!item.reciboUrl && !isParcela;
           const origem = textoOrigem(item);
@@ -331,88 +328,65 @@ export default function Historico() {
           const editavel =
             podeEditarPapel && !isParcela && podeEditarRegistro(item);
 
+          const dataStr = item.data
+            ? new Date(item.data).toLocaleDateString("pt-BR")
+            : "-";
 
-          const badgeColor = isEntrada ? "#2E7D32" : "#C62828";
+          const partesSub = [
+            dataStr,
+            item.tipo,
+            textoParcela,
+            origem ? `Pago: ${origem}` : null,
+            temParcial
+              ? `Total ${formatoMoeda.format(item.valorTotal)} · Pago ${formatoMoeda.format(
+                  item.valorRecebidoTotal || item.valorPagoTotal || 0
+                )}`
+              : null,
+          ].filter(Boolean);
+
+          const actions = [];
+
+          if (temRecibo) {
+            actions.push({
+              key: "recibo",
+              icon: "image-outline",
+              label: "Recibo",
+              backgroundColor: "#6b7280",
+              onPress: () => abrirRecibo(item.reciboUrl),
+            });
+          }
+
+          if (editavel) {
+            actions.push({
+              key: "edit",
+              icon: "create-outline",
+              label: "Editar",
+              backgroundColor: "#1976D2",
+              onPress: () =>
+                navigation.navigate("EditarRegistro", { id: item.id }),
+            });
+          }
 
           return (
-            <TouchableOpacity
-              style={styles.card}
-              activeOpacity={editavel ? 0.75 : 1}
-              disabled={!editavel}
-              onPress={() => {
-                if (editavel) {
-                  navigation.navigate("EditarRegistro", { id: item.id });
-                }
-              }}
-            >
-              <View style={styles.topRow}>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 7,
-                  }}
-                >
-
-                  <Text style={styles.meta}>
-                    {item.data
-                      ? new Date(item.data).toLocaleDateString("pt-BR")
-                      : "-"}
-                  </Text>
-                </View>
-
-                <Text style={[styles.valor, { color: badgeColor }]}>
-                  {isEntrada ? "+" : "-"} {formatoMoeda.format(valor)}
-                </Text>
-              </View>
-
-              <Text style={styles.descricao} numberOfLines={2}>
-                {item.descricao || "Sem descrição"}
-              </Text>
-
-              <View style={styles.metaRow}>
-                {isParcelaLinha && (
-                  <Text style={styles.meta}>
-                    {textoParcela || item.tipo || "Pagamento"}
-                  </Text>
-                )}
-              </View>
-
-              {!!origem && (
-                <Text style={styles.extra}>Pago com: {origem}</Text>
-              )}
-
-              {temParcial && (
-                <Text style={styles.extra}>
-                  Total {formatoMoeda.format(item.valorTotal)} · Pago{" "}
-                  {formatoMoeda.format(
-                    item.valorRecebidoTotal || item.valorPagoTotal || 0
-                  )}
-                </Text>
-              )}
-
-              {(temRecibo || editavel) && (
-                <View style={styles.actions}>
-                  {temRecibo && (
-                    <TouchableOpacity
-                      style={styles.actionBtn}
-                      onPress={() => abrirRecibo(item.reciboUrl)}
-                      activeOpacity={0.75}
-                    >
-                      <Ionicons name="image-outline" size={15} color="#777" />
-                      <Text style={styles.actionText}>Recibo</Text>
-                    </TouchableOpacity>
-                  )}
-
-                  {editavel && (
-                    <View style={styles.actionBtn}>
-                      <Ionicons name="create-outline" size={15} />
-                      <Text style={styles.actionText}>Editar</Text>
-                    </View>
-                  )}
-                </View>
-              )}
-            </TouchableOpacity>
+            <SwipeCard
+              icon={isEntrada ? "arrow-down-outline" : "arrow-up-outline"}
+              iconColor={isEntrada ? "#2E7D32" : "#C62828"}
+              tint={isEntrada ? "#E8F5E9" : "#FFEBEE"}
+              title={item.descricao || "Sem descrição"}
+              subtitle={partesSub.join(" · ")}
+              value={`${isEntrada ? "+" : "-"} ${formatoMoeda.format(valor)}`}
+              actions={actions}
+              open={abertoId === item.rowId}
+              onOpenChange={(isOpen) =>
+                setAbertoId(isOpen ? item.rowId : null)
+              }
+              onPress={
+                editavel
+                  ? () =>
+                      navigation.navigate("EditarRegistro", { id: item.id })
+                  : undefined
+              }
+            />
           );
         }}
       />
@@ -478,76 +452,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Roboto-Medium",
   },
-  filtroInfo: {
-    marginTop: 8,
-    fontSize: 11,
-    fontFamily: "Roboto-Regular",
-  },
   listContent: {
     paddingHorizontal: 16,
     paddingTop: 4,
     paddingBottom: 100,
-  },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 14,
-  },
-  topRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 7,
-  },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontFamily: "Roboto-Medium",
-  },
-  valor: {
-    fontSize: 14,
-    fontFamily: "Roboto-Medium",
-  },
-  descricao: {
-    fontSize: 15,
-    fontFamily: "Roboto-Regular",
-    marginBottom: 2,
-  },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-  },
-  meta: {
-    fontSize: 13,
-    fontFamily: "Roboto-Light",
-    color: '#000'
-  },
-  extra: {
-    marginTop: 6,
-    fontSize: 13,
-    fontFamily: "Roboto-Light",
-  },
-  actions: {
-    marginTop: 12,
-    paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#eee",
-    flexDirection: "row",
-    gap: 16,
-  },
-  actionBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  actionText: {
-    fontSize: 12,
-    fontFamily: "Roboto-Light",
   },
   emptyContainer: {
     marginTop: 80,
