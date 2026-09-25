@@ -15,12 +15,12 @@ import {
 } from "react-native";
 import { useTheme } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
-import { AppContext } from "../../context/AppContext";
-import { db } from "../../firebaseConnection";
+import { AppContext } from "../context/AppContext";
+import { db } from "../firebaseConnection";
 import { doc, updateDoc } from "firebase/firestore";
-import Load from "../../componentes/Load";
-import SwipeCard from "../../componentes/SwipeCard";
-import { useAuth } from "../../context/AuthContext";
+import Load from "../componentes/Load";
+import SwipeCard from "../componentes/SwipeCard";
+import { useAuth } from "../context/AuthContext";
 
 function parseNumero(txt) {
   if (txt === null || txt === undefined) return 0;
@@ -499,7 +499,7 @@ export default function APagar() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, },
+  container: { flex: 1, paddingHorizontal:14 },
   content: { paddingTop: 12, paddingBottom: 20, gap:8 },
   emptyBox: {
     marginTop: 40,

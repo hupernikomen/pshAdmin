@@ -16,20 +16,12 @@ import { useTheme, useNavigation } from "@react-navigation/native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { launchCamera } from "react-native-image-picker";
 import RNFS from "react-native-fs";
-import { AppContext } from "../../context/AppContext";
-import { db } from "../../firebaseConnection";
-import {
-  collection,
-  addDoc,
-  doc,
-  updateDoc,
-  getDocs,
-  query,
-  where,
-} from "firebase/firestore";
-import Load from "../../componentes/Load";
+import { AppContext } from "../context/AppContext";
+import { db } from "../firebaseConnection";
+import { collection, addDoc } from "firebase/firestore";
+import Load from "../componentes/Load";
 import Ionicons from "react-native-vector-icons/Ionicons";
-import { useAuth } from "../../context/AuthContext";
+import { useAuth } from "../context/AuthContext";
 
 function parseNumero(txt) {
   if (txt === null || txt === undefined) return 0;
@@ -145,7 +137,6 @@ export default function Registro() {
   const { uid } = useAuth();
 
   const [tipoMovimento, setTipoMovimento] = useState(null);
-  const [modo, setModo] = useState("nova");
   const [tipo, setTipo] = useState(null);
   const [data, setData] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -155,32 +146,13 @@ export default function Registro() {
   const [observacao, setObservacao] = useState("");
   const [qtdParcelas, setQtdParcelas] = useState("1");
   const [reciboUri, setReciboUri] = useState(null);
-  const [abertos, setAbertos] = useState([]);
-  const [selecionado, setSelecionado] = useState(null);
-  const [parcelaSel, setParcelaSel] = useState(null);
   const [origemPagamento, setOrigemPagamento] = useState("geral");
   const [caixinhaId, setCaixinhaId] = useState(null);
-  const [temSaldoInicial, setTemSaldoInicial] = useState(false);
 
-  const tiposEntrada = ["Saldo inicial", "Dízimo", "Oferta", "Bazar"];
+  const tiposEntrada = ["Dízimo", "Oferta", "Bazar"];
   const tiposSaida = ["Conta Fixa", "Parcelada"];
-  const isSaldoInicial = tipo === "Saldo inicial";
 
   const igrejaId = getIgrejaId?.() || igrejaAtiva?.id || null;
-
-  useEffect(() => {
-    verificarSaldoInicial();
-  }, [uid, igrejaId]);
-
-  useEffect(() => {
-    if (modo === "adicionar" && tipoMovimento && uid && igrejaId) {
-      carregarAbertos();
-    } else {
-      setAbertos([]);
-      setSelecionado(null);
-      setParcelaSel(null);
-    }
-  }, [modo, tipoMovimento, uid, igrejaId]);
 
   useEffect(() => {
     if (tipoMovimento !== "saida") {
@@ -188,40 +160,6 @@ export default function Registro() {
       setCaixinhaId(null);
     }
   }, [tipoMovimento]);
-
-  async function verificarSaldoInicial() {
-    if (!uid || !igrejaId) {
-      setTemSaldoInicial(false);
-      return;
-    }
-    try {
-      const q = query(
-        collection(db, "registros"),
-        where("igrejaId", "==", igrejaId),
-        where("tipo", "==", "Saldo inicial")
-      );
-      const snap = await getDocs(q);
-      setTemSaldoInicial(!snap.empty);
-    } catch (e) {
-      console.log("Erro verificarSaldoInicial:", e);
-    }
-  }
-
-  async function carregarAbertos() {
-    if (!uid || !igrejaId) return;
-    try {
-      const q = query(
-        collection(db, "registros"),
-        where("igrejaId", "==", igrejaId),
-        where("tipoMovimento", "==", tipoMovimento),
-        where("status", "==", "aberta")
-      );
-      const snap = await getDocs(q);
-      setAbertos(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    } catch (e) {
-      console.log("Erro ao carregar abertos:", e);
-    }
-  }
 
   async function salvarImagemLocal(uri) {
     const nomeArquivo = `recibo_${Date.now()}.jpg`;
@@ -321,156 +259,14 @@ export default function Registro() {
       Alert.alert("Atenção", "Selecione Entrada ou Saída.");
       return;
     }
-    if (modo === "nova" && (!tipo || !descricao || !valorTotal)) {
+    if (!tipo || !descricao || !valorTotal) {
       Alert.alert("Atenção", "Preencha os campos obrigatórios.");
-      return;
-    }
-    if (modo === "adicionar" && !selecionado) {
-      Alert.alert("Atenção", "Selecione um registro.");
-      return;
-    }
-    if (isSaldoInicial && temSaldoInicial) {
-      Alert.alert(
-        "Atenção",
-        "O saldo inicial já foi registrado e não pode ser lançado de novo."
-      );
       return;
     }
 
     const caixinhaSel = (caixinhas || []).find((c) => c.id === caixinhaId);
-
-    // --- ADICIONAR PAGAMENTO ---
-    if (modo === "adicionar") {
-      const temParcelas =
-        Array.isArray(selecionado.parcelas) && selecionado.parcelas.length > 0;
-
-      if (temParcelas) {
-        if (!parcelaSel) {
-          Alert.alert("Atenção", "Selecione a parcela a pagar.");
-          return;
-        }
-        const valor = arred(parcelaSel.valor);
-        if (!validarOrigemSaida(valor)) return;
-
-        setLoad(true);
-        try {
-          const parcelas = (selecionado.parcelas || []).map((p) => {
-            if (p.numero !== parcelaSel.numero) return p;
-            return {
-              ...p,
-              status: "paga",
-              pagoEm: data.getTime(),
-              origemPagamento,
-              caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
-              caixinhaNome:
-                origemPagamento === "caixinha"
-                  ? caixinhaSel?.nome || null
-                  : null,
-            };
-          });
-
-          const listaAtual = selecionado.valoresPagos || [];
-          const novoPagamento = {
-            valor,
-            data: data.getTime(),
-            id: Date.now().toString(),
-            parcelaNumero: parcelaSel.numero,
-            origemPagamento,
-            caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
-            caixinhaNome:
-              origemPagamento === "caixinha"
-                ? caixinhaSel?.nome || null
-                : null,
-          };
-
-          const novoTotal = arred((selecionado.valorPagoTotal || 0) + valor);
-          const todasPagas = parcelas.every((p) => p.status === "paga");
-
-          await updateDoc(doc(db, "registros", selecionado.id), {
-            parcelas,
-            valoresPagos: [...listaAtual, novoPagamento],
-            valorPagoTotal: novoTotal,
-            status: todasPagas ? "quitada" : "aberta",
-          });
-
-          await debitarOrigemSeSaida(valor);
-          await Promise.all([
-            HistoricoMovimentos(),
-            ResumoFinanceiro(),
-            CarregarCaixinhas?.(),
-          ]);
-          setAviso({ titulo: "Sucesso", mensagem: "Parcela paga!" });
-          navigation.goBack();
-        } catch (e) {
-          Alert.alert("Erro", e.message || "Não foi possível salvar");
-        } finally {
-          setLoad(false);
-        }
-        return;
-      }
-
-      if (!valorParcial) {
-        Alert.alert("Atenção", "Informe o valor.");
-        return;
-      }
-      const valor = parseNumero(valorParcial);
-      if (!validarOrigemSaida(valor)) return;
-
-      setLoad(true);
-      try {
-        const campoArray =
-          tipoMovimento === "entrada" ? "valoresRecebidos" : "valoresPagos";
-        const campoTotal =
-          tipoMovimento === "entrada"
-            ? "valorRecebidoTotal"
-            : "valorPagoTotal";
-        const listaAtual = selecionado[campoArray] || [];
-        const novoTotal = arred((selecionado[campoTotal] || 0) + valor);
-
-        await updateDoc(doc(db, "registros", selecionado.id), {
-          [campoArray]: [
-            ...listaAtual,
-            {
-              valor,
-              data: data.getTime(),
-              id: Date.now().toString(),
-              origemPagamento:
-                tipoMovimento === "saida" ? origemPagamento : null,
-              caixinhaId:
-                tipoMovimento === "saida" && origemPagamento === "caixinha"
-                  ? caixinhaId
-                  : null,
-              caixinhaNome:
-                tipoMovimento === "saida" && origemPagamento === "caixinha"
-                  ? caixinhaSel?.nome || null
-                  : null,
-            },
-          ],
-          [campoTotal]: novoTotal,
-          status: novoTotal >= selecionado.valorTotal ? "quitada" : "aberta",
-        });
-
-        await debitarOrigemSeSaida(valor);
-        await Promise.all([
-          HistoricoMovimentos(),
-          ResumoFinanceiro(),
-          CarregarCaixinhas?.(),
-        ]);
-        setAviso({ titulo: "Sucesso", mensagem: "Registro salvo!" });
-        navigation.goBack();
-      } catch (e) {
-        Alert.alert("Erro", e.message || "Não foi possível salvar");
-      } finally {
-        setLoad(false);
-      }
-      return;
-    }
-
-    // --- NOVA ---
     const valor = parseNumero(valorTotal);
-    const parcial = isSaldoInicial
-      ? valor
-      : valorParcial
+    const parcial = valorParcial
       ? parseNumero(valorParcial)
       : tipo === "Parcelada"
       ? 0
@@ -496,7 +292,7 @@ export default function Registro() {
           caixinhaNome: caixinhaSel?.nome || null,
         });
 
-        const base = {
+        await addDoc(collection(db, "registros"), {
           igrejaId,
           idUsuario: uid,
           tipoMovimento: "saida",
@@ -513,15 +309,12 @@ export default function Registro() {
           origemPagamento,
           caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
           caixinhaNome:
-            origemPagamento === "caixinha"
-              ? caixinhaSel?.nome || null
-              : null,
+            origemPagamento === "caixinha" ? caixinhaSel?.nome || null : null,
           reciboUrl: reciboUri ? await salvarImagemLocal(reciboUri) : null,
           reg: Date.now(),
           createdAt: Date.now(),
-        };
+        });
 
-        await addDoc(collection(db, "registros"), base);
         await debitarOrigemSeSaida(montado.valorPagoTotal);
         await Promise.all([
           HistoricoMovimentos(),
@@ -553,7 +346,7 @@ export default function Registro() {
         descricao: descricao.trim(),
         valorTotal: valor,
         observacao: observacao.trim(),
-        status: isSaldoInicial || parcial >= valor ? "quitada" : "aberta",
+        status: parcial >= valor ? "quitada" : "aberta",
         reg: Date.now(),
         createdAt: Date.now(),
       };
@@ -613,10 +406,6 @@ export default function Registro() {
     (c) => (Number(c.valor) || 0) > 0
   );
 
-  const parcelasAbertasSel = (selecionado?.parcelas || []).filter(
-    (p) => p.status === "aberta"
-  );
-
   const qtdNum = parseInt(qtdParcelas, 10) || 0;
   const totalNum = parseNumero(valorTotal);
   const previewParcela =
@@ -650,9 +439,6 @@ export default function Registro() {
                 onPress={() => {
                   setTipoMovimento(item);
                   setTipo(null);
-                  setModo("nova");
-                  setSelecionado(null);
-                  setParcelaSel(null);
                 }}
               >
                 <Text
@@ -667,65 +453,21 @@ export default function Registro() {
 
         {tipoMovimento && (
           <>
-            <View style={styles.segment}>
-              {[
-                { id: "nova", label: "Nova" },
-                { id: "adicionar", label: "Adicionar Pagamento" },
-              ].map((opt) => {
-                const ativo = modo === opt.id;
-                return (
-                  <TouchableOpacity
-                    key={opt.id}
-                    style={[
-                      styles.segmentBtn,
-                      ativo && { backgroundColor: colors.principal },
-                    ]}
-                    onPress={() => {
-                      setModo(opt.id);
-                      if (opt.id === "nova") {
-                        setSelecionado(null);
-                        setParcelaSel(null);
-                      }
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.segmentText,
-                        ativo && { color: "#fff" },
-                      ]}
-                    >
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {modo === "nova" && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Tipo</Text>
-                <View style={styles.chips}>
-                  {(tipoMovimento === "entrada"
-                    ? tiposEntrada
-                    : tiposSaida
-                  ).map((t) => {
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Tipo</Text>
+              <View style={styles.chips}>
+                {(tipoMovimento === "entrada" ? tiposEntrada : tiposSaida).map(
+                  (t) => {
                     const ativo = tipo === t;
-                    const bloqueado =
-                      t === "Saldo inicial" && temSaldoInicial;
                     return (
                       <TouchableOpacity
                         key={t}
-                        disabled={bloqueado}
                         style={[
                           styles.chip,
                           ativo && { backgroundColor: colors.principal },
-                          bloqueado && styles.chipDisabled,
                         ]}
                         onPress={() => {
                           setTipo(t);
-                          if (t === "Saldo inicial" && !descricao) {
-                            setDescricao("Saldo inicial");
-                          }
                           if (t === "Parcelada" && !qtdParcelas) {
                             setQtdParcelas("2");
                           }
@@ -735,126 +477,16 @@ export default function Registro() {
                           style={[
                             styles.chipText,
                             ativo && { color: "#fff" },
-                            bloqueado && styles.chipTextDisabled,
                           ]}
                         >
                           {t}
                         </Text>
                       </TouchableOpacity>
                     );
-                  })}
-                </View>
-              </View>
-            )}
-
-            {modo === "adicionar" && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Selecione o registro</Text>
-                {abertos.length === 0 ? (
-                  <Text style={styles.empty}>Nenhum registro em aberto</Text>
-                ) : (
-                  abertos.map((item) => {
-                    const ativo = selecionado?.id === item.id;
-                    return (
-                      <TouchableOpacity
-                        key={item.id}
-                        style={[
-                          styles.selectCard,
-                          ativo && {
-                            borderColor: colors.principal,
-                            backgroundColor: "#fff",
-                          },
-                        ]}
-                        onPress={() => {
-                          setSelecionado(item);
-                          setParcelaSel(null);
-                          setValorParcial("");
-                        }}
-                      >
-                        <View style={styles.selectIcon}>
-                          <Ionicons
-                            name={
-                              tipoMovimento === "entrada"
-                                ? "arrow-down-outline"
-                                : "arrow-up-outline"
-                            }
-                            size={16}
-                            color={ativo ? colors.principal : "#9aa0a6"}
-                          />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.selectTitle}>
-                            {item.tipo} · {item.descricao}
-                          </Text>
-                          <Text style={styles.selectSub}>
-                            R${" "}
-                            {(
-                              item.valorRecebidoTotal ||
-                              item.valorPagoTotal ||
-                              0
-                            ).toFixed(2)}{" "}
-                            de R$ {item.valorTotal?.toFixed(2)}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })
+                  }
                 )}
-
-                {selecionado &&
-                  Array.isArray(selecionado.parcelas) &&
-                  parcelasAbertasSel.length > 0 && (
-                    <View style={{ marginTop: 12 }}>
-                      <Text style={styles.sectionTitle}>Parcela a pagar</Text>
-                      {parcelasAbertasSel.map((p) => {
-                        const ativo = parcelaSel?.numero === p.numero;
-                        return (
-                          <TouchableOpacity
-                            key={p.numero}
-                            style={[
-                              styles.selectCard,
-                              ativo && {
-                                borderColor: colors.principal,
-                                backgroundColor: "#fff",
-                              },
-                            ]}
-                            onPress={() => {
-                              setParcelaSel(p);
-                              setValorParcial(
-                                String(p.valor).replace(".", ",")
-                              );
-                            }}
-                          >
-                            <View style={styles.selectIcon}>
-                              <Ionicons
-                                name="calendar-outline"
-                                size={16}
-                                color={
-                                  ativo ? colors.principal : "#9aa0a6"
-                                }
-                              />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.selectTitle}>
-                                Parcela {p.numero}/
-                                {selecionado.quantidadeParcelas ||
-                                  selecionado.parcelas.length}
-                              </Text>
-                              <Text style={styles.selectSub}>
-                                Venc.{" "}
-                                {new Date(p.vencimento).toLocaleDateString(
-                                  "pt-BR"
-                                )}{" "}
-                                · R$ {formatoMoeda.format(p.valor)}
-                              </Text>
-                            </View>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  )}
               </View>
-            )}
+            </View>
 
             {tipoMovimento === "saida" && (
               <View style={styles.section}>
@@ -892,13 +524,10 @@ export default function Registro() {
 
                 {origemPagamento === "geral" ? (
                   <Text style={styles.hint}>
-                    Disponível: R${" "}
-                    {formatoMoeda.format(saldoDisponivel || 0)}
+                    Disponível: R$ {formatoMoeda.format(saldoDisponivel || 0)}
                   </Text>
                 ) : caixinhasComSaldo.length === 0 ? (
-                  <Text style={styles.empty}>
-                    Nenhuma caixinha com saldo
-                  </Text>
+                  <Text style={styles.empty}>Nenhuma caixinha com saldo</Text>
                 ) : (
                   caixinhasComSaldo.map((cx) => {
                     const ativo = caixinhaId === cx.id;
@@ -959,36 +588,30 @@ export default function Registro() {
                 />
               )}
 
-              {modo === "nova" && (
-                <>
-                  <View style={styles.field}>
-                    <Text style={styles.fieldLabel}>Descrição</Text>
-                    <TextInput
-                      style={styles.fieldInput}
-                      value={descricao}
-                      onChangeText={setDescricao}
-                      placeholder="Descreva o registro"
-                      placeholderTextColor="#b0b5ba"
-                    />
-                  </View>
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Descrição</Text>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={descricao}
+                  onChangeText={setDescricao}
+                  placeholder="Descreva o registro"
+                  placeholderTextColor="#b0b5ba"
+                />
+              </View>
 
-                  <View style={styles.field}>
-                    <Text style={styles.fieldLabel}>
-                      {isSaldoInicial ? "Saldo inicial" : "Valor total"}
-                    </Text>
-                    <TextInput
-                      style={styles.fieldInput}
-                      value={valorTotal}
-                      onChangeText={setValorTotal}
-                      keyboardType="decimal-pad"
-                      placeholder="0,00"
-                      placeholderTextColor="#b0b5ba"
-                    />
-                  </View>
-                </>
-              )}
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Valor total</Text>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={valorTotal}
+                  onChangeText={setValorTotal}
+                  keyboardType="decimal-pad"
+                  placeholder="0,00"
+                  placeholderTextColor="#b0b5ba"
+                />
+              </View>
 
-              {modo === "nova" && tipo === "Parcelada" && (
+              {tipo === "Parcelada" && (
                 <>
                   <View style={styles.field}>
                     <Text style={styles.fieldLabel}>
@@ -1011,45 +634,23 @@ export default function Registro() {
                 </>
               )}
 
-              {modo === "nova" && !isSaldoInicial && (
-                <View style={styles.field}>
-                  <Text style={styles.fieldLabel}>
-                    {tipo === "Parcelada"
-                      ? "Valor pago agora (parcelas iniciais)"
-                      : "Valor agora"}
-                  </Text>
-                  <TextInput
-                    style={styles.fieldInput}
-                    value={valorParcial}
-                    onChangeText={setValorParcial}
-                    keyboardType="decimal-pad"
-                    placeholder="0,00"
-                    placeholderTextColor="#b0b5ba"
-                  />
-                </View>
-              )}
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>
+                  {tipo === "Parcelada"
+                    ? "Valor pago agora (parcelas iniciais)"
+                    : "Valor agora"}
+                </Text>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={valorParcial}
+                  onChangeText={setValorParcial}
+                  keyboardType="decimal-pad"
+                  placeholder="0,00"
+                  placeholderTextColor="#b0b5ba"
+                />
+              </View>
 
-              {modo === "adicionar" &&
-                !(
-                  Array.isArray(selecionado?.parcelas) &&
-                  selecionado.parcelas.length > 0
-                ) && (
-                  <View style={styles.field}>
-                    <Text style={styles.fieldLabel}>
-                      Valor deste pagamento
-                    </Text>
-                    <TextInput
-                      style={styles.fieldInput}
-                      value={valorParcial}
-                      onChangeText={setValorParcial}
-                      keyboardType="decimal-pad"
-                      placeholder="0,00"
-                      placeholderTextColor="#b0b5ba"
-                    />
-                  </View>
-                )}
-
-              {tipoMovimento === "saida" && modo === "nova" && (
+              {tipoMovimento === "saida" && (
                 <View style={styles.reciboRow}>
                   <TouchableOpacity
                     style={styles.reciboBtn}
@@ -1085,10 +686,7 @@ export default function Registro() {
             </View>
 
             <TouchableOpacity
-              style={[
-                styles.saveBtn,
-                { backgroundColor: colors.principal },
-              ]}
+              style={[styles.saveBtn, { backgroundColor: colors.principal }]}
               onPress={salvar}
               activeOpacity={0.85}
             >
@@ -1102,7 +700,7 @@ export default function Registro() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, paddingHorizontal:14 },
   content: {
     paddingTop: 12,
     paddingBottom: 120,
@@ -1140,13 +738,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: "#fff",
   },
-  chipDisabled: { backgroundColor: "#ececec", opacity: 0.7 },
   chipText: {
     fontSize: 13,
     fontFamily: "Roboto-Regular",
     color: "#333",
   },
-  chipTextDisabled: { color: "#9aa0a6" },
   selectCard: {
     flexDirection: "row",
     alignItems: "center",

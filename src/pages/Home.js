@@ -13,12 +13,11 @@ import {
 } from "react-native";
 import { useNavigation, useTheme } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
-import { AppContext } from "../../context/AppContext";
-import { useAuth } from "../../context/AuthContext";
-import Load from "../../componentes/Load";
-import Saldo from "../../componentes/Saldo";
-
-import SwipeCard from "../../componentes/SwipeCard";
+import { AppContext } from "../context/AppContext";
+import { useAuth } from "../context/AuthContext";
+import Load from "../componentes/Load";
+import Saldo from "../componentes/Saldo";
+import SwipeCard from "../componentes/SwipeCard";
 
 export default function Home() {
   const {
@@ -100,6 +99,11 @@ export default function Home() {
     navigation.navigate("Membros");
   }
 
+  function abrirConfiguracoes() {
+    setMenuAberto(false);
+    navigation.navigate("Configuracoes");
+  }
+
   function abrirTrocarIgreja() {
     setMenuAberto(false);
     setModalIgrejas(true);
@@ -167,17 +171,18 @@ export default function Home() {
     0
   );
 
-  const saldoInicialReg = lista.find(
-    (i) => i.tipo === "Saldo inicial" && i.data
-  );
+  // Média de dízimos desde a criação da igreja
+  const criadoEm = igrejaAtiva?.createdAt
+    ? new Date(igrejaAtiva.createdAt)
+    : null;
 
   let mediaDizimosAnual = 0;
-  if (saldoInicialReg) {
-    const dSi = new Date(saldoInicialReg.data);
-    const siAno = dSi.getFullYear();
-    const siMes = dSi.getMonth();
+  if (criadoEm && !isNaN(criadoEm.getTime())) {
+    const siAno = criadoEm.getFullYear();
+    const siMes = criadoEm.getMonth();
     let meses = (anoAtual - siAno) * 12 + (mesAtual - siMes) + 1;
     if (meses < 1) meses = 1;
+
     const totalDizimosPeriodo = lista
       .filter((i) => {
         if (i.tipoMovimento !== "entrada" || i.tipo !== "Dízimo" || !i.data) {
@@ -192,6 +197,7 @@ export default function Home() {
         (acc, i) => acc + (i.valorRecebidoTotal || i.valorTotal || 0),
         0
       );
+
     mediaDizimosAnual = totalDizimosPeriodo / meses;
   } else {
     const totalDizimosAno = lista
@@ -244,7 +250,7 @@ export default function Home() {
       {
         id: "4",
         label: "Média de dízimos",
-        sub: "Desde o saldo inicial",
+        sub: "Desde a criação da igreja",
         value: `R$ ${formatoMoeda.format(mediaDizimosAnual)}`,
         icon: "stats-chart-outline",
         tint: "#FFF3E0",
@@ -287,7 +293,6 @@ export default function Home() {
           />
         }
         renderItem={({ item }) => (
-
           <SwipeCard
             icon={item.icon}
             iconColor={item.iconColor}
@@ -298,19 +303,17 @@ export default function Home() {
             actions={
               item.route
                 ? [
-                  {
-                    key: "go",
-                    icon: "arrow-forward",
-                    backgroundColor: colors.principal,
-                    onPress: () => navigation.navigate(item.route),
-                  },
-                ]
+                    {
+                      key: "go",
+                      icon: "arrow-forward",
+                      backgroundColor: colors.principal,
+                      onPress: () => navigation.navigate(item.route),
+                    },
+                  ]
                 : []
             }
             onPress={
-              item.route
-                ? () => navigation.navigate(item.route)
-                : undefined
+              item.route ? () => navigation.navigate(item.route) : undefined
             }
           />
         )}
@@ -327,7 +330,7 @@ export default function Home() {
           style={styles.menuOverlay}
           onPress={() => setMenuAberto(false)}
         >
-          <Pressable style={styles.menuCard} onPress={() => { }}>
+          <Pressable style={styles.menuCard} onPress={() => {}}>
             <View style={styles.menuUser}>
               {foto ? (
                 <Image source={{ uri: foto }} style={styles.menuAvatar} />
@@ -340,14 +343,22 @@ export default function Home() {
                 <Text style={styles.menuNome} numberOfLines={1}>
                   {nome}
                 </Text>
-                {!!igrejaAtiva?.nome && (
+                {!!igrejaAtiva?.papel && (
                   <Text style={styles.menuIgreja} numberOfLines={1}>
-                    {/* {igrejaAtiva.nome} */}
                     {igrejaAtiva.papel}
                   </Text>
                 )}
               </View>
             </View>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={abrirConfiguracoes}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="settings-outline" size={18} color="#333" />
+              <Text style={styles.menuItemText}>Configurações</Text>
+            </TouchableOpacity>
 
             {isAdmin && (
               <TouchableOpacity
@@ -366,7 +377,11 @@ export default function Home() {
                 onPress={abrirTrocarIgreja}
                 activeOpacity={0.8}
               >
-                <Ionicons name="swap-horizontal-outline" size={18} color="#333" />
+                <Ionicons
+                  name="swap-horizontal-outline"
+                  size={18}
+                  color="#333"
+                />
                 <Text style={styles.menuItemText}>Trocar igreja</Text>
               </TouchableOpacity>
             )}
@@ -376,10 +391,8 @@ export default function Home() {
               onPress={handleLogout}
               activeOpacity={0.8}
             >
-              <Ionicons name="log-out-outline" size={18} />
-              <Text style={styles.menuItemText}>
-                Sair
-              </Text>
+              <Ionicons name="log-out-outline" size={18} color="#333" />
+              <Text style={styles.menuItemText}>Sair</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
@@ -395,7 +408,10 @@ export default function Home() {
           style={styles.menuOverlay}
           onPress={() => setModalIgrejas(false)}
         >
-          <Pressable style={[styles.menuCard, { width: 280 }]} onPress={() => { }}>
+          <Pressable
+            style={[styles.menuCard, { width: 280 }]}
+            onPress={() => {}}
+          >
             <Text style={styles.modalIgrejaTitulo}>Suas igrejas</Text>
             {(igrejasDoUsuario || []).map((ig) => {
               const ativa = ig.igrejaId === igrejaAtiva?.id;
@@ -433,7 +449,8 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingTop: 10,
-    gap:8
+    gap: 8,
+    paddingHorizontal:14
   },
   avatar: {
     width: 36,
@@ -445,40 +462,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#66796b",
     alignItems: "center",
     justifyContent: "center",
-  },
-  itemCard: {
-    backgroundColor: "#fff",
-    borderRadius: 18,
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  iconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  itemCenter: {
-    flex: 1,
-    paddingRight: 8,
-  },
-  itemTitle: {
-    fontSize: 14,
-    fontFamily: "Roboto-Regular",
-    color: "#1f2933",
-    marginBottom: 2,
-  },
-  itemSub: {
-    fontSize: 12,
-    fontFamily: "Roboto-Light",
-  },
-  itemValue: {
-    fontSize: 14,
-    fontFamily: "Roboto-Medium",
   },
   menuOverlay: {
     flex: 1,
@@ -513,11 +496,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Roboto-Medium",
     color: "#1f2933",
-  },
-  menuEmail: {
-    fontSize: 12,
-    fontFamily: "Roboto-Light",
-    marginTop: 2,
   },
   menuIgreja: {
     fontSize: 12,

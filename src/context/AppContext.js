@@ -1,4 +1,4 @@
-import React, { createContext, useEffect, useState, useContext, useCallback } from "react";
+import React, { createContext, useEffect, useState, useContext } from "react";
 import { db } from "../firebaseConnection";
 import {
   doc,
@@ -12,6 +12,7 @@ import {
   updateDoc,
   deleteDoc,
   limit,
+  getDoc,
 } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AuthContext } from "./AuthContext";
@@ -48,9 +49,8 @@ export function AppProvider({ children }) {
   const [caixinhas, setCaixinhas] = useState([]);
   const [totalReservado, setTotalReservado] = useState(0);
 
-  // --- Igreja ---
-  const [igrejasDoUsuario, setIgrejasDoUsuario] = useState([]); // [{ igrejaId, nome, papel, membroId }]
-  const [igrejaAtiva, setIgrejaAtiva] = useState(null); // { id, nome, papel, membroId }
+  const [igrejasDoUsuario, setIgrejasDoUsuario] = useState([]);
+  const [igrejaAtiva, setIgrejaAtiva] = useState(null);
   const [igrejasProntas, setIgrejasProntas] = useState(false);
 
   function getUserId() {
@@ -65,7 +65,6 @@ export function AppProvider({ children }) {
     return igrejaAtiva?.id || null;
   }
 
-  // Carrega igrejas do usuário após login
   useEffect(() => {
     if (!authPronto) return;
 
@@ -83,7 +82,6 @@ export function AppProvider({ children }) {
     carregarIgrejasDoUsuario();
   }, [authPronto, uid, user?.email]);
 
-  // Quando a igreja ativa muda, recarrega finanças
   useEffect(() => {
     if (!igrejaAtiva?.id) {
       setDadosFinanceiros([]);
@@ -105,8 +103,6 @@ export function AppProvider({ children }) {
 
     try {
       setIgrejasProntas(false);
-
-      // Busca por e-mail (cadastro feito pelo admin) e/ou por uid já vinculado
       const mapa = new Map();
 
       if (email) {
@@ -149,7 +145,6 @@ export function AppProvider({ children }) {
 
       const membros = Array.from(mapa.values());
 
-      // Vincula uid no membro se ainda não tiver (1º login após cadastro por e-mail)
       await Promise.all(
         membros.map(async (m) => {
           if (userId && !m.uid && m.membroId) {
@@ -163,23 +158,7 @@ export function AppProvider({ children }) {
         })
       );
 
-      // Busca nomes das igrejas
       const lista = [];
-      for (const m of membros) {
-        try {
-          const igrejaSnap = await getDocs(
-            query(
-              collection(db, "igrejas"),
-              where("__name__", "==", m.igrejaId),
-              limit(1)
-            )
-          );
-          // getDoc é melhor — fallback manual:
-        } catch (e) { }
-      }
-
-      // Usando getDoc via doc()
-      const { getDoc } = await import("firebase/firestore");
       for (const m of membros) {
         try {
           const ref = doc(db, "igrejas", m.igrejaId);
@@ -191,6 +170,7 @@ export function AppProvider({ children }) {
               nome: data.nome || "Igreja",
               papel: m.papel,
               membroId: m.membroId,
+              createdAt: data.createdAt || null,
             });
           }
         } catch (e) {
@@ -200,7 +180,6 @@ export function AppProvider({ children }) {
 
       setIgrejasDoUsuario(lista);
 
-      // Restaura igreja ativa salva ou escolhe a primeira
       const salva = await AsyncStorage.getItem(KEY_IGREJA_ATIVA);
       let escolhida =
         (salva && lista.find((i) => i.igrejaId === salva)) || lista[0] || null;
@@ -211,6 +190,7 @@ export function AppProvider({ children }) {
           nome: escolhida.nome,
           papel: escolhida.papel,
           membroId: escolhida.membroId,
+          createdAt: escolhida.createdAt || null,
         });
       } else {
         setIgrejaAtiva(null);
@@ -233,6 +213,7 @@ export function AppProvider({ children }) {
       nome: item.nome,
       papel: item.papel,
       membroId: item.membroId,
+      createdAt: item.createdAt || null,
     });
 
     try {
@@ -242,7 +223,6 @@ export function AppProvider({ children }) {
     }
   }
 
-  /** Cria igreja + membro admin do usuário logado */
   async function criarIgreja(nome) {
     const userId = getUserId();
     const email = getEmail();
@@ -273,23 +253,45 @@ export function AppProvider({ children }) {
       nome: nomeLimpo,
       papel: "admin",
       membroId: membroRef.id,
+      createdAt: Date.now(),
     };
 
     setIgrejasDoUsuario((prev) => [...prev, nova]);
-    await selecionarIgreja(igrejaRef.id);
-    // selecionarIgreja precisa da lista atualizada:
     setIgrejaAtiva({
       id: igrejaRef.id,
       nome: nomeLimpo,
       papel: "admin",
       membroId: membroRef.id,
+      createdAt: Date.now(),
     });
     await AsyncStorage.setItem(KEY_IGREJA_ATIVA, igrejaRef.id);
 
     return igrejaRef.id;
   }
 
-  /** Admin cadastra membro por e-mail + papel */
+  async function atualizarNomeIgreja(novoNome) {
+    const igrejaId = getIgrejaId();
+    if (!igrejaId) throw new Error("Nenhuma igreja ativa.");
+    if (igrejaAtiva?.papel !== "admin") {
+      throw new Error("Apenas administradores podem alterar o nome da igreja.");
+    }
+
+    const nomeLimpo = String(novoNome || "").trim();
+    if (!nomeLimpo) throw new Error("Informe o nome da igreja.");
+
+    await updateDoc(doc(db, "igrejas", igrejaId), {
+      nome: nomeLimpo,
+      updatedAt: Date.now(),
+    });
+
+    setIgrejaAtiva((prev) => (prev ? { ...prev, nome: nomeLimpo } : prev));
+    setIgrejasDoUsuario((prev) =>
+      prev.map((ig) =>
+        ig.igrejaId === igrejaId ? { ...ig, nome: nomeLimpo } : ig
+      )
+    );
+  }
+
   async function adicionarMembro({ email, papel }) {
     const igrejaId = getIgrejaId();
     if (!igrejaId) throw new Error("Nenhuma igreja ativa.");
@@ -304,7 +306,6 @@ export function AppProvider({ children }) {
       ? papel
       : "leitura";
 
-    // Já é membro desta igreja?
     const qMesma = query(
       collection(db, "membros"),
       where("igrejaId", "==", igrejaId),
@@ -358,12 +359,9 @@ export function AppProvider({ children }) {
     return p === "admin" || p === "tesoureiro";
   }
 
-  // ----------------- Finanças (por igrejaId) -----------------
-
   async function HistoricoMovimentos() {
     const igrejaId = getIgrejaId();
     if (!igrejaId) {
-      console.log("HistoricoMovimentos: sem igrejaId ativo");
       setDadosFinanceiros([]);
       setSaldo(0);
       return [];
@@ -381,11 +379,6 @@ export function AppProvider({ children }) {
         const snap = await getDocs(q);
         lista = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       } catch (errIndex) {
-        console.log(
-          "HistoricoMovimentos: falhou orderBy (índice?). Tentando sem orderBy:",
-          errIndex?.message || errIndex
-        );
-
         const q2 = query(
           collection(db, "registros"),
           where("igrejaId", "==", igrejaId)
@@ -395,8 +388,6 @@ export function AppProvider({ children }) {
           .map((d) => ({ id: d.id, ...d.data() }))
           .sort((a, b) => (b.reg || b.data || 0) - (a.reg || a.data || 0));
       }
-
-
 
       setDadosFinanceiros(lista);
 
@@ -412,7 +403,6 @@ export function AppProvider({ children }) {
       });
 
       setSaldo(arredondarMoney(totalEntradas - totalSaidas));
-
       return lista;
     } catch (e) {
       console.log("Erro HistoricoMovimentos:", e);
@@ -452,8 +442,6 @@ export function AppProvider({ children }) {
       setTotalReservado(arredondarMoney(total));
       return lista;
     } catch (e) {
-      console.log("Erro CarregarCaixinhas:", e);
-      // fallback sem orderBy se faltar índice
       try {
         const q2 = query(
           collection(db, "caixinhas"),
@@ -466,7 +454,6 @@ export function AppProvider({ children }) {
         setTotalReservado(arredondarMoney(total));
         return lista;
       } catch (e2) {
-        console.log("Erro CarregarCaixinhas fallback:", e2);
         setCaixinhas([]);
         setTotalReservado(0);
         return [];
@@ -496,10 +483,11 @@ export function AppProvider({ children }) {
     if (!podeEditarFinanceiro()) throw new Error("Sem permissão.");
     const v = arredondarMoney(valor);
     if (v <= 0) throw new Error("Valor inválido.");
-    const ref = doc(db, "caixinhas", caixinhaId);
     const cx = caixinhas.find((c) => c.id === caixinhaId);
     if (!cx) throw new Error("Caixinha não encontrada.");
-    await updateDoc(ref, { valor: arredondarMoney((Number(cx.valor) || 0) + v) });
+    await updateDoc(doc(db, "caixinhas", caixinhaId), {
+      valor: arredondarMoney((Number(cx.valor) || 0) + v),
+    });
     await CarregarCaixinhas();
   }
 
@@ -598,6 +586,7 @@ export function AppProvider({ children }) {
         carregarIgrejasDoUsuario,
         selecionarIgreja,
         criarIgreja,
+        atualizarNomeIgreja,
         adicionarMembro,
         listarMembros,
         atualizarPapelMembro,

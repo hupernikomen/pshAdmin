@@ -17,10 +17,10 @@ import {
   addDoc,
   collection,
 } from "firebase/firestore";
-import { db } from "../../firebaseConnection";
-import { AppContext } from "../../context/AppContext";
-import Load from "../../componentes/Load";
-import { LIMITE_MS } from "../../utils/registroEdit";
+import { db } from "../firebaseConnection";
+import { AppContext } from "../context/AppContext";
+import Load from "../componentes/Load";
+import { LIMITE_MS } from "../utils/registroEdit";
 
 function parseNumero(txt) {
   if (txt === null || txt === undefined) return 0;

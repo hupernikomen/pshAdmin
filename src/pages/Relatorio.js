@@ -8,15 +8,15 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
-import { useNavigation, useTheme } from "@react-navigation/native";
+import { useTheme } from "@react-navigation/native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import RNFS from "react-native-fs";
 import Share from "react-native-share";
 import Ionicons from "react-native-vector-icons/Ionicons";
-import { AppContext } from "../../context/AppContext";
-import { useAuth } from "../../context/AuthContext";
-import Load from "../../componentes/Load";
+import { AppContext } from "../context/AppContext";
+import { useAuth } from "../context/AuthContext";
+import Load from "../componentes/Load";
 
 const MESES = [
   "Janeiro",
@@ -209,7 +209,6 @@ export default function Relatorio() {
   } = useContext(AppContext);
   const { uid, authPronto } = useAuth();
   const { colors } = useTheme();
-  const navigation = useNavigation();
 
   const agora = new Date();
   const [modoFiltro, setModoFiltro] = useState("mes");
@@ -717,47 +716,7 @@ export default function Relatorio() {
     }
   }
 
-  useEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <TouchableOpacity
-          onPress={exportarPDF}
-          disabled={gerando}
-          style={styles.headerBtn}
-          activeOpacity={0.7}
-        >
-          {gerando ? (
-            <ActivityIndicator size="small" color={colors.principal} />
-          ) : (
-            <Ionicons name="receipt-outline" size={22} />
-          )}
-        </TouchableOpacity>
-      ),
-    });
-  }, [
-    navigation,
-    colors,
-    gerando,
-    filtrados,
-    resumo,
-    projecao,
-    labelPeriodo,
-    seriesGraficos,
-    igrejaAtiva?.nome,
-    modoFiltro,
-    mesSelecionado,
-    anoSelecionado,
-  ]);
-
   if ((!authPronto || load) && !(dadosFinancas || []).length) return <Load />;
-
-  const listaEntradas = Object.entries(resumo.porTipoEntrada)
-    .map(([tipo, total]) => ({ tipo, total }))
-    .sort((a, b) => b.total - a.total);
-
-  const listaSaidas = Object.entries(resumo.porTipoSaida)
-    .map(([tipo, total]) => ({ tipo, total }))
-    .sort((a, b) => b.total - a.total);
 
   return (
     <View style={styles.container}>
@@ -898,64 +857,26 @@ export default function Relatorio() {
             <Text style={styles.filtroAtivoText}>{labelPeriodo}</Text>
             <Text style={styles.filtroQtd}>{resumo.quantidade} reg.</Text>
           </View>
-        </View>
 
-        <Text style={styles.sectionTitle}>Entradas por tipo</Text>
-        <View style={styles.listCard}>
-          {listaEntradas.length === 0 ? (
-            <Text style={styles.emptySection}>Nenhuma entrada no filtro</Text>
-          ) : (
-            listaEntradas.map((item, index) => (
-              <View
-                key={item.tipo}
-                style={[
-                  styles.itemRow,
-                  index === listaEntradas.length - 1 && styles.itemRowLast,
-                ]}
-              >
-                <View
-                  style={[styles.iconCircle, { backgroundColor: "#E8F5E9" }]}
-                >
-                  <Ionicons
-                    name="arrow-down-outline"
-                    size={16}
-                    color="#2E7D32"
-                  />
-                </View>
-                <Text style={styles.itemLabel}>{item.tipo}</Text>
-                <Text style={[styles.itemValue, { color: "#2E7D32" }]}>
-                  + {formatoMoeda.format(item.total)}
-                </Text>
-              </View>
-            ))
-          )}
-        </View>
-
-        <Text style={styles.sectionTitle}>Saídas por tipo</Text>
-        <View style={styles.listCard}>
-          {listaSaidas.length === 0 ? (
-            <Text style={styles.emptySection}>Nenhuma saída no filtro</Text>
-          ) : (
-            listaSaidas.map((item, index) => (
-              <View
-                key={item.tipo}
-                style={[
-                  styles.itemRow,
-                  index === listaSaidas.length - 1 && styles.itemRowLast,
-                ]}
-              >
-                <View
-                  style={[styles.iconCircle, { backgroundColor: "#FFEBEE" }]}
-                >
-                  <Ionicons name="arrow-up-outline" size={16} color="#C62828" />
-                </View>
-                <Text style={styles.itemLabel}>{item.tipo}</Text>
-                <Text style={[styles.itemValue, { color: "#C62828" }]}>
-                  − {formatoMoeda.format(item.total)}
-                </Text>
-              </View>
-            ))
-          )}
+          <TouchableOpacity
+            style={[
+              styles.pdfBtn,
+              { backgroundColor: colors.principal || "#65C556" },
+              gerando && { opacity: 0.75 },
+            ]}
+            onPress={exportarPDF}
+            disabled={gerando}
+            activeOpacity={0.85}
+          >
+            {gerando ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="document-text-outline" size={20} color="#fff" />
+                <Text style={styles.pdfBtnText}>Gerar relatório</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>
@@ -963,12 +884,11 @@ export default function Relatorio() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, paddingHorizontal:14 },
   content: {
     paddingTop: 12,
     paddingBottom: 100,
   },
-  headerBtn: { marginRight: 12, padding: 6 },
   block: {
     backgroundColor: "#fff",
     borderRadius: 18,
@@ -1071,50 +991,18 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Medium",
     color: "#9aa0a6",
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontFamily: "Roboto-Medium",
-    color: "#222",
-    marginBottom: 10,
-  },
-  listCard: {
-    backgroundColor: "#fff",
-    borderRadius: 18,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    marginBottom: 18,
-  },
-  itemRow: {
+  pdfBtn: {
+    marginTop: 16,
+    height: 52,
+    borderRadius: 14,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#f0f0f0",
-  },
-  itemRowLast: { borderBottomWidth: 0 },
-  iconCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    alignItems: "center",
     justifyContent: "center",
-    marginRight: 10,
+    gap: 8,
   },
-  itemLabel: {
-    flex: 1,
-    fontSize: 14,
-    fontFamily: "Roboto-Medium",
-    color: "#1f2933",
-  },
-  itemValue: {
-    fontSize: 14,
+  pdfBtnText: {
+    color: "#fff",
+    fontSize: 16,
     fontFamily: "Roboto-Bold",
-  },
-  emptySection: {
-    fontSize: 13,
-    fontFamily: "Roboto-Regular",
-    color: "#9aa0a6",
-    paddingVertical: 14,
-    textAlign: "center",
   },
 });

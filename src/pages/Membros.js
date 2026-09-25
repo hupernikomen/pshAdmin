@@ -15,14 +15,21 @@ import {
 } from "react-native";
 import { useTheme } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
-import { AppContext } from "../../context/AppContext";
-import Load from "../../componentes/Load";
+import { AppContext } from "../context/AppContext";
+import Load from "../componentes/Load";
+import SwipeCard from "../componentes/SwipeCard";
 
 const PAPEIS = [
   { id: "admin", label: "Admin" },
   { id: "tesoureiro", label: "Tesoureiro" },
   { id: "leitura", label: "Leitura" },
 ];
+
+function tintPapel(papel) {
+  if (papel === "admin") return { tint: "#E8F5E9", color: "#2E7D32" };
+  if (papel === "tesoureiro") return { tint: "#E3F2FD", color: "#1565C0" };
+  return { tint: "#F5F5F5", color: "#666" };
+}
 
 export default function Membros() {
   const {
@@ -37,6 +44,7 @@ export default function Membros() {
   const [membros, setMembros] = useState([]);
   const [load, setLoad] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [abertoId, setAbertoId] = useState(null);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [email, setEmail] = useState("");
@@ -64,6 +72,7 @@ export default function Membros() {
 
   const onRefresh = () => {
     setRefreshing(true);
+    setAbertoId(null);
     carregar();
   };
 
@@ -97,32 +106,26 @@ export default function Membros() {
       Alert.alert("Atenção", "Você não pode remover a si mesmo por aqui.");
       return;
     }
-    Alert.alert(
-      "Remover membro",
-      `Remover ${item.email} desta igreja?`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Remover",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await removerMembro(item.id);
-              await carregar();
-            } catch (e) {
-              Alert.alert("Erro", e?.message || "Falha ao remover.");
-            }
-          },
+    Alert.alert("Remover membro", `Remover ${item.email} desta igreja?`, [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Remover",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            setAbertoId(null);
+            await removerMembro(item.id);
+            await carregar();
+          } catch (e) {
+            Alert.alert("Erro", e?.message || "Falha ao remover.");
+          }
         },
-      ]
-    );
+      },
+    ]);
   }
 
   function alterarPapel(item) {
     if (!isAdmin) return;
-    if (item.id === igrejaAtiva?.membroId) {
-      Alert.alert("Atenção", "Altere o papel de outro admin com cuidado.");
-    }
 
     Alert.alert(
       "Alterar papel",
@@ -131,6 +134,7 @@ export default function Membros() {
         text: p.label + (item.papel === p.id ? " ✓" : ""),
         onPress: async () => {
           try {
+            setAbertoId(null);
             await atualizarPapelMembro(item.id, p.id);
             await carregar();
           } catch (e) {
@@ -150,7 +154,6 @@ export default function Membros() {
   return (
     <View style={styles.container}>
       <View style={styles.headerInfo}>
-        <Text style={styles.igrejaNome}>{igrejaAtiva?.nome || "Igreja"}</Text>
         <Text style={styles.igrejaSub}>
           {membros.length} membro{membros.length === 1 ? "" : "s"}
         </Text>
@@ -160,6 +163,7 @@ export default function Membros() {
         data={membros}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
+        ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -170,34 +174,50 @@ export default function Membros() {
         ListEmptyComponent={
           <Text style={styles.empty}>Nenhum membro cadastrado.</Text>
         }
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.email}>{item.email}</Text>
-              <Text style={styles.papel}>{labelPapel(item.papel)}</Text>
-              {!item.uid && (
-                <Text style={styles.pendente}>Ainda não entrou no app</Text>
-              )}
-            </View>
+        renderItem={({ item }) => {
+          const visual = tintPapel(item.papel);
+          const sub = [
+            labelPapel(item.papel),
+            !item.uid ? "Ainda não entrou no app" : null,
+          ]
+            .filter(Boolean)
+            .join(" · ");
 
-            {isAdmin && (
-              <View style={styles.actions}>
-                <TouchableOpacity
-                  onPress={() => alterarPapel(item)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons name="shield-outline" size={20} color="#555" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => confirmarRemover(item)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Ionicons name="trash-outline" size={20} color="#C62828" />
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        )}
+          const actions = isAdmin
+            ? [
+                {
+                  key: "papel",
+                  icon: "shield-outline",
+                  label: "Papel",
+                  backgroundColor: "#1565C0",
+                  onPress: () => alterarPapel(item),
+                },
+                {
+                  key: "remover",
+                  icon: "trash-outline",
+                  label: "Remover",
+                  backgroundColor: "#C62828",
+                  onPress: () => confirmarRemover(item),
+                },
+              ]
+            : [];
+
+          return (
+            <SwipeCard
+              icon="person-outline"
+              iconColor={visual.color}
+              tint={visual.tint}
+              title={item.email}
+              subtitle={sub}
+              value={labelPapel(item.papel)}
+              actions={actions}
+              open={abertoId === item.id}
+              onOpenChange={(open) =>
+                setAbertoId(open ? item.id : null)
+              }
+            />
+          );
+        }}
       />
 
       {isAdmin && (
@@ -304,7 +324,7 @@ export default function Membros() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, paddingHorizontal:14 },
   headerInfo: {
     paddingTop: 14,
     paddingBottom: 8,
@@ -321,32 +341,6 @@ const styles = StyleSheet.create({
     color: "#888",
   },
   list: { paddingBottom: 100 },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 8,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  email: {
-    fontSize: 15,
-    fontFamily: "Roboto-Medium",
-    color: "#1f2933",
-  },
-  papel: {
-    marginTop: 2,
-    fontSize: 12,
-    fontFamily: "Roboto-Regular",
-    color: "#666",
-  },
-  pendente: {
-    marginTop: 4,
-    fontSize: 11,
-    fontFamily: "Roboto-Regular",
-    color: "#e6a23c",
-  },
-  actions: { flexDirection: "row", gap: 16, marginLeft: 12 },
   empty: {
     textAlign: "center",
     marginTop: 40,

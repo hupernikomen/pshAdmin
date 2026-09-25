@@ -17,11 +17,11 @@ import {
 import { useNavigation, useTheme } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import RNFS from "react-native-fs";
-import { AppContext } from "../../context/AppContext";
-import { useAuth } from "../../context/AuthContext";
-import Load from "../../componentes/Load";
-import SwipeCard from "../../componentes/SwipeCard";
-import { podeEditarRegistro } from "../../utils/registroEdit";
+import { AppContext } from "../context/AppContext";
+import { useAuth } from "../context/AuthContext";
+import Load from "../componentes/Load";
+import SwipeCard from "../componentes/SwipeCard";
+import { podeEditarRegistro } from "../utils/registroEdit";
 
 const LIMITES = [30, 60, 90, 150];
 
@@ -420,6 +420,7 @@ export default function Historico() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingHorizontal:14
   },
   filtroWrap: {
     paddingTop: 10,

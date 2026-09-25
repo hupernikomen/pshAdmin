@@ -21,7 +21,8 @@ export default function Tabs() {
       screenOptions={{
         headerTitleStyle: {
           fontFamily: 'Roboto-Medium',
-          color: '#000'
+          color: '#000',
+          fontSize:18,
         },
         headerShadowVisible: false,
         sceneStyle: {
@@ -42,7 +43,7 @@ export default function Tabs() {
         name="Histórico"
         component={Historico}
         options={{
-          tabBarIcon: 'folder-open-outline',
+          tabBarIcon: 'swap-vertical',
         }}
       />
       <Tab.Screen

@@ -15,9 +15,9 @@ import {
 } from "react-native";
 import { useNavigation, useTheme } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
-import { AppContext } from "../../context/AppContext";
-import Load from "../../componentes/Load";
-import SwipeCard from "../../componentes/SwipeCard";
+import { AppContext } from "../context/AppContext";
+import Load from "../componentes/Load";
+import SwipeCard from "../componentes/SwipeCard";
 
 function parseValor(txt) {
   if (txt === null || txt === undefined) return 0;
@@ -395,7 +395,7 @@ export default function Caixinhas() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingTop: 14 },
+  container: { flex: 1, paddingTop: 14, paddingHorizontal:14 },
   list: { paddingBottom: 20 },
   emptyBox: {
     marginTop: 48,

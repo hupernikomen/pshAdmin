@@ -9,8 +9,8 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useTheme } from "@react-navigation/native";
-import { AppContext } from "../../context/AppContext";
-import { useAuth } from "../../context/AuthContext";
+import { AppContext } from "../context/AppContext";
+import { useAuth } from "../context/AuthContext";
 
 export default function CriarIgreja() {
   const { colors } = useTheme();

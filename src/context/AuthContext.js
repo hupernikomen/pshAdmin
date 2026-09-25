@@ -6,6 +6,11 @@ import {
   entrarComGoogle,
   sairDaConta,
 } from "../services/authGoogle";
+import {
+  cadastrarComEmail,
+  entrarComEmail,
+  redefinirSenha,
+} from "../services/authEmail";
 
 export const AuthContext = createContext({});
 
@@ -30,6 +35,22 @@ export function AuthProvider({ children }) {
     return u;
   }
 
+  async function loginComEmail(email, senha) {
+    const u = await entrarComEmail(email, senha);
+    setUser(u);
+    return u;
+  }
+
+  async function registrarComEmail(email, senha, nome) {
+    const u = await cadastrarComEmail(email, senha, nome);
+    setUser(u);
+    return u;
+  }
+
+  async function enviarRedefinicaoSenha(email) {
+    await redefinirSenha(email);
+  }
+
   async function logout() {
     await sairDaConta();
     setUser(null);
@@ -42,6 +63,9 @@ export function AuthProvider({ children }) {
         uid: user?.uid ?? null,
         authPronto,
         loginComGoogle,
+        loginComEmail,
+        registrarComEmail,
+        enviarRedefinicaoSenha,
         logout,
       }}
     >

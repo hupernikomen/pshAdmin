@@ -18,7 +18,7 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const TAB_SIZE = 54;
+const TAB_SIZE = 58;
 const PILL_SIZE = 52;
 
 function nomeIcone(nome, focado) {
@@ -128,6 +128,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   content: {
+    elevation: .5,
     backgroundColor: "#fff",
     flexDirection: "row",
     alignItems: "center",
@@ -137,8 +138,6 @@ const styles = StyleSheet.create({
     marginBottom: 28,
     padding: 2,
     borderRadius: 35,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#ececec",
   },
   pill: {
     position: "absolute",
