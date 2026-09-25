@@ -44,6 +44,16 @@ function arred(v) {
   return Math.round((Number(v) || 0) * 100) / 100;
 }
 
+function fimDoDiaTs(d = new Date()) {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x.getTime();
+}
+
+function dataDoItem(item) {
+  return Number(item?.data || item?.createdAt || item?.reg || 0) || 0;
+}
+
 export default function AReceber() {
   const {
     dadosFinancas,
@@ -67,6 +77,7 @@ export default function AReceber() {
   const [salvando, setSalvando] = useState(false);
 
   const podeEditar = podeEditarFinanceiro?.() !== false;
+  const limiteHoje = fimDoDiaTs();
 
   useEffect(() => {
     if (!authPronto || !uid) return;
@@ -86,25 +97,55 @@ export default function AReceber() {
     setRefreshing(false);
   };
 
+  /**
+   * Lista alinhada com o card da Home:
+   * 1) Entrada em aberto com falta (data <= hoje ou qualquer)
+   * 2) Entrada com DATA FUTURA (mesmo quitada no cadastro) —
+   *    valor ainda não entra no saldo, então aparece aqui
+   */
   const pendentes = useMemo(() => {
     const lista = [];
+
     (dadosFinancas || []).forEach((i) => {
       if (i.tipoMovimento !== "entrada") return;
-      if (i.status === "quitada") return;
       if (i.tipo === "Saldo inicial") return;
+
+      const ts = dataDoItem(i);
+      if (!ts) return;
 
       const total = Number(i.valorTotal) || 0;
       const recebido = Number(i.valorRecebidoTotal) || 0;
-      if (total > recebido) {
+      const isFuturo = ts > limiteHoje;
+
+      if (isFuturo) {
+        // O que ainda não pode ir para o saldo (recebido “agendado” ou total)
+        const valor =
+          recebido > 0.001 ? recebido : total > 0.001 ? total : 0;
+        if (valor <= 0.001) return;
+
+        lista.push({
+          ...i,
+          rowId: i.id,
+          falta: arred(valor),
+          isFuturo: true,
+        });
+        return;
+      }
+
+      // Data até hoje: só se ainda houver valor a receber
+      if (i.status === "quitada") return;
+      if (total > recebido + 0.001) {
         lista.push({
           ...i,
           rowId: i.id,
           falta: arred(total - recebido),
+          isFuturo: false,
         });
       }
     });
-    return lista.sort((a, b) => (b.data || 0) - (a.data || 0));
-  }, [dadosFinancas]);
+
+    return lista.sort((a, b) => (a.data || 0) - (b.data || 0));
+  }, [dadosFinancas, limiteHoje]);
 
   function abrirReceber(item) {
     if (!podeEditar) {
@@ -117,6 +158,7 @@ export default function AReceber() {
     setItemSel(item);
     setValorRecebido(String(item.falta).replace(".", ","));
     setModalVisible(true);
+    setAbertoId(null);
   }
 
   function fecharModal() {
@@ -152,25 +194,56 @@ export default function AReceber() {
     setSalvando(true);
     try {
       const listaAtual = itemSel.valoresRecebidos || [];
-      const novoTotal = arred(
-        (Number(itemSel.valorRecebidoTotal) || 0) + valor
-      );
+      const agora = Date.now();
 
-      await updateDoc(doc(db, "registros", itemSel.id), {
-        valoresRecebidos: [
-          ...listaAtual,
-          {
-            valor,
-            data: Date.now(),
-            id: Date.now().toString(),
-          },
-        ],
-        valorRecebidoTotal: novoTotal,
-        status:
-          novoTotal >= (Number(itemSel.valorTotal) || 0)
-            ? "quitada"
-            : "aberta",
-      });
+      if (itemSel.isFuturo) {
+        /**
+         * Entrada com data futura: ao “receber/baixar”,
+         * a data vira hoje para o valor entrar no saldo.
+         */
+        const total = Number(itemSel.valorTotal) || Number(itemSel.falta) || 0;
+        const novoRecebido = arred(valor);
+
+        await updateDoc(doc(db, "registros", itemSel.id), {
+          data: agora,
+          valoresRecebidos: [
+            ...listaAtual,
+            {
+              valor: novoRecebido,
+              data: agora,
+              id: agora.toString(),
+            },
+          ],
+          valorRecebidoTotal: novoRecebido,
+          valorTotal: total > 0 ? total : novoRecebido,
+          status:
+            novoRecebido >= (total > 0 ? total : novoRecebido) - 0.001
+              ? "quitada"
+              : "aberta",
+          updatedAt: agora,
+        });
+      } else {
+        const novoTotal = arred(
+          (Number(itemSel.valorRecebidoTotal) || 0) + valor
+        );
+
+        await updateDoc(doc(db, "registros", itemSel.id), {
+          valoresRecebidos: [
+            ...listaAtual,
+            {
+              valor,
+              data: agora,
+              id: agora.toString(),
+            },
+          ],
+          valorRecebidoTotal: novoTotal,
+          status:
+            novoTotal >= (Number(itemSel.valorTotal) || 0) - 0.001
+              ? "quitada"
+              : "aberta",
+          updatedAt: agora,
+        });
+      }
 
       await Promise.all([HistoricoMovimentos(), ResumoFinanceiro?.()]);
       fecharModal();
@@ -211,7 +284,7 @@ export default function AReceber() {
             <Text style={styles.emptyText}>
               {!uid
                 ? "Faça login para ver os valores."
-                : "Quando houver entradas em aberto, elas aparecem aqui."}
+                : "Quando houver entradas em aberto ou com data futura, elas aparecem aqui."}
             </Text>
           </View>
         }
@@ -224,14 +297,16 @@ export default function AReceber() {
               })
             : "--/--/--";
 
-          const meta = `${item.tipo || "Entrada"} · ${dataStr}`;
+          const meta = item.isFuturo
+            ? `${item.tipo || "Entrada"} · ${dataStr} · Data futura`
+            : `${item.tipo || "Entrada"} · ${dataStr}`;
 
           const actions = podeEditar
             ? [
                 {
                   key: "receber",
-                  icon: "download-outline",
-                  label: "Receber",
+                  icon: item.isFuturo ? "calendar-outline" : "download-outline",
+                  label: item.isFuturo ? "Baixar" : "Receber",
                   backgroundColor: colors.principal,
                   onPress: () => abrirReceber(item),
                 },
@@ -240,9 +315,9 @@ export default function AReceber() {
 
           return (
             <SwipeCard
-              icon="arrow-down-outline"
-              iconColor="#2E7D32"
-              tint="#E8F5E9"
+              icon={item.isFuturo ? "time-outline" : "arrow-down-outline"}
+              iconColor={item.isFuturo ? "#EF6C00" : "#2E7D32"}
+              tint={item.isFuturo ? "#FFF3E0" : "#E8F5E9"}
               title={item.descricao || "Sem descrição"}
               subtitle={meta}
               value={`R$ ${formatoMoeda.format(item.falta)}`}
@@ -270,11 +345,22 @@ export default function AReceber() {
             style={{ width: "100%", alignItems: "center" }}
           >
             <Pressable style={styles.modalCard} onPress={() => {}}>
-              <Text style={styles.modalTitle}>Registrar recebimento</Text>
+              <Text style={styles.modalTitle}>
+                {itemSel?.isFuturo
+                  ? "Baixar entrada futura"
+                  : "Registrar recebimento"}
+              </Text>
               <Text style={styles.modalSub}>
                 {itemSel?.descricao || ""} · R${" "}
                 {formatoMoeda.format(itemSel?.falta || 0)}
               </Text>
+
+              {!!itemSel?.isFuturo && (
+                <Text style={styles.hintFuturo}>
+                  Esta entrada tem data futura. Ao confirmar, a data passa a ser
+                  hoje e o valor entra no saldo atual.
+                </Text>
+              )}
 
               <Text style={styles.inputLabel}>Valor recebido</Text>
               <TextInput
@@ -313,7 +399,7 @@ export default function AReceber() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal:14 },
+  container: { flex: 1, paddingHorizontal: 14 },
   content: { paddingTop: 12, paddingBottom: 20 },
   emptyBox: {
     marginTop: 40,
@@ -362,10 +448,17 @@ const styles = StyleSheet.create({
   },
   modalSub: {
     marginTop: 4,
-    marginBottom: 14,
+    marginBottom: 10,
     fontSize: 13,
     fontFamily: "Roboto-Regular",
     color: "#888",
+  },
+  hintFuturo: {
+    fontSize: 12,
+    fontFamily: "Roboto-Regular",
+    color: "#EF6C00",
+    marginBottom: 12,
+    lineHeight: 18,
   },
   inputLabel: {
     fontSize: 12,

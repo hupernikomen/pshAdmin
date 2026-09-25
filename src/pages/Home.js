@@ -19,6 +19,16 @@ import Load from "../componentes/Load";
 import Saldo from "../componentes/Saldo";
 import SwipeCard from "../componentes/SwipeCard";
 
+function fimDoDiaTs(d = new Date()) {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x.getTime();
+}
+
+function dataDoItem(item) {
+  return Number(item?.data || item?.createdAt || item?.reg || 0) || 0;
+}
+
 export default function Home() {
   const {
     saldo,
@@ -119,59 +129,92 @@ export default function Home() {
   const agora = new Date();
   const mesAtual = agora.getMonth();
   const anoAtual = agora.getFullYear();
+  const limiteHoje = fimDoDiaTs(agora);
+  const inicioMes = new Date(anoAtual, mesAtual, 1, 0, 0, 0, 0).getTime();
 
+  // Só movimentos já realizados (data <= hoje)
   const entradasMesAtual = lista
     .filter((i) => {
-      if (i.tipoMovimento !== "entrada" || !i.data) return false;
-      const d = new Date(i.data);
+      if (i.tipoMovimento !== "entrada") return false;
+      const ts = dataDoItem(i);
+      if (!ts || ts > limiteHoje) return false;
+      const d = new Date(ts);
       return d.getMonth() === mesAtual && d.getFullYear() === anoAtual;
     })
-    .reduce((acc, i) => acc + (i.valorRecebidoTotal || i.valorTotal || 0), 0);
+    .reduce((acc, i) => acc + (Number(i.valorRecebidoTotal) || 0), 0);
 
   const saidasMesAtual = lista
     .filter((i) => {
-      if (i.tipoMovimento !== "saida" || !i.data) return false;
-      const d = new Date(i.data);
+      if (i.tipoMovimento !== "saida") return false;
+      const ts = dataDoItem(i);
+      if (!ts || ts > limiteHoje) return false;
+      const d = new Date(ts);
       return d.getMonth() === mesAtual && d.getFullYear() === anoAtual;
     })
-    .reduce((acc, i) => acc + (i.valorPagoTotal || i.valorTotal || 0), 0);
+    .reduce((acc, i) => acc + (Number(i.valorPagoTotal) || 0), 0);
 
+  // Saldo do context já exclui futuros
   const saldoAtual = Number(saldo) || 0;
   const caixaGeral = Number(saldoDisponivel) || 0;
   const emCaixinhas = Number(totalReservado) || 0;
   const qtdCaixinhas = (caixinhas || []).length;
+
+  // Saldo no início do mês (não inclui futuros nem movimentos do mês atual)
   const saldoAnterior = saldoAtual - entradasMesAtual + saidasMesAtual;
 
   const entradasFuturas = lista
     .filter((i) => i.tipoMovimento === "entrada" && i.status === "aberta")
     .reduce((acc, i) => {
-      const falta = (i.valorTotal || 0) - (i.valorRecebidoTotal || 0);
+      const falta =
+        (Number(i.valorTotal) || 0) - (Number(i.valorRecebidoTotal) || 0);
       return acc + (falta > 0 ? falta : 0);
     }, 0);
+
+  // Também trata como "a receber" entradas com data futura já marcadas como recebidas no cadastro
+  const entradasComDataFutura = lista
+    .filter((i) => {
+      if (i.tipoMovimento !== "entrada") return false;
+      if (i.tipo === "Saldo inicial") return false;
+      const ts = dataDoItem(i);
+      return ts > limiteHoje;
+    })
+    .reduce((acc, i) => acc + (Number(i.valorRecebidoTotal) || 0), 0);
+
+  const aReceberTotal = entradasFuturas + entradasComDataFutura;
 
   const despesasFuturas = lista
     .filter((i) => i.tipoMovimento === "saida" && i.status === "aberta")
     .reduce((acc, i) => {
-      const falta = (i.valorTotal || 0) - (i.valorPagoTotal || 0);
+      const parcelas = Array.isArray(i.parcelas) ? i.parcelas : [];
+      if (parcelas.length > 0) {
+        return (
+          acc +
+          parcelas.reduce((s, p) => {
+            if (p.status === "aberta") return s + (Number(p.valor) || 0);
+            return s;
+          }, 0)
+        );
+      }
+      const falta =
+        (Number(i.valorTotal) || 0) - (Number(i.valorPagoTotal) || 0);
       return acc + (falta > 0 ? falta : 0);
     }, 0);
 
-  const projecaoFutura = saldoAtual + entradasFuturas - despesasFuturas;
+  const projecaoFutura = saldoAtual + aReceberTotal - despesasFuturas;
 
   const dizimosMes = lista.filter((i) => {
-    if (i.tipoMovimento !== "entrada" || i.tipo !== "Dízimo" || !i.data) {
-      return false;
-    }
-    const d = new Date(i.data);
+    if (i.tipoMovimento !== "entrada" || i.tipo !== "Dízimo") return false;
+    const ts = dataDoItem(i);
+    if (!ts || ts > limiteHoje) return false;
+    const d = new Date(ts);
     return d.getMonth() === mesAtual && d.getFullYear() === anoAtual;
   });
 
   const totalDizimosMes = dizimosMes.reduce(
-    (acc, i) => acc + (i.valorRecebidoTotal || i.valorTotal || 0),
+    (acc, i) => acc + (Number(i.valorRecebidoTotal) || 0),
     0
   );
 
-  // Média de dízimos desde a criação da igreja
   const criadoEm = igrejaAtiva?.createdAt
     ? new Date(igrejaAtiva.createdAt)
     : null;
@@ -185,33 +228,27 @@ export default function Home() {
 
     const totalDizimosPeriodo = lista
       .filter((i) => {
-        if (i.tipoMovimento !== "entrada" || i.tipo !== "Dízimo" || !i.data) {
-          return false;
-        }
-        const d = new Date(i.data);
+        if (i.tipoMovimento !== "entrada" || i.tipo !== "Dízimo") return false;
+        const ts = dataDoItem(i);
+        if (!ts || ts > limiteHoje) return false;
+        const d = new Date(ts);
         const idx = d.getFullYear() * 12 + d.getMonth();
         const idxSi = siAno * 12 + siMes;
         return idx >= idxSi;
       })
-      .reduce(
-        (acc, i) => acc + (i.valorRecebidoTotal || i.valorTotal || 0),
-        0
-      );
+      .reduce((acc, i) => acc + (Number(i.valorRecebidoTotal) || 0), 0);
 
     mediaDizimosAnual = totalDizimosPeriodo / meses;
   } else {
     const totalDizimosAno = lista
       .filter((i) => {
-        if (i.tipoMovimento !== "entrada" || i.tipo !== "Dízimo" || !i.data) {
-          return false;
-        }
-        const d = new Date(i.data);
+        if (i.tipoMovimento !== "entrada" || i.tipo !== "Dízimo") return false;
+        const ts = dataDoItem(i);
+        if (!ts || ts > limiteHoje) return false;
+        const d = new Date(ts);
         return d.getFullYear() === anoAtual;
       })
-      .reduce(
-        (acc, i) => acc + (i.valorRecebidoTotal || i.valorTotal || 0),
-        0
-      );
+      .reduce((acc, i) => acc + (Number(i.valorRecebidoTotal) || 0), 0);
     mediaDizimosAnual =
       mesAtual + 1 > 0 ? totalDizimosAno / (mesAtual + 1) : 0;
   }
@@ -222,7 +259,7 @@ export default function Home() {
         id: "1",
         label: "A receber",
         sub: "Valores em aberto",
-        value: `R$ ${formatoMoeda.format(entradasFuturas)}`,
+        value: `R$ ${formatoMoeda.format(aReceberTotal)}`,
         icon: "arrow-down-outline",
         tint: "#E8F5E9",
         iconColor: "#2E7D32",
@@ -258,7 +295,7 @@ export default function Home() {
       },
     ],
     [
-      entradasFuturas,
+      aReceberTotal,
       despesasFuturas,
       totalDizimosMes,
       mediaDizimosAnual,
@@ -450,7 +487,7 @@ const styles = StyleSheet.create({
   content: {
     paddingTop: 10,
     gap: 8,
-    paddingHorizontal:14
+    paddingHorizontal: 14,
   },
   avatar: {
     width: 36,

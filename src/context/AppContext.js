@@ -31,6 +31,39 @@ function normalizarEmail(email) {
     .toLowerCase();
 }
 
+/** Fim do dia de hoje (ms) — movimentos futuros não entram no saldo */
+function fimDoDiaTs(d = new Date()) {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x.getTime();
+}
+
+function dataDoMovimento(item) {
+  return Number(item?.data || item?.createdAt || item?.reg || 0) || 0;
+}
+
+/**
+ * Saldo realizado: só entradas/saídas com data <= hoje.
+ * Valor futuro (ex.: dízimo em 02/10 lançado em 25/09) NÃO entra.
+ */
+function calcularSaldoRealizado(lista) {
+  const limite = fimDoDiaTs();
+  let total = 0;
+
+  (lista || []).forEach((item) => {
+    const ts = dataDoMovimento(item);
+    if (!ts || ts > limite) return;
+
+    if (item.tipoMovimento === "entrada") {
+      total += Number(item.valorRecebidoTotal) || 0;
+    } else if (item.tipoMovimento === "saida") {
+      total -= Number(item.valorPagoTotal) || 0;
+    }
+  });
+
+  return arredondarMoney(total);
+}
+
 export function AppProvider({ children }) {
   const { user, uid, authPronto } = useContext(AuthContext);
 
@@ -390,19 +423,7 @@ export function AppProvider({ children }) {
       }
 
       setDadosFinanceiros(lista);
-
-      let totalEntradas = 0;
-      let totalSaidas = 0;
-
-      lista.forEach((i) => {
-        if (i.tipoMovimento === "entrada") {
-          totalEntradas += Number(i.valorRecebidoTotal) || 0;
-        } else if (i.tipoMovimento === "saida") {
-          totalSaidas += Number(i.valorPagoTotal) || 0;
-        }
-      });
-
-      setSaldo(arredondarMoney(totalEntradas - totalSaidas));
+      setSaldo(calcularSaldoRealizado(lista));
       return lista;
     } catch (e) {
       console.log("Erro HistoricoMovimentos:", e);

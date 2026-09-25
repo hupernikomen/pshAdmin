@@ -70,6 +70,9 @@ function montarLinhasHistorico(dadosFinancas) {
   const linhas = [];
 
   (dadosFinancas || []).forEach((item) => {
+    // Saldo inicial fica só em Configurações — não lista no histórico
+    if (item.tipo === "Saldo inicial") return;
+
     const sortBase = item.reg || item.data || item.createdAt || 0;
     const pagos = item.valoresPagos || [];
     const recebidos = item.valoresRecebidos || [];
@@ -318,7 +321,7 @@ export default function Historico() {
             item.valorTotal &&
             (item.valorRecebidoTotal || item.valorPagoTotal) &&
             item.valorTotal !==
-            (item.valorRecebidoTotal || item.valorPagoTotal);
+              (item.valorRecebidoTotal || item.valorPagoTotal);
 
           const temRecibo = !!item.reciboUrl && !isParcela;
           const origem = textoOrigem(item);
@@ -337,8 +340,8 @@ export default function Historico() {
             origem ? `Pago: ${origem}` : null,
             temParcial
               ? `Total ${formatoMoeda.format(item.valorTotal)} · Pago ${formatoMoeda.format(
-                item.valorRecebidoTotal || item.valorPagoTotal || 0
-              )}`
+                  item.valorRecebidoTotal || item.valorPagoTotal || 0
+                )}`
               : null,
           ].filter(Boolean);
 
@@ -380,7 +383,6 @@ export default function Historico() {
               onOpenChange={(isOpen) =>
                 setAbertoId(isOpen ? item.rowId : null)
               }
-
             />
           );
         }}
@@ -420,7 +422,7 @@ export default function Historico() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal:14
+    paddingHorizontal: 14,
   },
   filtroWrap: {
     paddingTop: 10,
@@ -450,7 +452,7 @@ const styles = StyleSheet.create({
   listContent: {
     paddingTop: 4,
     paddingBottom: 100,
-    gap:8
+    gap: 8,
   },
   emptyContainer: {
     marginTop: 80,
