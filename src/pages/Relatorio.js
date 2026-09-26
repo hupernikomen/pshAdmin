@@ -10,13 +10,11 @@ import {
 } from "react-native";
 import { useTheme } from "@react-navigation/native";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import RNFS from "react-native-fs";
-import Share from "react-native-share";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
 import Load from "../componentes/Load";
+import { exportarRelatorioPDF } from "../utils/relatorioPdf";
 
 const MESES = [
   "Janeiro",
@@ -77,19 +75,6 @@ function isDizimo(item) {
   return t.includes("dizimo") || t.includes("dízimo");
 }
 
-function labelMovimento(item) {
-  if (isDizimo(item)) return "Diz. ***";
-  const desc = String(item.descricao || "").trim();
-  if (desc) return desc;
-  return String(item.tipo || "Movimento");
-}
-
-function valorMovimento(item) {
-  if (item.tipoMovimento === "entrada") return valorEntrada(item);
-  if (item.tipoMovimento === "saida") return valorSaida(item);
-  return 0;
-}
-
 function resumoDeLista(lista) {
   let entradas = 0;
   let saidas = 0;
@@ -98,6 +83,7 @@ function resumoDeLista(lista) {
   const porTipoSaida = {};
 
   lista.forEach((item) => {
+    if (item.tipo === "Saldo inicial") return;
     const tipo = item.tipo || "Outros";
     if (item.tipoMovimento === "entrada") {
       const v = valorEntrada(item);
@@ -118,97 +104,233 @@ function resumoDeLista(lista) {
     dizimos: arred(dizimos),
     porTipoEntrada,
     porTipoSaida,
-    quantidade: lista.length,
+    quantidade: lista.filter((i) => i.tipo !== "Saldo inicial").length,
   };
 }
 
-const C = {
-  ink: rgb(0.12, 0.16, 0.2),
-  muted: rgb(0.55, 0.58, 0.62),
-  line: rgb(0.9, 0.91, 0.92),
-  card: rgb(0.96, 0.96, 0.97),
-  green: rgb(0.18, 0.42, 0.31),
-  red: rgb(0.61, 0.13, 0.15),
-  white: rgb(1, 1, 1),
-};
+/** Criação da igreja → agora; após 12 meses, últimos 12 (rolante) */
+function montarJanelaMesesGrafico(createdAtTs) {
+  const agora = new Date();
+  const fimAno = agora.getFullYear();
+  const fimMes = agora.getMonth();
 
-function desenharLinhaChart(page, font, opts) {
-  const {
-    x,
-    y,
-    width,
-    height,
-    series,
-    labels,
-    colors,
-    lineColor = C.line,
-    mutedColor = C.muted,
-  } = opts;
+  let iniAno = fimAno;
+  let iniMes = fimMes;
 
-  const padL = 8;
-  const padR = 8;
-  const padT = 14;
-  const padB = 18;
-  const plotW = width - padL - padR;
-  const plotH = height - padT - padB;
-  const baseY = y - height + padB;
+  if (createdAtTs) {
+    const criacao = new Date(Number(createdAtTs));
+    if (!isNaN(criacao.getTime())) {
+      iniAno = criacao.getFullYear();
+      iniMes = criacao.getMonth();
+    }
+  }
 
-  page.drawRectangle({
-    x,
-    y: y - height,
-    width,
-    height,
-    borderColor: lineColor,
-    borderWidth: 0.5,
-    color: rgb(1, 1, 1),
-  });
+  const totalMeses = (fimAno - iniAno) * 12 + (fimMes - iniMes) + 1;
+  let startAno = iniAno;
+  let startMes = iniMes;
+  let qtd = Math.max(totalMeses, 1);
 
-  page.drawLine({
-    start: { x: x + padL, y: baseY },
-    end: { x: x + width - padR, y: baseY },
-    thickness: 0.5,
-    color: lineColor,
-  });
+  if (totalMeses > 12) {
+    qtd = 12;
+    startMes = fimMes - 11;
+    startAno = fimAno;
+    while (startMes < 0) {
+      startMes += 12;
+      startAno -= 1;
+    }
+  }
 
-  const allVals = series.flatMap((s) => s.values);
-  const maxV = Math.max(...allVals, 1);
-  const n = Math.max(labels.length, 1);
-  const stepX = n === 1 ? plotW / 2 : plotW / (n - 1);
+  const pontos = [];
+  let y = startAno;
+  let m = startMes;
+  for (let i = 0; i < qtd; i++) {
+    pontos.push({ ano: y, mes: m, label: MESES_CURTO[m] });
+    m += 1;
+    if (m > 11) {
+      m = 0;
+      y += 1;
+    }
+  }
+  return pontos;
+}
 
-  const pointsFor = (values) =>
-    values.map((v, i) => ({
-      px: x + padL + i * stepX,
-      py: baseY + (Number(v) / maxV) * plotH,
+function formatCompacto(v, formatoMoeda) {
+  const n = Number(v) || 0;
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
+  return formatoMoeda.format(n);
+}
+
+/** Barras alinhadas à esquerda */
+function ChartBarras({ dados, cor, formatoMoeda, altura = 140 }) {
+  const max = Math.max(...dados.map((d) => d.value), 1);
+  const barMaxH = altura - 36;
+  const barSlot = Math.min(
+    36,
+    Math.max(24, Math.floor(300 / Math.max(dados.length, 1)))
+  );
+
+  return (
+    <View style={[styles.chartBox, { height: altura + 8 }]}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={dados.length > 8}
+        contentContainerStyle={styles.barsRowStart}
+      >
+        {dados.map((d, i) => {
+          const h = Math.max(4, (d.value / max) * barMaxH);
+          return (
+            <View
+              key={`${d.label}-${i}`}
+              style={[styles.barColFixed, { width: barSlot }]}
+            >
+              <Text style={styles.barValue} numberOfLines={1}>
+                {d.value > 0 ? formatCompacto(d.value, formatoMoeda) : "—"}
+              </Text>
+              <View style={[styles.barTrack, { height: barMaxH }]}>
+                <View
+                  style={[styles.barFill, { height: h, backgroundColor: cor }]}
+                />
+              </View>
+              <Text style={styles.barLabel}>{d.label}</Text>
+            </View>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
+/** Linhas a partir da esquerda (1 ponto no início) */
+function ChartLinhas({ dados, corReceita, corDespesa, altura = 150 }) {
+  const max = Math.max(
+    ...dados.flatMap((d) => [d.receita, d.despesa]),
+    1
+  );
+  const plotH = altura - 28;
+  const n = dados.length;
+  const plotW = Math.max(n * 28, 120);
+  const stepX = n <= 1 ? 0 : plotW / (n - 1);
+
+  const pts = (key) =>
+    dados.map((d, i) => ({
+      x: i * stepX,
+      y: plotH - (Number(d[key]) / max) * plotH,
     }));
 
-  series.forEach((s, si) => {
-    const pts = pointsFor(s.values);
-    const col = colors[si] || C.ink;
-    for (let i = 0; i < pts.length - 1; i++) {
-      page.drawLine({
-        start: { x: pts[i].px, y: pts[i].py },
-        end: { x: pts[i + 1].px, y: pts[i + 1].py },
-        thickness: 1.5,
-        color: col,
-      });
-    }
-    pts.forEach((p) => {
-      page.drawCircle({ x: p.px, y: p.py, size: 2.2, color: col });
-    });
-  });
+  const rec = pts("receita");
+  const des = pts("despesa");
 
-  const stepLabel = labels.length > 8 ? 2 : 1;
-  labels.forEach((lab, i) => {
-    if (i % stepLabel !== 0 && i !== labels.length - 1) return;
-    const px = x + padL + i * stepX;
-    page.drawText(String(lab), {
-      x: px - 8,
-      y: y - height + 4,
-      size: 7,
-      font,
-      color: mutedColor,
-    });
-  });
+  return (
+    <View style={[styles.chartBox, { height: altura + 24 }]}>
+      <View style={styles.legendRow}>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: corReceita }]} />
+          <Text style={styles.legendText}>Receitas</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: corDespesa }]} />
+          <Text style={styles.legendText}>Despesas</Text>
+        </View>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={n > 8}
+        contentContainerStyle={{ minWidth: plotW + 16 }}
+      >
+        <View style={{ height: plotH, width: plotW, marginTop: 4 }}>
+          <View style={[styles.axisBase, { top: plotH - 1 }]} />
+
+          {rec.slice(0, -1).map((p, i) => {
+            const n2 = rec[i + 1];
+            const dx = n2.x - p.x;
+            const dy = n2.y - p.y;
+            const len = Math.sqrt(dx * dx + dy * dy) || 1;
+            const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+            return (
+              <View
+                key={`r-${i}`}
+                style={{
+                  position: "absolute",
+                  left: p.x,
+                  top: p.y,
+                  width: len,
+                  height: 2,
+                  backgroundColor: corReceita,
+                  transform: [{ rotate: `${angle}deg` }],
+                  transformOrigin: "left center",
+                }}
+              />
+            );
+          })}
+          {des.slice(0, -1).map((p, i) => {
+            const n2 = des[i + 1];
+            const dx = n2.x - p.x;
+            const dy = n2.y - p.y;
+            const len = Math.sqrt(dx * dx + dy * dy) || 1;
+            const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+            return (
+              <View
+                key={`d-${i}`}
+                style={{
+                  position: "absolute",
+                  left: p.x,
+                  top: p.y,
+                  width: len,
+                  height: 2,
+                  backgroundColor: corDespesa,
+                  transform: [{ rotate: `${angle}deg` }],
+                  transformOrigin: "left center",
+                }}
+              />
+            );
+          })}
+
+          {rec.map((p, i) => (
+            <View
+              key={`rp-${i}`}
+              style={[
+                styles.lineDot,
+                {
+                  left: p.x - 3,
+                  top: p.y - 3,
+                  backgroundColor: corReceita,
+                },
+              ]}
+            />
+          ))}
+          {des.map((p, i) => (
+            <View
+              key={`dp-${i}`}
+              style={[
+                styles.lineDot,
+                {
+                  left: p.x - 3,
+                  top: p.y - 3,
+                  backgroundColor: corDespesa,
+                },
+              ]}
+            />
+          ))}
+        </View>
+      </ScrollView>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={[styles.lineLabels, { minWidth: plotW + 16 }]}
+      >
+        {dados.map((d, i) => (
+          <Text
+            key={i}
+            style={[styles.barLabel, { width: n <= 1 ? 40 : stepX || 28 }]}
+          >
+            {d.label}
+          </Text>
+        ))}
+      </ScrollView>
+    </View>
+  );
 }
 
 export default function Relatorio() {
@@ -244,18 +366,18 @@ export default function Relatorio() {
 
   const filtrados = useMemo(() => {
     const lista = dadosFinancas || [];
-
     if (modoFiltro === "periodo") {
       const ini = inicioDoDia(dataDe).getTime();
       const fim = fimDoDia(dataAte).getTime();
       return lista.filter((item) => {
+        if (item.tipo === "Saldo inicial") return false;
         const ts = item.data || item.createdAt || item.reg;
         if (!ts) return false;
         return ts >= ini && ts <= fim;
       });
     }
-
     return lista.filter((item) => {
+      if (item.tipo === "Saldo inicial") return false;
       const ts = item.data || item.createdAt || item.reg;
       if (!ts) return false;
       const d = new Date(ts);
@@ -272,11 +394,13 @@ export default function Relatorio() {
     anoSelecionado,
   ]);
 
-  const historicoPeriodo = useMemo(() => {
-    return [...filtrados]
-      .filter((i) => i.tipo !== "Saldo inicial")
-      .sort((a, b) => (a.data || a.reg || 0) - (b.data || b.reg || 0));
-  }, [filtrados]);
+  const historicoPeriodo = useMemo(
+    () =>
+      [...filtrados].sort(
+        (a, b) => (a.data || a.reg || 0) - (b.data || b.reg || 0)
+      ),
+    [filtrados]
+  );
 
   const resumo = useMemo(() => resumoDeLista(filtrados), [filtrados]);
 
@@ -284,7 +408,6 @@ export default function Relatorio() {
     const lista = dadosFinancas || [];
     let aReceber = 0;
     let aPagar = 0;
-
     lista.forEach((i) => {
       if (i.tipoMovimento === "entrada") {
         if (i.tipo === "Saldo inicial") return;
@@ -308,7 +431,6 @@ export default function Relatorio() {
         if (falta > 0) aPagar += falta;
       }
     });
-
     const saldoAtual = Number(saldo) || 0;
     return {
       saldoAtual: arred(saldoAtual),
@@ -320,19 +442,17 @@ export default function Relatorio() {
 
   const seriesGraficos = useMemo(() => {
     const lista = dadosFinancas || [];
-    const pontos = [];
-    for (let i = 11; i >= 0; i--) {
-      const ref = new Date(agora.getFullYear(), agora.getMonth() - i, 1);
-      const m = ref.getMonth();
-      const a = ref.getFullYear();
-      const ini = new Date(a, m, 1, 0, 0, 0, 0).getTime();
-      const fimM = new Date(a, m + 1, 0, 23, 59, 59, 999).getTime();
+    const janela = montarJanelaMesesGrafico(igrejaAtiva?.createdAt);
+    return janela.map(({ ano, mes, label }) => {
       let receita = 0;
       let despesa = 0;
       let dizimo = 0;
       lista.forEach((item) => {
+        if (item.tipo === "Saldo inicial") return;
         const ts = item.data || item.createdAt || item.reg;
-        if (!ts || ts < ini || ts > fimM) return;
+        if (!ts) return;
+        const d = new Date(ts);
+        if (d.getFullYear() !== ano || d.getMonth() !== mes) return;
         if (item.tipoMovimento === "entrada") {
           const v = valorEntrada(item);
           receita += v;
@@ -341,475 +461,52 @@ export default function Relatorio() {
           despesa += valorSaida(item);
         }
       });
-      pontos.push({
-        label: MESES_CURTO[m],
+      return {
+        label,
         receita: arred(receita),
         despesa: arred(despesa),
         dizimo: arred(dizimo),
-      });
-    }
-    return pontos;
-  }, [dadosFinancas]);
+      };
+    });
+  }, [dadosFinancas, igrejaAtiva?.createdAt]);
+
+  const labelJanelaGrafico = useMemo(() => {
+    if (!seriesGraficos.length) return "";
+    if (seriesGraficos.length === 1) return seriesGraficos[0].label;
+    return `${seriesGraficos[0].label} – ${
+      seriesGraficos[seriesGraficos.length - 1].label
+    }`;
+  }, [seriesGraficos]);
 
   const labelPeriodo = useMemo(() => {
     if (modoFiltro === "periodo") {
-      return `${inicioDoDia(dataDe).toLocaleDateString(
-        "pt-BR"
-      )} até ${fimDoDia(dataAte).toLocaleDateString("pt-BR")}`;
+      return `${inicioDoDia(dataDe).toLocaleDateString("pt-BR")} até ${fimDoDia(
+        dataAte
+      ).toLocaleDateString("pt-BR")}`;
     }
     return `${MESES[mesSelecionado]} de ${anoSelecionado}`;
   }, [modoFiltro, dataDe, dataAte, mesSelecionado, anoSelecionado]);
 
-  async function exportarPDF() {
+  const corPrincipal = colors.principal || "#65C556";
+  const corDespesa = "#C62828";
+
+  async function onExportar() {
     if (filtrados.length === 0) {
       Alert.alert("Aviso", "Não há registros neste período.");
       return;
     }
-
     setGerando(true);
-
     try {
-      const pdfDoc = await PDFDocument.create();
-      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-      const pageWidth = 595;
-      const pageHeight = 842;
-      const margin = 28;
-      const gapCol = 12;
-      const colRightW = 168;
-      const colLeftW = pageWidth - margin * 2 - gapCol - colRightW;
-      const xLeft = margin;
-      const xRight = margin + colLeftW + gapCol;
-
-      let page = pdfDoc.addPage([pageWidth, pageHeight]);
-      let yLeft = pageHeight - margin;
-      let yRight = pageHeight - margin;
-
-      // Mantém acentos (WinAnsi / Helvetica). Só normaliza aspas e travessões.
-      const safe = (t) =>
-        String(t ?? "")
-          .replace(/\u2013|\u2014/g, "-")
-          .replace(/\u2018|\u2019/g, "'")
-          .replace(/\u201c|\u201d/g, '"')
-          .replace(/\u2026/g, "...");
-
-      const pagesRef = () => pdfDoc.getPages();
-
-      const drawVLine = (p) => {
-        p.drawLine({
-          start: { x: xRight - gapCol / 2, y: margin },
-          end: { x: xRight - gapCol / 2, y: pageHeight - margin },
-          thickness: 0.5,
-          color: C.line,
-        });
-      };
-
-      drawVLine(page);
-
-      const novaPagina = () => {
-        page = pdfDoc.addPage([pageWidth, pageHeight]);
-        yLeft = pageHeight - margin;
-        yRight = pageHeight - margin;
-        drawVLine(page);
-      };
-
-      const ensureLeft = (h) => {
-        if (yLeft - h < margin + 20) {
-          novaPagina();
-        }
-      };
-
-      const lineLeft = (yy) => {
-        page.drawLine({
-          start: { x: xLeft, y: yy },
-          end: { x: xLeft + colLeftW, y: yy },
-          thickness: 0.5,
-          color: C.line,
-        });
-      };
-
-      const nomeIgreja = igrejaAtiva?.nome || "Tesouraria";
-
-      // ===== COLUNA ESQUERDA =====
-      page.drawText(safe(nomeIgreja), {
-        x: xLeft,
-        y: yLeft,
-        size: 13,
-        font: fontBold,
-        color: C.ink,
-        maxWidth: colLeftW,
+      await exportarRelatorioPDF({
+        nomeIgreja: igrejaAtiva?.nome || "Tesouraria",
+        labelPeriodo,
+        labelJanelaGrafico,
+        resumo,
+        projecao,
+        seriesGraficos,
+        historicoPeriodo,
+        formatoMoeda,
       });
-      yLeft -= 14;
-      page.drawText(safe("RELATÓRIO FINANCEIRO"), {
-        x: xLeft,
-        y: yLeft,
-        size: 8,
-        font,
-        color: C.muted,
-      });
-      yLeft -= 12;
-      page.drawText(safe(labelPeriodo), {
-        x: xLeft,
-        y: yLeft,
-        size: 9,
-        font: fontBold,
-        color: C.ink,
-        maxWidth: colLeftW,
-      });
-      yLeft -= 8;
-      lineLeft(yLeft);
-      yLeft -= 14;
-
-      const textoExec = safe(
-        `Período: ${labelPeriodo}. Receitas R$ ${formatoMoeda.format(
-          resumo.entradas
-        )}, despesas R$ ${formatoMoeda.format(
-          resumo.saidas
-        )}, saldo do período R$ ${formatoMoeda.format(resumo.saldo)}. ` +
-          `Saldo atual R$ ${formatoMoeda.format(
-            projecao.saldoAtual
-          )}. A receber R$ ${formatoMoeda.format(
-            projecao.aReceber
-          )}, a pagar R$ ${formatoMoeda.format(
-            projecao.aPagar
-          )}. Projetado R$ ${formatoMoeda.format(projecao.saldoProjetado)}.`
-      );
-
-      let resto = textoExec;
-      const maxChars = 58;
-      while (resto.length > 0) {
-        ensureLeft(12);
-        let chunk = resto.slice(0, maxChars);
-        if (resto.length > maxChars) {
-          const sp = chunk.lastIndexOf(" ");
-          if (sp > 28) chunk = chunk.slice(0, sp);
-        }
-        page.drawText(chunk, {
-          x: xLeft,
-          y: yLeft,
-          size: 8,
-          font,
-          color: C.ink,
-          maxWidth: colLeftW,
-        });
-        yLeft -= 11;
-        resto = resto.slice(chunk.length).trim();
-      }
-      yLeft -= 12;
-
-      const cardW = (colLeftW - 6) / 2;
-      const cardH = 36;
-      ensureLeft(cardH * 2 + 20);
-
-      const kpis = [
-        { label: "RECEITAS", value: resumo.entradas, color: C.green },
-        { label: "DESPESAS", value: resumo.saidas, color: C.red },
-        { label: "RESULTADO", value: resumo.saldo, color: C.ink },
-        { label: "DÍZIMOS", value: resumo.dizimos, color: C.green },
-      ];
-      kpis.forEach((k, i) => {
-        const col = i % 2;
-        const row = Math.floor(i / 2);
-        const x = xLeft + col * (cardW + 6);
-        const yy = yLeft - row * (cardH + 6);
-        page.drawRectangle({
-          x,
-          y: yy - cardH,
-          width: cardW,
-          height: cardH,
-          color: C.card,
-          borderColor: C.line,
-          borderWidth: 0.5,
-        });
-        page.drawText(safe(k.label), {
-          x: x + 6,
-          y: yy - 12,
-          size: 6,
-          font,
-          color: C.muted,
-        });
-        page.drawText(safe(`R$ ${formatoMoeda.format(k.value)}`), {
-          x: x + 6,
-          y: yy - 26,
-          size: 8,
-          font: fontBold,
-          color: k.color,
-          maxWidth: cardW - 10,
-        });
-      });
-      yLeft -= cardH * 2 + 18;
-
-      ensureLeft(cardH + 20);
-      page.drawText(safe("Posição e projeção"), {
-        x: xLeft,
-        y: yLeft,
-        size: 9,
-        font: fontBold,
-        color: C.ink,
-      });
-      yLeft -= 12;
-      const proj = [
-        { label: "ATUAL", value: projecao.saldoAtual, color: C.ink },
-        { label: "A RECEBER", value: projecao.aReceber, color: C.green },
-        { label: "A PAGAR", value: projecao.aPagar, color: C.red },
-        { label: "PROJETADO", value: projecao.saldoProjetado, color: C.ink },
-      ];
-      const pW = (colLeftW - 9) / 4;
-      proj.forEach((k, i) => {
-        const x = xLeft + i * (pW + 3);
-        page.drawRectangle({
-          x,
-          y: yLeft - cardH,
-          width: pW,
-          height: cardH,
-          color: C.card,
-          borderColor: C.line,
-          borderWidth: 0.5,
-        });
-        page.drawText(safe(k.label), {
-          x: x + 3,
-          y: yLeft - 11,
-          size: 5.5,
-          font,
-          color: C.muted,
-        });
-        page.drawText(safe(formatoMoeda.format(k.value)), {
-          x: x + 3,
-          y: yLeft - 24,
-          size: 7,
-          font: fontBold,
-          color: k.color,
-          maxWidth: pW - 6,
-        });
-      });
-      yLeft -= cardH + 18;
-
-      const labels = seriesGraficos.map((s) => s.label);
-
-      ensureLeft(100);
-      page.drawText(safe("Dízimos (12 meses)"), {
-        x: xLeft,
-        y: yLeft,
-        size: 9,
-        font: fontBold,
-        color: C.ink,
-      });
-      yLeft -= 8;
-      const chartH1 = 72;
-      desenharLinhaChart(page, font, {
-        x: xLeft,
-        y: yLeft,
-        width: colLeftW,
-        height: chartH1,
-        labels,
-        series: [{ values: seriesGraficos.map((s) => s.dizimo) }],
-        colors: [C.green],
-      });
-      yLeft -= chartH1 + 16;
-
-      ensureLeft(110);
-      page.drawText(safe("Receitas e despesas (12 meses)"), {
-        x: xLeft,
-        y: yLeft,
-        size: 9,
-        font: fontBold,
-        color: C.ink,
-      });
-      yLeft -= 8;
-      const chartH2 = 80;
-      desenharLinhaChart(page, font, {
-        x: xLeft,
-        y: yLeft,
-        width: colLeftW,
-        height: chartH2,
-        labels,
-        series: [
-          { values: seriesGraficos.map((s) => s.receita) },
-          { values: seriesGraficos.map((s) => s.despesa) },
-        ],
-        colors: [C.green, C.red],
-      });
-      yLeft -= chartH2 + 16;
-
-      const drawTabela = (titulo, lista, cor) => {
-        ensureLeft(20);
-        page.drawText(safe(titulo), {
-          x: xLeft,
-          y: yLeft,
-          size: 9,
-          font: fontBold,
-          color: C.ink,
-        });
-        yLeft -= 8;
-        lineLeft(yLeft);
-        yLeft -= 12;
-        if (!lista.length) {
-          page.drawText(safe("Sem dados."), {
-            x: xLeft,
-            y: yLeft,
-            size: 8,
-            font,
-            color: C.muted,
-          });
-          yLeft -= 14;
-          return;
-        }
-        lista.forEach(([tipo, total]) => {
-          ensureLeft(12);
-          page.drawText(safe(String(tipo)), {
-            x: xLeft,
-            y: yLeft,
-            size: 8,
-            font,
-            color: C.ink,
-            maxWidth: colLeftW - 70,
-          });
-          page.drawText(safe(`R$ ${formatoMoeda.format(total)}`), {
-            x: xLeft + colLeftW - 62,
-            y: yLeft,
-            size: 8,
-            font: fontBold,
-            color: cor,
-          });
-          yLeft -= 12;
-        });
-        yLeft -= 10;
-      };
-
-      drawTabela(
-        "Receitas por tipo",
-        Object.entries(resumo.porTipoEntrada).sort((a, b) => b[1] - a[1]),
-        C.green
-      );
-      drawTabela(
-        "Despesas por tipo",
-        Object.entries(resumo.porTipoSaida).sort((a, b) => b[1] - a[1]),
-        C.red
-      );
-
-      // ===== COLUNA DIREITA =====
-      const drawRightHeader = () => {
-        page.drawText(safe("Movimentações"), {
-          x: xRight,
-          y: yRight,
-          size: 9,
-          font: fontBold,
-          color: C.ink,
-        });
-        yRight -= 6;
-        page.drawLine({
-          start: { x: xRight, y: yRight },
-          end: { x: xRight + colRightW, y: yRight },
-          thickness: 0.5,
-          color: C.line,
-        });
-        yRight -= 12;
-      };
-
-      page = pagesRef()[0];
-      yRight = pageHeight - margin;
-      drawRightHeader();
-
-      if (historicoPeriodo.length === 0) {
-        page.drawText(safe("Nenhum lançamento."), {
-          x: xRight,
-          y: yRight,
-          size: 8,
-          font,
-          color: C.muted,
-        });
-      } else {
-        for (let i = 0; i < historicoPeriodo.length; i++) {
-          const item = historicoPeriodo[i];
-          const label = labelMovimento(item);
-          const valor = valorMovimento(item);
-          const isEnt = item.tipoMovimento === "entrada";
-          const sinal = isEnt ? "+" : "-";
-          const corVal = isEnt ? C.green : C.red;
-          const valorTxt = `${sinal} ${formatoMoeda.format(valor)}`;
-
-          if (yRight - 14 < margin + 16) {
-            const all = pagesRef();
-            const idx = all.indexOf(page);
-            if (idx >= 0 && idx < all.length - 1) {
-              page = all[idx + 1];
-            } else {
-              page = pdfDoc.addPage([pageWidth, pageHeight]);
-              drawVLine(page);
-            }
-            yRight = pageHeight - margin;
-            drawRightHeader();
-          }
-
-          let lab = safe(label);
-          if (lab.length > 18) lab = lab.slice(0, 17) + ".";
-
-          page.drawText(lab, {
-            x: xRight,
-            y: yRight,
-            size: 8,
-            font,
-            color: C.ink,
-            maxWidth: colRightW - 52,
-          });
-
-          const vw = fontBold.widthOfTextAtSize(valorTxt, 8);
-          page.drawText(valorTxt, {
-            x: xRight + colRightW - vw,
-            y: yRight,
-            size: 8,
-            font: fontBold,
-            color: corVal,
-          });
-
-          yRight -= 13;
-        }
-      }
-
-      const lastPage = pagesRef()[pagesRef().length - 1];
-      lastPage.drawText(
-        safe(
-          `Gerado em ${new Date().toLocaleDateString(
-            "pt-BR"
-          )} ${new Date().toLocaleTimeString("pt-BR")} · ${
-            resumo.quantidade
-          } reg.`
-        ),
-        {
-          x: margin,
-          y: 14,
-          size: 7,
-          font,
-          color: C.muted,
-        }
-      );
-
-      const base64 = await pdfDoc.saveAsBase64();
-      if (!base64) throw new Error("Falha ao gerar o conteúdo do PDF.");
-
-      const fileName = `relatorio_${Date.now()}.pdf`;
-      const cachePath = `${RNFS.CachesDirectoryPath}/${fileName}`;
-      await RNFS.writeFile(cachePath, base64, "base64");
-      const fileUrl = cachePath.startsWith("file://")
-        ? cachePath
-        : `file://${cachePath}`;
-
-      try {
-        await Share.open({
-          title: "Relatório Financeiro",
-          url: fileUrl,
-          type: "application/pdf",
-          showAppsToView: true,
-          failOnCancel: false,
-        });
-      } catch {
-        await RNFS.copyFile(
-          cachePath,
-          `${RNFS.DownloadDirectoryPath}/${fileName}`
-        );
-        Alert.alert("PDF salvo", `Arquivo salvo em Downloads:\n\n${fileName}`);
-      }
     } catch (e) {
       console.log("ERRO PDF:", e);
       Alert.alert("Erro ao exportar PDF", e?.message || "Erro desconhecido");
@@ -819,6 +516,11 @@ export default function Relatorio() {
   }
 
   if ((!authPronto || load) && !(dadosFinancas || []).length) return <Load />;
+
+  const dadosBarrasDizimo = seriesGraficos.map((s) => ({
+    label: s.label,
+    value: s.dizimo,
+  }));
 
   return (
     <View style={styles.container}>
@@ -844,7 +546,6 @@ export default function Relatorio() {
                 Por mês
               </Text>
             </TouchableOpacity>
-
             <TouchableOpacity
               style={[
                 styles.segmentBtn,
@@ -882,7 +583,6 @@ export default function Relatorio() {
                   <Ionicons name="chevron-forward" size={18} color="#444" />
                 </TouchableOpacity>
               </View>
-
               <View style={styles.mesesGrid}>
                 {MESES.map((nome, index) => {
                   const ativo = mesSelecionado === index;
@@ -963,10 +663,10 @@ export default function Relatorio() {
           <TouchableOpacity
             style={[
               styles.pdfBtn,
-              { backgroundColor: colors.principal || "#65C556" },
+              { backgroundColor: corPrincipal },
               gerando && { opacity: 0.75 },
             ]}
-            onPress={exportarPDF}
+            onPress={onExportar}
             disabled={gerando}
             activeOpacity={0.85}
           >
@@ -980,6 +680,28 @@ export default function Relatorio() {
             )}
           </TouchableOpacity>
         </View>
+
+        <View style={styles.block}>
+          <Text style={styles.previewTitle}>Dízimos</Text>
+          <Text style={styles.previewSub}>{labelJanelaGrafico}</Text>
+          <ChartBarras
+            dados={dadosBarrasDizimo}
+            cor={corPrincipal}
+            formatoMoeda={formatoMoeda}
+            altura={150}
+          />
+        </View>
+
+        <View style={styles.block}>
+          <Text style={styles.previewTitle}>Receitas e despesas</Text>
+          <Text style={styles.previewSub}>{labelJanelaGrafico}</Text>
+          <ChartLinhas
+            dados={seriesGraficos}
+            corReceita={corPrincipal}
+            corDespesa={corDespesa}
+            altura={150}
+          />
+        </View>
       </ScrollView>
     </View>
   );
@@ -990,6 +712,7 @@ const styles = StyleSheet.create({
   content: {
     paddingTop: 12,
     paddingBottom: 100,
+    paddingHorizontal: 14,
   },
   block: {
     backgroundColor: "#fff",
@@ -1106,5 +829,91 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontFamily: "Roboto-Bold",
+  },
+  previewTitle: {
+    fontSize: 15,
+    fontFamily: "Roboto-Medium",
+    color: "#1f2933",
+  },
+  previewSub: {
+    marginTop: 2,
+    marginBottom: 12,
+    fontSize: 12,
+    fontFamily: "Roboto-Regular",
+    color: "#9aa0a6",
+  },
+  chartBox: { width: "100%" },
+  barsRowStart: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "flex-start",
+    paddingRight: 8,
+  },
+  barColFixed: {
+    alignItems: "center",
+    paddingHorizontal: 2,
+  },
+  barValue: {
+    fontSize: 9,
+    fontFamily: "Roboto-Medium",
+    color: "#555",
+    marginBottom: 4,
+  },
+  barTrack: {
+    width: "70%",
+    maxWidth: 28,
+    justifyContent: "flex-end",
+    backgroundColor: "#f4f5f7",
+    borderRadius: 6,
+    overflow: "hidden",
+  },
+  barFill: {
+    width: "100%",
+    borderRadius: 6,
+    minHeight: 3,
+  },
+  barLabel: {
+    marginTop: 6,
+    fontSize: 10,
+    fontFamily: "Roboto-Regular",
+    color: "#888",
+    textAlign: "center",
+  },
+  legendRow: {
+    flexDirection: "row",
+    gap: 16,
+    marginBottom: 4,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    fontSize: 11,
+    fontFamily: "Roboto-Regular",
+    color: "#666",
+  },
+  axisBase: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: "#ececec",
+  },
+  lineDot: {
+    position: "absolute",
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  lineLabels: {
+    flexDirection: "row",
+    marginTop: 8,
   },
 });
