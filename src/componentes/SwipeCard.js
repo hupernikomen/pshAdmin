@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useContext, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -9,123 +9,120 @@ import {
   Pressable,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
+import { AppContext } from "../context/AppContext";
 
 const ACTION_WIDTH = 64;
-const OPEN_THRESHOLD = 48;
+const OPEN_THRESHOLD = 40;
 
-/**
- * Card com arraste para a esquerda revelando ações.
- * Toque no card = abre/fecha os botões (não navega).
- *
- * - hasRecibo?: boolean → ícone de anexo
- * - canEdit?: boolean   → ícone de edição (ao lado do anexo se ambos)
- */
 export default function SwipeCard({
   icon = "ellipse-outline",
-  iconColor = "#555",
-  tint = "#f0f0f0",
-  title,
-  subtitle,
-  value,
+  iconColor = "#333",
+  tint = "#f4f5f7",
+  title = "",
+  subtitle = "",
+  value = "",
+  actions = [],
+  open = false,
+  onOpenChange,
+  onPress,
   hasRecibo = false,
   canEdit = false,
-  actions = [],
-  open,
-  onOpenChange,
-  style,
 }) {
-  const maxOpen = Math.max(actions.length, 0) * ACTION_WIDTH;
-  const tx = useRef(new Animated.Value(0)).current;
-  const openRef = useRef(false);
+  const { ocultarValores } = useContext(AppContext);
+  const valorExibido = ocultarValores ? "000" : value;
+
+  const qtd = Array.isArray(actions) ? actions.length : 0;
+  const maxOpen = qtd * ACTION_WIDTH;
+
+  const translateX = useRef(new Animated.Value(0)).current;
+  const startX = useRef(0);
 
   useEffect(() => {
-    if (typeof open === "boolean") {
-      animateTo(open ? -maxOpen : 0, false);
-      openRef.current = open;
-    }
-  }, [open, maxOpen]);
-
-  function animateTo(to, notify = true) {
-    Animated.spring(tx, {
-      toValue: to,
+    Animated.spring(translateX, {
+      toValue: open && maxOpen > 0 ? -maxOpen : 0,
       useNativeDriver: true,
       friction: 9,
       tension: 80,
-    }).start(() => {
-      const isOpen = to < -OPEN_THRESHOLD / 2;
-      openRef.current = isOpen;
-      if (notify) onOpenChange?.(isOpen);
-    });
+    }).start();
+  }, [open, maxOpen]);
+
+  function fechar() {
+    onOpenChange?.(false);
+    Animated.spring(translateX, {
+      toValue: 0,
+      useNativeDriver: true,
+      friction: 9,
+      tension: 80,
+    }).start();
   }
 
-  function close() {
-    animateTo(0);
-  }
-
-  function openActions() {
-    if (maxOpen <= 0) return;
-    animateTo(-maxOpen);
+  function abrir() {
+    if (maxOpen <= 0) {
+      onPress?.();
+      return;
+    }
+    onOpenChange?.(true);
+    Animated.spring(translateX, {
+      toValue: -maxOpen,
+      useNativeDriver: true,
+      friction: 9,
+      tension: 80,
+    }).start();
   }
 
   function toggle() {
-    if (maxOpen <= 0) return;
-    if (openRef.current) close();
-    else openActions();
+    if (open) fechar();
+    else abrir();
   }
 
-  const pan = useRef(
+  const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) =>
-        maxOpen > 0 && Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy),
+        Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderGrant: () => {
+        translateX.stopAnimation((v) => {
+          startX.current = v;
+        });
+      },
       onPanResponderMove: (_, g) => {
         if (maxOpen <= 0) return;
-        let next = g.dx + (openRef.current ? -maxOpen : 0);
+        let next = startX.current + g.dx;
         if (next > 0) next = 0;
         if (next < -maxOpen) next = -maxOpen;
-        tx.setValue(next);
+        translateX.setValue(next);
       },
       onPanResponderRelease: (_, g) => {
         if (maxOpen <= 0) return;
-        const current = openRef.current ? -maxOpen + g.dx : g.dx;
-        if (current < -OPEN_THRESHOLD || g.vx < -0.4) {
-          animateTo(-maxOpen);
-        } else {
-          animateTo(0);
-        }
+        const current = startX.current + g.dx;
+        const shouldOpen =
+          current < -OPEN_THRESHOLD || (open && current < -maxOpen / 2);
+        if (shouldOpen) abrir();
+        else fechar();
       },
     })
   ).current;
 
-  function handleAction(action) {
-    close();
-    setTimeout(() => action.onPress?.(), 80);
-  }
-
-  const hasActions = actions.length > 0;
-  const showMetaIcons = hasRecibo || canEdit;
-
   return (
-    <View style={[styles.wrap, style]}>
-      {hasActions && (
-        <View style={[styles.actionsRow, { width: maxOpen }]}>
+    <View style={styles.wrap}>
+      {/* botões atrás */}
+      {qtd > 0 && (
+        <View style={[styles.actionsBehind, { width: maxOpen }]}>
           {actions.map((a) => (
             <TouchableOpacity
-              key={a.key}
+              key={a.key || a.icon}
               style={[
                 styles.actionBtn,
-                {
-                  backgroundColor: a.backgroundColor || "#666",
-                  width: ACTION_WIDTH,
-                },
+                { backgroundColor: a.backgroundColor || "#666" },
               ]}
+              onPress={() => {
+                fechar();
+                a.onPress?.();
+              }}
               activeOpacity={0.85}
-              onPress={() => handleAction(a)}
             >
-              <Ionicons name={a.icon} size={20} color={a.color || "#fff"} />
+              <Ionicons name={a.icon || "ellipsis-horizontal"} size={20} color="#fff" />
               {!!a.label && (
-                <Text
-                  style={[styles.actionLabel, { color: a.color || "#fff" }]}
-                >
+                <Text style={styles.actionLabel} numberOfLines={1}>
                   {a.label}
                 </Text>
               )}
@@ -135,45 +132,47 @@ export default function SwipeCard({
       )}
 
       <Animated.View
-        style={[styles.card, { transform: [{ translateX: tx }] }]}
-        {...(hasActions ? pan.panHandlers : {})}
+        style={[styles.card, { transform: [{ translateX }] }]}
+        {...panResponder.panHandlers}
       >
         <Pressable onPress={toggle} style={styles.cardInner}>
           <View style={[styles.iconCircle, { backgroundColor: tint }]}>
             <Ionicons name={icon} size={18} color={iconColor} />
           </View>
 
-          <View style={styles.itemCenter}>
-            <Text style={styles.itemTitle} numberOfLines={1}>
-              {title}
-            </Text>
-            {!!subtitle && (
-              <Text style={styles.itemSub} numberOfLines={2}>
-                {subtitle}
+          <View style={styles.center}>
+            <View style={styles.titleRow}>
+              <Text style={styles.title} numberOfLines={1}>
+                {title}
               </Text>
-            )}
-          </View>
-
-          <View style={styles.rightCol}>
-            <View style={styles.rightTop}>
-              {value != null && value !== "" && (
-                <Text style={styles.itemValue} numberOfLines={1}>
-                  {value}
-                </Text>
-              )}
-              
+              <Text style={styles.value} numberOfLines={1}>
+                {valorExibido}
+              </Text>
             </View>
 
-            {showMetaIcons ? (
-              <View style={styles.metaIcons}>
+            <View style={styles.subRow}>
+              <Text style={styles.subtitle} numberOfLines={2}>
+                {subtitle}
+              </Text>
+              <View style={styles.badges}>
                 {hasRecibo && (
-                  <Ionicons name="attach-outline" size={18} color="#888" />
+                  <Ionicons
+                    name="attach-outline"
+                    size={14}
+                    color="#888"
+                    style={styles.badgeIcon}
+                  />
                 )}
                 {canEdit && (
-                  <Ionicons name="create-outline" size={18} color="#888" />
+                  <Ionicons
+                    name="create-outline"
+                    size={14}
+                    color="#888"
+                    style={styles.badgeIcon}
+                  />
                 )}
               </View>
-            ) : null}
+            </View>
           </View>
         </Pressable>
       </Animated.View>
@@ -184,32 +183,38 @@ export default function SwipeCard({
 const styles = StyleSheet.create({
   wrap: {
     position: "relative",
-    borderRadius: 18,
-    overflow: "hidden",
+    marginBottom: 0,
   },
-  actionsRow: {
+  actionsBehind: {
     position: "absolute",
     right: 0,
     top: 0,
     bottom: 0,
     flexDirection: "row",
     alignItems: "stretch",
+    overflow: "hidden",
+    borderRadius: 18,
   },
   actionBtn: {
+    width: ACTION_WIDTH,
     alignItems: "center",
     justifyContent: "center",
-    gap: 2,
+    paddingHorizontal: 4,
   },
   actionLabel: {
+    marginTop: 2,
     fontSize: 10,
     fontFamily: "Roboto-Medium",
+    color: "#fff",
   },
   card: {
     backgroundColor: "#fff",
+    borderRadius: 18,
+    overflow: "hidden",
   },
   cardInner: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     paddingVertical: 14,
     paddingHorizontal: 12,
   },
@@ -221,44 +226,47 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 12,
   },
-  itemCenter: {
+  center: {
     flex: 1,
-    paddingRight: 8,
-    minHeight: 40,
-    justifyContent: "center",
+    minWidth: 0,
   },
-  itemTitle: {
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  title: {
+    flex: 1,
     fontSize: 14,
     fontFamily: "Roboto-Regular",
     color: "#1f2933",
-    marginBottom: 2,
   },
-  itemSub: {
-    fontSize: 12,
-    fontFamily: "Roboto-Light",
-  },
-  rightCol: {
-    alignItems: "flex-end",
-    justifyContent: "flex-start",
-    minWidth: 72,
-  },
-  rightTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: 20,
-  },
-  itemValue: {
+  value: {
     fontSize: 14,
     fontFamily: "Roboto-Medium",
     color: "#1f2933",
   },
-  chevron: {
-    marginLeft: 4,
+  subRow: {
+    marginTop: 2,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
   },
-  metaIcons: {
-    marginTop: 6,
+  subtitle: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: "Roboto-Light",
+    color: "#888",
+  },
+  badges: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 4,
+    minHeight: 16,
+  },
+  badgeIcon: {
+    marginTop: 1,
   },
 });

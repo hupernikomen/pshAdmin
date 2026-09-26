@@ -20,6 +20,7 @@ import { AuthContext } from "./AuthContext";
 export const AppContext = createContext({});
 
 const KEY_IGREJA_ATIVA = "@igreja_ativa_id";
+const KEY_OCULTAR_VALORES = "@ocultar_valores";
 
 function arredondarMoney(v) {
   return Math.round((Number(v) || 0) * 100) / 100;
@@ -131,6 +132,8 @@ export function AppProvider({ children }) {
   const [igrejaAtiva, setIgrejaAtiva] = useState(null);
   const [igrejasProntas, setIgrejasProntas] = useState(false);
 
+  const [ocultarValores, setOcultarValoresState] = useState(false);
+
   function getUserId() {
     return uid || user?.uid || null;
   }
@@ -141,6 +144,27 @@ export function AppProvider({ children }) {
 
   function getIgrejaId() {
     return igrejaAtiva?.id || null;
+  }
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const v = await AsyncStorage.getItem(KEY_OCULTAR_VALORES);
+        setOcultarValoresState(v === "1");
+      } catch (_) {}
+    })();
+  }, []);
+
+  async function setOcultarValores(oculto) {
+    const next = !!oculto;
+    setOcultarValoresState(next);
+    try {
+      await AsyncStorage.setItem(KEY_OCULTAR_VALORES, next ? "1" : "0");
+    } catch (_) {}
+  }
+
+  function toggleOcultarValores() {
+    setOcultarValores(!ocultarValores);
   }
 
   useEffect(() => {
@@ -659,6 +683,9 @@ export function AppProvider({ children }) {
         removerMembro,
         podeEditarFinanceiro,
         getIgrejaId,
+        ocultarValores,
+        setOcultarValores,
+        toggleOcultarValores,
       }}
     >
       {children}

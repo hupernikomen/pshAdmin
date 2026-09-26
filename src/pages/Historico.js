@@ -66,86 +66,140 @@ function textoOrigem(item) {
   return null;
 }
 
+/**
+ * Histórico por evento de caixa:
+ * - cada item de valoresPagos / valoresRecebidos = 1 linha (data + valor da parcela)
+ * - não mostra card "pai" agregando total da dívida
+ * - sem pagamentos ainda: 1 linha do registro em aberto (se houver saldo em aberto)
+ */
 function montarLinhasHistorico(dadosFinancas) {
   const linhas = [];
 
   (dadosFinancas || []).forEach((item) => {
-    // Saldo inicial fica só em Configurações — não lista no histórico
     if (item.tipo === "Saldo inicial") return;
 
     const sortBase = Number(item.data || item.reg || item.createdAt || 0) || 0;
-    const pagos = item.valoresPagos || [];
-    const recebidos = item.valoresRecebidos || [];
+    const pagos = Array.isArray(item.valoresPagos) ? item.valoresPagos : [];
+    const recebidos = Array.isArray(item.valoresRecebidos)
+      ? item.valoresRecebidos
+      : [];
+    const parcelas = Array.isArray(item.parcelas) ? item.parcelas : [];
+    const totalParcelas =
+      item.quantidadeParcelas ||
+      (parcelas.length > 0 ? parcelas.length : null);
 
+    // --- SAÍDA: uma linha por pagamento ---
+    if (item.tipoMovimento === "saida" && pagos.length > 0) {
+      pagos.forEach((p, idx) => {
+        const tsPag = Number(p.data || sortBase) || sortBase;
+        const nParc =
+          p.parcelaNumero != null
+            ? p.parcelaNumero
+            : totalParcelas
+            ? idx + 1
+            : null;
+
+        linhas.push({
+          kind: "pagamento",
+          rowId: `${item.id}_pag_${p.id || idx}`,
+          id: item.id,
+          tipoMovimento: "saida",
+          tipo: item.tipo || "Pagamento",
+          descricao: item.descricao || item.tipo || "Despesa",
+          data: tsPag,
+          valorTotal: Number(p.valor) || 0,
+          valorPagoTotal: Number(p.valor) || 0,
+          status: "quitada",
+          origemPagamento: p.origemPagamento || item.origemPagamento || null,
+          caixinhaNome: p.caixinhaNome || item.caixinhaNome || null,
+          caixinhaId: p.caixinhaId || item.caixinhaId || null,
+          parcelaNumero: nParc,
+          parcelaTotal: totalParcelas,
+          registroPaiId: item.id,
+          reg: tsPag,
+          sortKey: tsPag,
+          createdAt: tsPag,
+          reciboUrl: idx === 0 ? item.reciboUrl || null : null,
+        });
+      });
+      return;
+    }
+
+    // Fallback parcelas pagas sem valoresPagos preenchido
+    if (item.tipoMovimento === "saida" && parcelas.length > 0) {
+      const pagas = parcelas.filter(
+        (p) => p.status === "paga" || p.status === "quitada" || !!p.pago
+      );
+      if (pagas.length > 0) {
+        pagas.forEach((p, idx) => {
+          const tsPag =
+            Number(p.dataPagamento || p.pagoEm || p.data || sortBase) ||
+            sortBase;
+          linhas.push({
+            kind: "pagamento",
+            rowId: `${item.id}_parc_${p.id || idx}`,
+            id: item.id,
+            tipoMovimento: "saida",
+            tipo: item.tipo || "Pagamento",
+            descricao: item.descricao || item.tipo || "Despesa",
+            data: tsPag,
+            valorTotal: Number(p.valor) || 0,
+            valorPagoTotal: Number(p.valor) || 0,
+            status: "quitada",
+            origemPagamento: item.origemPagamento || null,
+            caixinhaNome: item.caixinhaNome || null,
+            caixinhaId: item.caixinhaId || null,
+            parcelaNumero: p.numero != null ? p.numero : idx + 1,
+            parcelaTotal: totalParcelas || parcelas.length,
+            registroPaiId: item.id,
+            reg: tsPag,
+            sortKey: tsPag,
+            createdAt: tsPag,
+            reciboUrl: null,
+          });
+        });
+        return;
+      }
+    }
+
+    // --- ENTRADA: uma linha por recebimento ---
+    if (item.tipoMovimento === "entrada" && recebidos.length > 0) {
+      recebidos.forEach((p, idx) => {
+        const tsRec = Number(p.data || sortBase) || sortBase;
+        linhas.push({
+          kind: "recebimento",
+          rowId: `${item.id}_rec_${p.id || idx}`,
+          id: item.id,
+          tipoMovimento: "entrada",
+          tipo: item.tipo || "Recebimento",
+          descricao: item.descricao || item.tipo || "Receita",
+          data: tsRec,
+          valorTotal: Number(p.valor) || 0,
+          valorRecebidoTotal: Number(p.valor) || 0,
+          status: "quitada",
+          registroPaiId: item.id,
+          reg: tsRec,
+          sortKey: tsRec,
+          createdAt: tsRec,
+          reciboUrl: idx === 0 ? item.reciboUrl || null : null,
+        });
+      });
+      return;
+    }
+
+    // Sem eventos parciais: movimento simples (à vista) ou ainda em aberto
     linhas.push({
       ...item,
       kind: "registro",
       rowId: item.id,
       sortKey: sortBase,
     });
-
-    if (pagos.length > 1) {
-      const totalParcelas =
-        item.quantidadeParcelas ||
-        (Array.isArray(item.parcelas) ? item.parcelas.length : null);
-
-      pagos.slice(1).forEach((p, idx) => {
-        const tsPag = Number(p.data || sortBase) || sortBase;
-        linhas.push({
-          kind: "pagamento",
-          rowId: `${item.id}_pag_${p.id || idx + 1}`,
-          id: item.id,
-          tipoMovimento: "saida",
-          tipo: item.tipo || "Pagamento",
-          descricao: item.descricao || item.tipo || "Despesa",
-          data: tsPag,
-          valorTotal: p.valor,
-          valorPagoTotal: p.valor,
-          status: "quitada",
-          origemPagamento: p.origemPagamento || item.origemPagamento || null,
-          caixinhaNome: p.caixinhaNome || item.caixinhaNome || null,
-          caixinhaId: p.caixinhaId || item.caixinhaId || null,
-          parcelaNumero: p.parcelaNumero || null,
-          parcelaTotal: totalParcelas,
-          registroPaiId: item.id,
-          reg: tsPag,
-          sortKey: tsPag,
-          createdAt: tsPag,
-          reciboUrl: null,
-        });
-      });
-    }
-
-    if (recebidos.length > 1) {
-      recebidos.slice(1).forEach((p, idx) => {
-        const tsRec = Number(p.data || sortBase) || sortBase;
-        linhas.push({
-          kind: "recebimento",
-          rowId: `${item.id}_rec_${p.id || idx + 1}`,
-          id: item.id,
-          tipoMovimento: "entrada",
-          tipo: item.tipo || "Recebimento",
-          descricao: item.descricao || item.tipo || "Receita",
-          data: tsRec,
-          valorTotal: p.valor,
-          valorRecebidoTotal: p.valor,
-          status: "quitada",
-          registroPaiId: item.id,
-          reg: tsRec,
-          sortKey: tsRec,
-          createdAt: tsRec,
-          reciboUrl: null,
-        });
-      });
-    }
   });
 
-  // Mais novo no topo (data decrescente)
   return linhas.sort((a, b) => {
     const da = Number(a.sortKey || a.data || a.reg || 0) || 0;
     const db = Number(b.sortKey || b.data || b.reg || 0) || 0;
     if (db !== da) return db - da;
-    // desempate estável
     return String(b.rowId || "").localeCompare(String(a.rowId || ""));
   });
 }
@@ -325,13 +379,6 @@ export default function Historico() {
             item.valorTotal ||
             0;
 
-          const temParcial =
-            !isParcela &&
-            item.valorTotal &&
-            (item.valorRecebidoTotal || item.valorPagoTotal) &&
-            item.valorTotal !==
-              (item.valorRecebidoTotal || item.valorPagoTotal);
-
           const temRecibo = !!item.reciboUrl && !isParcela;
           const origem = textoOrigem(item);
 
@@ -347,11 +394,6 @@ export default function Historico() {
             item.tipo,
             textoParcela,
             origem ? `Pago: ${origem}` : null,
-            temParcial
-              ? `Total ${formatoMoeda.format(item.valorTotal)} · Pago ${formatoMoeda.format(
-                  item.valorRecebidoTotal || item.valorPagoTotal || 0
-                )}`
-              : null,
           ].filter(Boolean);
 
           const actions = [];
