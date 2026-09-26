@@ -261,6 +261,66 @@ export async function exportarRelatorioPDF({
     });
   };
 
+  const drawSectionTitle = (titulo) => {
+    ensureLeft(22);
+    page.drawText(safe(titulo), {
+      x: xLeft,
+      y: yLeft,
+      size: 9,
+      font: fontBold,
+      color: C.ink,
+    });
+    yLeft -= 6;
+    lineLeft(yLeft);
+    yLeft -= 10;
+  };
+
+  const drawKpiRow = (items, cardH = 44) => {
+    const n = items.length;
+    const gap = 5;
+    const cardW = (colLeftW - gap * (n - 1)) / n;
+    ensureLeft(cardH + 8);
+
+    items.forEach((k, i) => {
+      const x = xLeft + i * (cardW + gap);
+      page.drawRectangle({
+        x,
+        y: yLeft - cardH,
+        width: cardW,
+        height: cardH,
+        color: C.card,
+        borderColor: C.line,
+        borderWidth: 0.5,
+      });
+      page.drawText(safe(k.label), {
+        x: x + 4,
+        y: yLeft - 11,
+        size: 5.5,
+        font,
+        color: C.muted,
+      });
+      if (k.sub) {
+        page.drawText(safe(k.sub), {
+          x: x + 4,
+          y: yLeft - 19,
+          size: 5.5,
+          font,
+          color: C.muted,
+        });
+      }
+      page.drawText(safe(formatoMoeda.format(k.value)), {
+        x: x + 4,
+        y: yLeft - (k.sub ? 34 : 28),
+        size: 7.5,
+        font: fontBold,
+        color: k.color,
+        maxWidth: cardW - 8,
+      });
+    });
+
+    yLeft -= cardH + 16;
+  };
+
   page.drawText(safe(nomeIgreja || "Tesouraria"), {
     x: xLeft,
     y: yLeft,
@@ -270,7 +330,7 @@ export async function exportarRelatorioPDF({
     maxWidth: colLeftW,
   });
   yLeft -= 14;
-  page.drawText(safe("RELATÓRIO FINANCEIRO"), {
+  page.drawText(safe("RELATORIO FINANCEIRO"), {
     x: xLeft,
     y: yLeft,
     size: 8,
@@ -291,18 +351,19 @@ export async function exportarRelatorioPDF({
   yLeft -= 14;
 
   const textoExec = safe(
-    `Período: ${labelPeriodo}. Receitas R$ ${formatoMoeda.format(
+    `Saldo anterior R$ ${formatoMoeda.format(
+      resumo.saldoAnterior || 0
+    )}. Receitas R$ ${formatoMoeda.format(
       resumo.entradas
     )}, despesas R$ ${formatoMoeda.format(
       resumo.saidas
-    )}, saldo do período R$ ${formatoMoeda.format(resumo.saldo)}. ` +
-      `Saldo atual R$ ${formatoMoeda.format(
-        projecao.saldoAtual
-      )}. A receber R$ ${formatoMoeda.format(
-        projecao.aReceber
-      )}, a pagar R$ ${formatoMoeda.format(
-        projecao.aPagar
-      )}. Projetado R$ ${formatoMoeda.format(projecao.saldoProjetado)}.`
+    )}. Saldo atual R$ ${formatoMoeda.format(
+      resumo.saldoAtual || 0
+    )}. A receber R$ ${formatoMoeda.format(
+      projecao.aReceber
+    )}, a pagar R$ ${formatoMoeda.format(
+      projecao.aPagar
+    )}. Projecao futura R$ ${formatoMoeda.format(projecao.saldoProjetado)}.`
   );
 
   let resto = textoExec;
@@ -325,94 +386,37 @@ export async function exportarRelatorioPDF({
     yLeft -= 11;
     resto = resto.slice(chunk.length).trim();
   }
-  yLeft -= 12;
+  yLeft -= 10;
 
-  const cardW = (colLeftW - 6) / 2;
-  const cardH = 36;
-  ensureLeft(cardH * 2 + 20);
-
-  const kpis = [
+  drawSectionTitle("Resultado do mes");
+  drawKpiRow([
+    {
+      label: "SALDO",
+      sub: "ANTERIOR",
+      value: resumo.saldoAnterior || 0,
+      color: C.ink,
+    },
     { label: "RECEITAS", value: resumo.entradas, color: C.green },
     { label: "DESPESAS", value: resumo.saidas, color: C.red },
-    { label: "RESULTADO", value: resumo.saldo, color: C.ink },
-    { label: "DÍZIMOS", value: resumo.dizimos, color: C.green },
-  ];
-  kpis.forEach((k, i) => {
-    const col = i % 2;
-    const row = Math.floor(i / 2);
-    const x = xLeft + col * (cardW + 6);
-    const yy = yLeft - row * (cardH + 6);
-    page.drawRectangle({
-      x,
-      y: yy - cardH,
-      width: cardW,
-      height: cardH,
-      color: C.card,
-      borderColor: C.line,
-      borderWidth: 0.5,
-    });
-    page.drawText(safe(k.label), {
-      x: x + 6,
-      y: yy - 12,
-      size: 6,
-      font,
-      color: C.muted,
-    });
-    page.drawText(safe(`R$ ${formatoMoeda.format(k.value)}`), {
-      x: x + 6,
-      y: yy - 26,
-      size: 8,
-      font: fontBold,
-      color: k.color,
-      maxWidth: cardW - 10,
-    });
-  });
-  yLeft -= cardH * 2 + 18;
+    {
+      label: "SALDO",
+      sub: "ATUAL",
+      value: resumo.saldoAtual || 0,
+      color: C.ink,
+    },
+  ]);
 
-  ensureLeft(cardH + 20);
-  page.drawText(safe("Posição e projeção"), {
-    x: xLeft,
-    y: yLeft,
-    size: 9,
-    font: fontBold,
-    color: C.ink,
-  });
-  yLeft -= 12;
-  const proj = [
-    { label: "ATUAL", value: projecao.saldoAtual, color: C.ink },
+  drawSectionTitle("Projecao futura");
+  drawKpiRow([
     { label: "A RECEBER", value: projecao.aReceber, color: C.green },
     { label: "A PAGAR", value: projecao.aPagar, color: C.red },
-    { label: "PROJETADO", value: projecao.saldoProjetado, color: C.ink },
-  ];
-  const pW = (colLeftW - 9) / 4;
-  proj.forEach((k, i) => {
-    const x = xLeft + i * (pW + 3);
-    page.drawRectangle({
-      x,
-      y: yLeft - cardH,
-      width: pW,
-      height: cardH,
-      color: C.card,
-      borderColor: C.line,
-      borderWidth: 0.5,
-    });
-    page.drawText(safe(k.label), {
-      x: x + 3,
-      y: yLeft - 11,
-      size: 5.5,
-      font,
-      color: C.muted,
-    });
-    page.drawText(safe(formatoMoeda.format(k.value)), {
-      x: x + 3,
-      y: yLeft - 24,
-      size: 7,
-      font: fontBold,
-      color: k.color,
-      maxWidth: pW - 6,
-    });
-  });
-  yLeft -= cardH + 18;
+    {
+      label: "PROJECAO",
+      sub: "FUTURA",
+      value: projecao.saldoProjetado,
+      color: C.ink,
+    },
+  ]);
 
   const labels = (seriesGraficos || []).map((s) => s.label);
   const receitaVals = (seriesGraficos || []).map((s) => s.receita);
@@ -420,7 +424,7 @@ export async function exportarRelatorioPDF({
   const dizimoVals = (seriesGraficos || []).map((s) => s.dizimo);
 
   ensureLeft(110);
-  page.drawText(safe(`Dízimos`), {
+  page.drawText(safe("Dizimos"), {
     x: xLeft,
     y: yLeft,
     size: 9,
@@ -441,7 +445,7 @@ export async function exportarRelatorioPDF({
   yLeft -= chartH1 + 16;
 
   ensureLeft(110);
-  page.drawText(safe(`Receitas e despesas`), {
+  page.drawText(safe("Receitas e despesas"), {
     x: xLeft,
     y: yLeft,
     size: 9,
@@ -518,7 +522,7 @@ export async function exportarRelatorioPDF({
   );
 
   const drawRightHeader = () => {
-    page.drawText(safe("Movimentações"), {
+    page.drawText(safe("Movimentacoes"), {
       x: xRight,
       y: yRight,
       size: 9,
@@ -541,7 +545,7 @@ export async function exportarRelatorioPDF({
 
   const hist = historicoPeriodo || [];
   if (hist.length === 0) {
-    page.drawText(safe("Nenhum lançamento."), {
+    page.drawText(safe("Nenhum lancamento."), {
       x: xRight,
       y: yRight,
       size: 8,
@@ -615,7 +619,7 @@ export async function exportarRelatorioPDF({
   );
 
   const base64 = await pdfDoc.saveAsBase64();
-  if (!base64) throw new Error("Falha ao gerar o conteúdo do PDF.");
+  if (!base64) throw new Error("Falha ao gerar o conteudo do PDF.");
 
   const fileName = `relatorio_${Date.now()}.pdf`;
   const cachePath = `${RNFS.CachesDirectoryPath}/${fileName}`;
@@ -626,7 +630,7 @@ export async function exportarRelatorioPDF({
 
   try {
     await Share.open({
-      title: "Relatório Financeiro",
+      title: "Relatorio Financeiro",
       url: fileUrl,
       type: "application/pdf",
       showAppsToView: true,

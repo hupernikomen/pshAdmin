@@ -81,28 +81,52 @@ function tsItem(item) {
   return Number(item?.data || item?.createdAt || item?.reg || 0) || 0;
 }
 
-function pontoOuNulo(isFuturo, valor) {
-  const n = arred(valor);
-  if (isFuturo && n <= 0) return null;
-  return n;
+function hojeFimTs() {
+  return fimDoDia(new Date()).getTime();
 }
 
-function resumoDeLista(lista) {
+function itemNoFuturo(item) {
+  const ts = tsItem(item);
+  return ts > hojeFimTs();
+}
+
+function seedSaldoInicial(lista, igreja) {
+  const item = (lista || []).find((i) => i.tipo === "Saldo inicial");
+  if (item) {
+    return arred(
+      Number(item.valorTotal) || Number(item.valorRecebidoTotal) || 0
+    );
+  }
+  return arred(Number(igreja?.saldoInicial) || 0);
+}
+
+/** Só o que já aconteceu (data até hoje) dentro do intervalo */
+function realizadoNoIntervalo(lista, iniTs, fimTs) {
+  const teto = Math.min(fimTs, hojeFimTs());
   let entradas = 0;
   let saidas = 0;
   let dizimos = 0;
   const porTipoEntrada = {};
   const porTipoSaida = {};
+  let quantidade = 0;
 
-  lista.forEach((item) => {
+  (lista || []).forEach((item) => {
     if (item.tipo === "Saldo inicial") return;
+    const ts = tsItem(item);
+    if (!ts || ts < iniTs || ts > teto) return;
+
+    quantidade += 1;
     const tipo = item.tipo || "Outros";
+
     if (item.tipoMovimento === "entrada") {
       const v = valorEntrada(item);
       entradas += v;
       porTipoEntrada[tipo] = (porTipoEntrada[tipo] || 0) + v;
       if (isDizimo(item)) dizimos += v;
-    } else if (item.tipoMovimento === "saida") {
+      return;
+    }
+
+    if (item.tipoMovimento === "saida") {
       const v = valorSaida(item);
       saidas += v;
       porTipoSaida[tipo] = (porTipoSaida[tipo] || 0) + v;
@@ -112,25 +136,75 @@ function resumoDeLista(lista) {
   return {
     entradas: arred(entradas),
     saidas: arred(saidas),
-    saldo: arred(entradas - saidas),
     dizimos: arred(dizimos),
     porTipoEntrada,
     porTipoSaida,
-    quantidade: lista.filter((i) => i.tipo !== "Saldo inicial").length,
+    quantidade,
   };
+}
+
+/** Saldo fechado até ateTs: inicial + receitas − despesas, mês a mês */
+function acumuladoAte(lista, seed, ateTs) {
+  const mov = realizadoNoIntervalo(lista, 0, ateTs);
+  return arred(seed + mov.entradas - mov.saidas);
+}
+
+function valorAReceberItem(item) {
+  if (item.tipoMovimento !== "entrada") return 0;
+  if (item.tipo === "Saldo inicial") return 0;
+
+  const total = Number(item.valorTotal) || 0;
+  const recebido = Number(item.valorRecebidoTotal) || 0;
+  const falta = arred(total - recebido);
+  const futuro = itemNoFuturo(item);
+
+  if (futuro) return falta > 0 ? falta : arred(total || recebido);
+  if (item.status === "quitada") return 0;
+  return falta > 0 ? falta : 0;
+}
+
+function valorAPagarItem(item) {
+  if (item.tipoMovimento !== "saida") return 0;
+
+  const hoje = hojeFimTs();
+  const parcelas = Array.isArray(item.parcelas) ? item.parcelas : [];
+
+  if (parcelas.length > 0) {
+    return arred(
+      parcelas.reduce((acc, p) => {
+        const pts = Number(p.data || p.vencimento || 0) || 0;
+        const aberta = p.status === "aberta" || !p.status;
+        const futura = pts > hoje;
+        if (aberta || futura) return acc + (Number(p.valor) || 0);
+        return acc;
+      }, 0)
+    );
+  }
+
+  const total = Number(item.valorTotal) || 0;
+  const pago = Number(item.valorPagoTotal) || 0;
+  const falta = arred(total - pago);
+  const futuro = itemNoFuturo(item);
+
+  if (futuro) return falta > 0 ? falta : arred(total || pago);
+  if (item.status === "quitada") return 0;
+  return falta > 0 ? falta : 0;
+}
+
+function pontoOuNulo(isFuturo, valor) {
+  const n = arred(valor);
+  if (isFuturo && n <= 0) return null;
+  return n;
 }
 
 function montarJanelaMesesGrafico() {
   const TOTAL = 12;
-  const FUTUROS = 3; // ← mude só este número se quiser mais/menos futuro
+  const FUTUROS = 3;
   const PASSADOS = TOTAL - 1 - FUTUROS;
 
   const agora = new Date();
-  const fimAno = agora.getFullYear();
-  const fimMes = agora.getMonth();
-
-  let y = fimAno;
-  let m = fimMes - PASSADOS;
+  let y = agora.getFullYear();
+  let m = agora.getMonth() - PASSADOS;
   while (m < 0) {
     m += 12;
     y -= 1;
@@ -162,7 +236,6 @@ export default function Relatorio() {
     HistoricoMovimentos,
     formatoMoeda,
     igrejaAtiva,
-    saldo,
   } = useContext(AppContext);
   const { uid, authPronto } = useAuth();
   const { colors } = useTheme();
@@ -186,35 +259,36 @@ export default function Relatorio() {
     HistoricoMovimentos();
   }, [authPronto, uid, igrejaAtiva?.id]);
 
+  const intervalo = useMemo(() => {
+    if (modoFiltro === "periodo") {
+      return {
+        ini: inicioDoDia(dataDe).getTime(),
+        fim: fimDoDia(dataAte).getTime(),
+      };
+    }
+    return {
+      ini: new Date(anoSelecionado, mesSelecionado, 1, 0, 0, 0, 0).getTime(),
+      fim: new Date(
+        anoSelecionado,
+        mesSelecionado + 1,
+        0,
+        23,
+        59,
+        59,
+        999
+      ).getTime(),
+    };
+  }, [modoFiltro, dataDe, dataAte, mesSelecionado, anoSelecionado]);
+
   const filtrados = useMemo(() => {
     const lista = dadosFinancas || [];
-    if (modoFiltro === "periodo") {
-      const ini = inicioDoDia(dataDe).getTime();
-      const fim = fimDoDia(dataAte).getTime();
-      return lista.filter((item) => {
-        if (item.tipo === "Saldo inicial") return false;
-        const ts = tsItem(item);
-        if (!ts) return false;
-        return ts >= ini && ts <= fim;
-      });
-    }
     return lista.filter((item) => {
       if (item.tipo === "Saldo inicial") return false;
       const ts = tsItem(item);
       if (!ts) return false;
-      const d = new Date(ts);
-      return (
-        d.getFullYear() === anoSelecionado && d.getMonth() === mesSelecionado
-      );
+      return ts >= intervalo.ini && ts <= intervalo.fim;
     });
-  }, [
-    dadosFinancas,
-    modoFiltro,
-    dataDe,
-    dataAte,
-    mesSelecionado,
-    anoSelecionado,
-  ]);
+  }, [dadosFinancas, intervalo]);
 
   const historicoPeriodo = useMemo(
     () =>
@@ -224,43 +298,40 @@ export default function Relatorio() {
     [filtrados]
   );
 
-  const resumo = useMemo(() => resumoDeLista(filtrados), [filtrados]);
+  const resumo = useMemo(() => {
+    const lista = dadosFinancas || [];
+    const seed = seedSaldoInicial(lista, igrejaAtiva);
+    const saldoAnterior = acumuladoAte(lista, seed, intervalo.ini - 1);
+    const mov = realizadoNoIntervalo(lista, intervalo.ini, intervalo.fim);
+    const saldoAtual = arred(saldoAnterior + mov.entradas - mov.saidas);
+
+    return {
+      ...mov,
+      saldoAnterior,
+      saldoAtual,
+      saldo: arred(mov.entradas - mov.saidas),
+    };
+  }, [dadosFinancas, igrejaAtiva, intervalo]);
 
   const projecao = useMemo(() => {
     const lista = dadosFinancas || [];
     let aReceber = 0;
     let aPagar = 0;
+
     lista.forEach((i) => {
-      if (i.tipoMovimento === "entrada") {
-        if (i.tipo === "Saldo inicial") return;
-        if (i.status === "quitada") return;
-        const falta =
-          (Number(i.valorTotal) || 0) - (Number(i.valorRecebidoTotal) || 0);
-        if (falta > 0) aReceber += falta;
-        return;
-      }
-      if (i.tipoMovimento === "saida") {
-        if (i.status === "quitada") return;
-        const parcelas = Array.isArray(i.parcelas) ? i.parcelas : [];
-        if (parcelas.length > 0) {
-          parcelas.forEach((p) => {
-            if (p.status === "aberta") aPagar += Number(p.valor) || 0;
-          });
-          return;
-        }
-        const falta =
-          (Number(i.valorTotal) || 0) - (Number(i.valorPagoTotal) || 0);
-        if (falta > 0) aPagar += falta;
-      }
+      aReceber += valorAReceberItem(i);
+      aPagar += valorAPagarItem(i);
     });
-    const saldoAtual = Number(saldo) || 0;
+
+    aReceber = arred(aReceber);
+    aPagar = arred(aPagar);
+
     return {
-      saldoAtual: arred(saldoAtual),
-      aReceber: arred(aReceber),
-      aPagar: arred(aPagar),
-      saldoProjetado: arred(saldoAtual - aPagar + aReceber),
+      aReceber,
+      aPagar,
+      saldoProjetado: arred(resumo.saldoAtual + aReceber - aPagar),
     };
-  }, [dadosFinancas, saldo]);
+  }, [dadosFinancas, resumo.saldoAtual]);
 
   const seriesGraficos = useMemo(() => {
     const lista = dadosFinancas || [];
@@ -281,7 +352,7 @@ export default function Relatorio() {
           if (d.getFullYear() !== slot.ano || d.getMonth() !== slot.mes) return;
 
           const v = slot.isFuturo
-            ? valorEntrada(item) || Number(item.valorTotal) || 0
+            ? Number(item.valorTotal) || valorEntrada(item) || 0
             : valorEntrada(item);
           receita += v;
           if (isDizimo(item)) dizimo += v;
@@ -300,7 +371,7 @@ export default function Relatorio() {
               return;
             const val = Number(p.valor) || 0;
             if (slot.isFuturo) {
-              if (p.status === "aberta") despesa += val;
+              if (p.status === "aberta" || !p.status) despesa += val;
             } else {
               despesa += val;
             }
@@ -314,9 +385,7 @@ export default function Relatorio() {
         if (d.getFullYear() !== slot.ano || d.getMonth() !== slot.mes) return;
 
         if (slot.isFuturo) {
-          const falta =
-            (Number(item.valorTotal) || 0) - (Number(item.valorPagoTotal) || 0);
-          despesa += falta > 0 ? falta : valorSaida(item);
+          despesa += Number(item.valorTotal) || valorSaida(item) || 0;
         } else {
           despesa += valorSaida(item);
         }
@@ -364,10 +433,6 @@ export default function Relatorio() {
   const corDespesa = "#C62828";
 
   async function onExportar() {
-    if (filtrados.length === 0) {
-      Alert.alert("Aviso", "Não há registros neste período.");
-      return;
-    }
     setGerando(true);
     try {
       await exportarRelatorioPDF({
@@ -502,7 +567,7 @@ export default function Relatorio() {
               mode="date"
               display="default"
               maximumDate={dataAte}
-              onValueChange={(e, selected) => {
+              onChange={(e, selected) => {
                 setShowDe(false);
                 if (selected) setDataDe(selected);
               }}
@@ -514,8 +579,7 @@ export default function Relatorio() {
               mode="date"
               display="default"
               minimumDate={dataDe}
-              maximumDate={new Date()}
-              onValueChange={(e, selected) => {
+              onChange={(e, selected) => {
                 setShowAte(false);
                 if (selected) setDataAte(selected);
               }}

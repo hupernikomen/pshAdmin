@@ -54,6 +54,31 @@ function dataDoItem(item) {
   return Number(item?.data || item?.createdAt || item?.reg || 0) || 0;
 }
 
+/**
+ * Mesma regra da Home:
+ * - Data futura: ainda não entrou no saldo → recebido + falta
+ * - Data <= hoje: só o que ainda falta
+ * - Ignora Saldo inicial
+ */
+function valorAReceberItem(item, limiteHoje) {
+  if (item?.tipoMovimento !== "entrada") return 0;
+  if (item?.tipo === "Saldo inicial") return 0;
+
+  const ts = dataDoItem(item);
+  if (!ts) return 0;
+
+  const total = Number(item.valorTotal) || 0;
+  const recebido = Number(item.valorRecebidoTotal) || 0;
+  const falta = Math.max(0, arred(total - recebido));
+
+  if (ts > limiteHoje) {
+    const v = arred(recebido + falta);
+    return v > 0 ? v : 0;
+  }
+
+  return falta > 0 ? falta : 0;
+}
+
 export default function AReceber() {
   const {
     dadosFinancas,
@@ -97,51 +122,20 @@ export default function AReceber() {
     setRefreshing(false);
   };
 
-  /**
-   * Lista alinhada com o card da Home:
-   * 1) Entrada em aberto com falta (data <= hoje ou qualquer)
-   * 2) Entrada com DATA FUTURA (mesmo quitada no cadastro) —
-   *    valor ainda não entra no saldo, então aparece aqui
-   */
   const pendentes = useMemo(() => {
     const lista = [];
 
     (dadosFinancas || []).forEach((i) => {
-      if (i.tipoMovimento !== "entrada") return;
-      if (i.tipo === "Saldo inicial") return;
+      const valor = valorAReceberItem(i, limiteHoje);
+      if (valor <= 0.001) return;
 
       const ts = dataDoItem(i);
-      if (!ts) return;
-
-      const total = Number(i.valorTotal) || 0;
-      const recebido = Number(i.valorRecebidoTotal) || 0;
-      const isFuturo = ts > limiteHoje;
-
-      if (isFuturo) {
-        // O que ainda não pode ir para o saldo (recebido “agendado” ou total)
-        const valor =
-          recebido > 0.001 ? recebido : total > 0.001 ? total : 0;
-        if (valor <= 0.001) return;
-
-        lista.push({
-          ...i,
-          rowId: i.id,
-          falta: arred(valor),
-          isFuturo: true,
-        });
-        return;
-      }
-
-      // Data até hoje: só se ainda houver valor a receber
-      if (i.status === "quitada") return;
-      if (total > recebido + 0.001) {
-        lista.push({
-          ...i,
-          rowId: i.id,
-          falta: arred(total - recebido),
-          isFuturo: false,
-        });
-      }
+      lista.push({
+        ...i,
+        rowId: i.id,
+        falta: arred(valor),
+        isFuturo: ts > limiteHoje,
+      });
     });
 
     return lista.sort((a, b) => (a.data || 0) - (b.data || 0));
@@ -197,10 +191,6 @@ export default function AReceber() {
       const agora = Date.now();
 
       if (itemSel.isFuturo) {
-        /**
-         * Entrada com data futura: ao “receber/baixar”,
-         * a data vira hoje para o valor entrar no saldo.
-         */
         const total = Number(itemSel.valorTotal) || Number(itemSel.falta) || 0;
         const novoRecebido = arred(valor);
 

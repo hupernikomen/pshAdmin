@@ -29,6 +29,35 @@ function dataDoItem(item) {
   return Number(item?.data || item?.createdAt || item?.reg || 0) || 0;
 }
 
+function arred(v) {
+  return Math.round((Number(v) || 0) * 100) / 100;
+}
+
+/**
+ * Quanto deste lançamento ainda NÃO está no saldo atual (caixa).
+ * - Data futura: nada entrou no saldo → recebido + falta
+ * - Data <= hoje: só o que ainda falta receber
+ * - Ignora Saldo inicial
+ */
+function valorAReceberItem(item, limiteHoje) {
+  if (item?.tipoMovimento !== "entrada") return 0;
+  if (item?.tipo === "Saldo inicial") return 0;
+
+  const ts = dataDoItem(item);
+  if (!ts) return 0;
+
+  const total = Number(item.valorTotal) || 0;
+  const recebido = Number(item.valorRecebidoTotal) || 0;
+  const falta = Math.max(0, arred(total - recebido));
+
+  if (ts > limiteHoje) {
+    const v = arred(recebido + falta);
+    return v > 0 ? v : 0;
+  }
+
+  return falta > 0 ? falta : 0;
+}
+
 export default function Home() {
   const {
     saldo,
@@ -130,9 +159,7 @@ export default function Home() {
   const mesAtual = agora.getMonth();
   const anoAtual = agora.getFullYear();
   const limiteHoje = fimDoDiaTs(agora);
-  const inicioMes = new Date(anoAtual, mesAtual, 1, 0, 0, 0, 0).getTime();
 
-  // Só movimentos já realizados (data <= hoje)
   const entradasMesAtual = lista
     .filter((i) => {
       if (i.tipoMovimento !== "entrada") return false;
@@ -153,34 +180,18 @@ export default function Home() {
     })
     .reduce((acc, i) => acc + (Number(i.valorPagoTotal) || 0), 0);
 
-  // Saldo do context já exclui futuros
   const saldoAtual = Number(saldo) || 0;
   const caixaGeral = Number(saldoDisponivel) || 0;
   const emCaixinhas = Number(totalReservado) || 0;
   const qtdCaixinhas = (caixinhas || []).length;
 
-  // Saldo no início do mês (não inclui futuros nem movimentos do mês atual)
-  const saldoAnterior = saldoAtual - entradasMesAtual + saidasMesAtual;
+  // Fechamento do mês anterior
+  const saldoAnterior = arred(saldoAtual - entradasMesAtual + saidasMesAtual);
 
-  const entradasFuturas = lista
-    .filter((i) => i.tipoMovimento === "entrada" && i.status === "aberta")
-    .reduce((acc, i) => {
-      const falta =
-        (Number(i.valorTotal) || 0) - (Number(i.valorRecebidoTotal) || 0);
-      return acc + (falta > 0 ? falta : 0);
-    }, 0);
-
-  // Também trata como "a receber" entradas com data futura já marcadas como recebidas no cadastro
-  const entradasComDataFutura = lista
-    .filter((i) => {
-      if (i.tipoMovimento !== "entrada") return false;
-      if (i.tipo === "Saldo inicial") return false;
-      const ts = dataDoItem(i);
-      return ts > limiteHoje;
-    })
-    .reduce((acc, i) => acc + (Number(i.valorRecebidoTotal) || 0), 0);
-
-  const aReceberTotal = entradasFuturas + entradasComDataFutura;
+  // A receber unificado (sem duplicar aberto + data futura)
+  const aReceberTotal = arred(
+    lista.reduce((acc, i) => acc + valorAReceberItem(i, limiteHoje), 0)
+  );
 
   const despesasFuturas = lista
     .filter((i) => i.tipoMovimento === "saida" && i.status === "aberta")
@@ -200,7 +211,7 @@ export default function Home() {
       return acc + (falta > 0 ? falta : 0);
     }, 0);
 
-  const projecaoFutura = saldoAtual + aReceberTotal - despesasFuturas;
+  const projecaoFutura = arred(saldoAtual + aReceberTotal - despesasFuturas);
 
   const dizimosMes = lista.filter((i) => {
     if (i.tipoMovimento !== "entrada" || i.tipo !== "Dízimo") return false;

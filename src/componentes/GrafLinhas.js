@@ -23,7 +23,7 @@ function SegmentoLinha({ from, to, color }) {
   );
 }
 
-function GrafLinhas({ dados = [], corReceita, corDespesa, altura = 150 }) {
+function FLinhas({ dados = [], corReceita, corDespesa, altura = 150 }) {
   const max = Math.max(
     ...dados.flatMap((d) => [d.receita || 0, d.despesa || 0]),
     1
@@ -74,53 +74,71 @@ function GrafLinhas({ dados = [], corReceita, corDespesa, altura = 150 }) {
       </View>
 
       <ScrollView
+        showsHorizontalScrollIndicator={false}
         horizontal
-        showsHorizontalScrollIndicator={n > 8}
-        contentContainerStyle={{ minWidth: plotW + 16 }}
+        // showsHorizontalScrollIndicator={n > 8}
+        contentContainerStyle={{ minWidth: plotW + 16, }}
       >
-        <View style={{ height: plotH, width: plotW, marginTop: 4 }}>
-          <View style={[styles.axisBase, { top: plotH - 1 }]} />
-          {segs(rec, corReceita)}
-          {segs(des, corDespesa)}
+        <View style={{alignItems:"center"}}>
 
-          {rec.map(
-            (p, i) =>
-              p && (
-                <View
-                  key={`rs-${i}`}
-                  style={[
-                    styles.lineDot,
-                    {
-                      left: p.x - 3,
-                      top: p.y - 3,
-                      backgroundColor: corReceita,
-                    },
-                  ]}
-                />
-              )
-          )}
-          {des.map(
-            (p, i) =>
-              p && (
-                <View
-                  key={`ds-${i}`}
-                  style={[
-                    styles.lineDot,
-                    {
-                      left: p.x - 3,
-                      top: p.y - 3,
-                      backgroundColor: corDespesa,
-                    },
-                  ]}
-                />
-              )
-          )}
+          <View style={{ height: plotH, width: plotW, marginTop: 4 }}>
+            <View style={[styles.axisBase, { top: plotH - 1 }]} />
+            {segs(rec, corReceita)}
+            {segs(des, corDespesa)}
+
+            {rec.map(
+              (p, i) =>
+                p && (
+                  <View
+                    key={`rs-${i}`}
+                    style={[
+                      styles.lineDot,
+                      {
+                        left: p.x - 3,
+                        top: p.y - 3,
+                        backgroundColor: corReceita,
+                      },
+                    ]}
+                  />
+                )
+            )}
+            {des.map(
+              (p, i) =>
+                p && (
+                  <View
+                    key={`ds-${i}`}
+                    style={[
+                      styles.lineDot,
+                      {
+                        left: p.x - 3,
+                        top: p.y - 3,
+                        backgroundColor: corDespesa,
+                      },
+                    ]}
+                  />
+                )
+            )}
+          </View>
+          <View style={{ flexDirection: "row" }}>
+
+            {dados.map((d, i) => (
+              <Text
+                key={i}
+                style={[
+                  styles.barLabel,
+                  { width: n <= 1 ? 40 : stepX || 28 },
+                  d.isAtual && styles.barLabelAtual,
+                ]}
+              >
+                {d.label}
+              </Text>
+            ))}
+          </View>
         </View>
       </ScrollView>
 
-      <ScrollView
+      {/* <ScrollView
         horizontal
-        showsHorizontalScrollIndicator={false}
         contentContainerStyle={[styles.lineLabels, { minWidth: plotW + 16 }]}
       >
         {dados.map((d, i) => (
@@ -135,7 +153,7 @@ function GrafLinhas({ dados = [], corReceita, corDespesa, altura = 150 }) {
             {d.label}
           </Text>
         ))}
-      </ScrollView>
+      </ScrollView> */}
     </View>
   );
 }
@@ -193,4 +211,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default memo(GrafLinhas);
+export default memo(FLinhas);

@@ -61,7 +61,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   barTrack: {
-    width: "70%",
+    width: "50%",
     maxWidth: 28,
     justifyContent: "flex-end",
     backgroundColor: "transparent",
