@@ -33,12 +33,73 @@ function arred(v) {
   return Math.round((Number(v) || 0) * 100) / 100;
 }
 
+function noMes(ts, mes, ano) {
+  if (!ts) return false;
+  const d = new Date(ts);
+  return d.getMonth() === mes && d.getFullYear() === ano;
+}
+
 /**
- * Quanto deste lançamento ainda NÃO está no saldo atual (caixa).
- * - Data futura: nada entrou no saldo → recebido + falta
- * - Data <= hoje: só o que ainda falta receber
- * - Ignora Saldo inicial
+ * Recebimentos no mês — pela data de cada pagamento recebido.
+ * Saldo inicial NÃO entra aqui: fica no Saldo anterior (igual ao relatório).
  */
+function entradasNoMes(item, mes, ano, limiteHoje) {
+  if (item?.tipoMovimento !== "entrada") return 0;
+  if (item?.tipo === "Saldo inicial") return 0;
+
+  const lista = Array.isArray(item.valoresRecebidos) ? item.valoresRecebidos : [];
+  if (lista.length > 0) {
+    return lista.reduce((acc, r) => {
+      const ts = Number(r.data || 0);
+      if (ts && ts <= limiteHoje && noMes(ts, mes, ano)) {
+        return acc + (Number(r.valor) || 0);
+      }
+      return acc;
+    }, 0);
+  }
+  const ts = dataDoItem(item);
+  if (ts && ts <= limiteHoje && noMes(ts, mes, ano)) {
+    return Number(item.valorRecebidoTotal) || 0;
+  }
+  return 0;
+}
+
+/** Pagamentos no mês — pela data de cada pagamento */
+function saidasNoMes(item, mes, ano, limiteHoje) {
+  if (item?.tipoMovimento !== "saida") return 0;
+
+  const pagos = Array.isArray(item.valoresPagos) ? item.valoresPagos : [];
+  if (pagos.length > 0) {
+    return pagos.reduce((acc, p) => {
+      const ts = Number(p.data || 0);
+      if (ts && ts <= limiteHoje && noMes(ts, mes, ano)) {
+        return acc + (Number(p.valor) || 0);
+      }
+      return acc;
+    }, 0);
+  }
+
+  const parcelas = Array.isArray(item.parcelas) ? item.parcelas : [];
+  const pagas = parcelas.filter(
+    (p) => p.status === "paga" || p.status === "quitada" || !!p.pago
+  );
+  if (pagas.length > 0) {
+    return pagas.reduce((acc, p) => {
+      const ts = Number(p.dataPagamento || p.pagoEm || p.data || 0);
+      if (ts && ts <= limiteHoje && noMes(ts, mes, ano)) {
+        return acc + (Number(p.valor) || 0);
+      }
+      return acc;
+    }, 0);
+  }
+
+  const ts = dataDoItem(item);
+  if (ts && ts <= limiteHoje && noMes(ts, mes, ano)) {
+    return Number(item.valorPagoTotal) || 0;
+  }
+  return 0;
+}
+
 function valorAReceberItem(item, limiteHoje) {
   if (item?.tipoMovimento !== "entrada") return 0;
   if (item?.tipo === "Saldo inicial") return 0;
@@ -160,35 +221,25 @@ export default function Home() {
   const anoAtual = agora.getFullYear();
   const limiteHoje = fimDoDiaTs(agora);
 
-  const entradasMesAtual = lista
-    .filter((i) => {
-      if (i.tipoMovimento !== "entrada") return false;
-      const ts = dataDoItem(i);
-      if (!ts || ts > limiteHoje) return false;
-      const d = new Date(ts);
-      return d.getMonth() === mesAtual && d.getFullYear() === anoAtual;
-    })
-    .reduce((acc, i) => acc + (Number(i.valorRecebidoTotal) || 0), 0);
+  const entradasMesAtual = lista.reduce(
+    (acc, i) => acc + entradasNoMes(i, mesAtual, anoAtual, limiteHoje),
+    0
+  );
 
-  const saidasMesAtual = lista
-    .filter((i) => {
-      if (i.tipoMovimento !== "saida") return false;
-      const ts = dataDoItem(i);
-      if (!ts || ts > limiteHoje) return false;
-      const d = new Date(ts);
-      return d.getMonth() === mesAtual && d.getFullYear() === anoAtual;
-    })
-    .reduce((acc, i) => acc + (Number(i.valorPagoTotal) || 0), 0);
+  const saidasMesAtual = lista.reduce(
+    (acc, i) => acc + saidasNoMes(i, mesAtual, anoAtual, limiteHoje),
+    0
+  );
 
+  // saldo do context já inclui Saldo inicial (caixa real até hoje)
   const saldoAtual = Number(saldo) || 0;
   const caixaGeral = Number(saldoDisponivel) || 0;
   const emCaixinhas = Number(totalReservado) || 0;
   const qtdCaixinhas = (caixinhas || []).length;
 
-  // Fechamento do mês anterior
+  // Inicial não está em entradasMes → permanece no Saldo anterior
   const saldoAnterior = arred(saldoAtual - entradasMesAtual + saidasMesAtual);
 
-  // A receber unificado (sem duplicar aberto + data futura)
   const aReceberTotal = arred(
     lista.reduce((acc, i) => acc + valorAReceberItem(i, limiteHoje), 0)
   );
@@ -213,18 +264,12 @@ export default function Home() {
 
   const projecaoFutura = arred(saldoAtual + aReceberTotal - despesasFuturas);
 
-  const dizimosMes = lista.filter((i) => {
-    if (i.tipoMovimento !== "entrada" || i.tipo !== "Dízimo") return false;
-    const ts = dataDoItem(i);
-    if (!ts || ts > limiteHoje) return false;
-    const d = new Date(ts);
-    return d.getMonth() === mesAtual && d.getFullYear() === anoAtual;
-  });
-
-  const totalDizimosMes = dizimosMes.reduce(
-    (acc, i) => acc + (Number(i.valorRecebidoTotal) || 0),
-    0
-  );
+  const totalDizimosMes = lista
+    .filter((i) => i.tipoMovimento === "entrada" && i.tipo === "Dízimo")
+    .reduce(
+      (acc, i) => acc + entradasNoMes(i, mesAtual, anoAtual, limiteHoje),
+      0
+    );
 
   const criadoEm = igrejaAtiva?.createdAt
     ? new Date(igrejaAtiva.createdAt)
@@ -238,28 +283,45 @@ export default function Home() {
     if (meses < 1) meses = 1;
 
     const totalDizimosPeriodo = lista
-      .filter((i) => {
-        if (i.tipoMovimento !== "entrada" || i.tipo !== "Dízimo") return false;
+      .filter((i) => i.tipoMovimento === "entrada" && i.tipo === "Dízimo")
+      .reduce((acc, i) => {
+        const recebidos = Array.isArray(i.valoresRecebidos)
+          ? i.valoresRecebidos
+          : [];
+        if (recebidos.length > 0) {
+          return (
+            acc +
+            recebidos.reduce((s, r) => {
+              const ts = Number(r.data || 0);
+              if (!ts || ts > limiteHoje) return s;
+              const d = new Date(ts);
+              const idx = d.getFullYear() * 12 + d.getMonth();
+              const idxSi = siAno * 12 + siMes;
+              if (idx >= idxSi) return s + (Number(r.valor) || 0);
+              return s;
+            }, 0)
+          );
+        }
         const ts = dataDoItem(i);
-        if (!ts || ts > limiteHoje) return false;
+        if (!ts || ts > limiteHoje) return acc;
         const d = new Date(ts);
         const idx = d.getFullYear() * 12 + d.getMonth();
         const idxSi = siAno * 12 + siMes;
-        return idx >= idxSi;
-      })
-      .reduce((acc, i) => acc + (Number(i.valorRecebidoTotal) || 0), 0);
+        if (idx >= idxSi) return acc + (Number(i.valorRecebidoTotal) || 0);
+        return acc;
+      }, 0);
 
     mediaDizimosAnual = totalDizimosPeriodo / meses;
   } else {
     const totalDizimosAno = lista
-      .filter((i) => {
-        if (i.tipoMovimento !== "entrada" || i.tipo !== "Dízimo") return false;
-        const ts = dataDoItem(i);
-        if (!ts || ts > limiteHoje) return false;
-        const d = new Date(ts);
-        return d.getFullYear() === anoAtual;
-      })
-      .reduce((acc, i) => acc + (Number(i.valorRecebidoTotal) || 0), 0);
+      .filter((i) => i.tipoMovimento === "entrada" && i.tipo === "Dízimo")
+      .reduce((acc, i) => {
+        let s = 0;
+        for (let m = 0; m <= mesAtual; m++) {
+          s += entradasNoMes(i, m, anoAtual, limiteHoje);
+        }
+        return acc + s;
+      }, 0);
     mediaDizimosAnual =
       mesAtual + 1 > 0 ? totalDizimosAno / (mesAtual + 1) : 0;
   }
@@ -492,9 +554,7 @@ export default function Home() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   content: {
     paddingTop: 10,
     gap: 8,
@@ -520,7 +580,7 @@ const styles = StyleSheet.create({
   },
   menuCard: {
     width: 260,
-    backgroundColor: "#fff",
+  backgroundColor: "#fff",
     borderRadius: 16,
     padding: 12,
     elevation: 6,
@@ -578,9 +638,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 4,
   },
-  igrejaItemAtiva: {
-    backgroundColor: "#f4f5f7",
-  },
+  igrejaItemAtiva: { backgroundColor: "#f4f5f7" },
   igrejaItemNome: {
     fontSize: 14,
     fontFamily: "Roboto-Medium",

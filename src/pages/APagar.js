@@ -14,6 +14,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { useTheme } from "@react-navigation/native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../context/AppContext";
 import { db } from "../firebaseConnection";
@@ -44,6 +45,13 @@ function arred(v) {
   return Math.round((Number(v) || 0) * 100) / 100;
 }
 
+/** Timestamp do dia selecionado (meio-dia local, estável para mês/ano) */
+function tsDoDia(d) {
+  const x = new Date(d);
+  x.setHours(12, 0, 0, 0);
+  return x.getTime();
+}
+
 export default function APagar() {
   const {
     dadosFinancas,
@@ -70,6 +78,8 @@ export default function APagar() {
   const [valorPago, setValorPago] = useState("");
   const [origemPagamento, setOrigemPagamento] = useState("geral");
   const [caixinhaId, setCaixinhaId] = useState(null);
+  const [dataPagamento, setDataPagamento] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
   const podeEditar = podeEditarFinanceiro?.() !== false;
@@ -149,7 +159,10 @@ export default function APagar() {
     setValorPago(String(item.falta).replace(".", ","));
     setOrigemPagamento("geral");
     setCaixinhaId(null);
+    setDataPagamento(new Date());
+    setShowDatePicker(false);
     setModalVisible(true);
+    setAbertoId(null);
   }
 
   function fecharModal() {
@@ -157,6 +170,15 @@ export default function APagar() {
     setItemSel(null);
     setValorPago("");
     setCaixinhaId(null);
+    setShowDatePicker(false);
+  }
+
+  function onChangeData(event, selected) {
+    if (Platform.OS === "android") {
+      setShowDatePicker(false);
+    }
+    if (event?.type === "dismissed") return;
+    if (selected) setDataPagamento(selected);
   }
 
   async function confirmarPagamento() {
@@ -207,6 +229,8 @@ export default function APagar() {
     }
 
     const cxSel = (caixinhas || []).find((c) => c.id === caixinhaId);
+    const dataPagTs = tsDoDia(dataPagamento);
+    const idPag = `${dataPagTs}_${Date.now()}`;
 
     setSalvando(true);
     try {
@@ -216,7 +240,8 @@ export default function APagar() {
           return {
             ...p,
             status: "paga",
-            pagoEm: Date.now(),
+            pagoEm: dataPagTs,
+            dataPagamento: dataPagTs,
             origemPagamento,
             caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
             caixinhaNome:
@@ -234,8 +259,8 @@ export default function APagar() {
             ...listaAtual,
             {
               valor,
-              data: Date.now(),
-              id: Date.now().toString(),
+              data: dataPagTs,
+              id: idPag,
               parcelaNumero: itemSel.parcelaNumero,
               origemPagamento,
               caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
@@ -245,6 +270,7 @@ export default function APagar() {
           ],
           valorPagoTotal: novoTotal,
           status: todasPagas ? "quitada" : "aberta",
+          updatedAt: Date.now(),
         });
       } else {
         const listaAtual = itemSel.valoresPagos || [];
@@ -255,8 +281,8 @@ export default function APagar() {
             ...listaAtual,
             {
               valor,
-              data: Date.now(),
-              id: Date.now().toString(),
+              data: dataPagTs,
+              id: idPag,
               origemPagamento,
               caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
               caixinhaNome:
@@ -265,9 +291,10 @@ export default function APagar() {
           ],
           valorPagoTotal: novoTotal,
           status:
-            novoTotal >= (Number(itemSel.valorTotal) || 0)
+            novoTotal >= (Number(itemSel.valorTotal) || 0) - 0.001
               ? "quitada"
               : "aberta",
+          updatedAt: Date.now(),
         });
       }
 
@@ -346,7 +373,7 @@ export default function APagar() {
                 {
                   key: "pagar",
                   icon: "card-outline",
-                  label: item.isParcela ? "Pagar" : "Pagar",
+                  label: "Pagar",
                   backgroundColor: colors.principal,
                   onPress: () => abrirPagar(item),
                 },
@@ -394,6 +421,39 @@ export default function APagar() {
                   : ""}{" "}
                 · R$ {formatoMoeda.format(itemSel?.falta || 0)}
               </Text>
+
+              <Text style={styles.inputLabel}>Data do pagamento</Text>
+              <TouchableOpacity
+                style={styles.dateBox}
+                onPress={() => setShowDatePicker(true)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="calendar-outline" size={18} color="#666" />
+                <Text style={styles.dateText}>
+                  {dataPagamento.toLocaleDateString("pt-BR")}
+                </Text>
+              </TouchableOpacity>
+
+              {showDatePicker && (
+                <DateTimePicker
+                  value={dataPagamento}
+                  mode="date"
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
+                  maximumDate={new Date()}
+                  onChange={onChangeData}
+                />
+              )}
+
+              {Platform.OS === "ios" && showDatePicker && (
+                <TouchableOpacity
+                  style={styles.dateOk}
+                  onPress={() => setShowDatePicker(false)}
+                >
+                  <Text style={[styles.dateOkText, { color: colors.principal }]}>
+                    OK
+                  </Text>
+                </TouchableOpacity>
+              )}
 
               {!itemSel?.isParcela && (
                 <>
@@ -499,8 +559,8 @@ export default function APagar() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal:14 },
-  content: { paddingTop: 12, paddingBottom: 20, gap:8 },
+  container: { flex: 1, paddingHorizontal: 14 },
+  content: { paddingTop: 12, paddingBottom: 20, gap: 8 },
   emptyBox: {
     marginTop: 40,
     alignItems: "center",
@@ -567,6 +627,31 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Roboto-Regular",
     marginBottom: 12,
+  },
+  dateBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#f4f5f7",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
+  },
+  dateText: {
+    fontSize: 15,
+    fontFamily: "Roboto-Medium",
+    color: "#1f2933",
+  },
+  dateOk: {
+    alignSelf: "flex-end",
+    marginBottom: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+  },
+  dateOkText: {
+    fontSize: 15,
+    fontFamily: "Roboto-Bold",
   },
   segment: {
     flexDirection: "row",

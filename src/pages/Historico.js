@@ -73,7 +73,7 @@ function montarLinhasHistorico(dadosFinancas) {
     // Saldo inicial fica só em Configurações — não lista no histórico
     if (item.tipo === "Saldo inicial") return;
 
-    const sortBase = item.reg || item.data || item.createdAt || 0;
+    const sortBase = Number(item.data || item.reg || item.createdAt || 0) || 0;
     const pagos = item.valoresPagos || [];
     const recebidos = item.valoresRecebidos || [];
 
@@ -90,6 +90,7 @@ function montarLinhasHistorico(dadosFinancas) {
         (Array.isArray(item.parcelas) ? item.parcelas.length : null);
 
       pagos.slice(1).forEach((p, idx) => {
+        const tsPag = Number(p.data || sortBase) || sortBase;
         linhas.push({
           kind: "pagamento",
           rowId: `${item.id}_pag_${p.id || idx + 1}`,
@@ -97,7 +98,7 @@ function montarLinhasHistorico(dadosFinancas) {
           tipoMovimento: "saida",
           tipo: item.tipo || "Pagamento",
           descricao: item.descricao || item.tipo || "Despesa",
-          data: p.data || sortBase,
+          data: tsPag,
           valorTotal: p.valor,
           valorPagoTotal: p.valor,
           status: "quitada",
@@ -107,9 +108,9 @@ function montarLinhasHistorico(dadosFinancas) {
           parcelaNumero: p.parcelaNumero || null,
           parcelaTotal: totalParcelas,
           registroPaiId: item.id,
-          reg: p.data || sortBase,
-          sortKey: p.data || sortBase,
-          createdAt: p.data || sortBase,
+          reg: tsPag,
+          sortKey: tsPag,
+          createdAt: tsPag,
           reciboUrl: null,
         });
       });
@@ -117,6 +118,7 @@ function montarLinhasHistorico(dadosFinancas) {
 
     if (recebidos.length > 1) {
       recebidos.slice(1).forEach((p, idx) => {
+        const tsRec = Number(p.data || sortBase) || sortBase;
         linhas.push({
           kind: "recebimento",
           rowId: `${item.id}_rec_${p.id || idx + 1}`,
@@ -124,21 +126,28 @@ function montarLinhasHistorico(dadosFinancas) {
           tipoMovimento: "entrada",
           tipo: item.tipo || "Recebimento",
           descricao: item.descricao || item.tipo || "Receita",
-          data: p.data || sortBase,
+          data: tsRec,
           valorTotal: p.valor,
           valorRecebidoTotal: p.valor,
           status: "quitada",
           registroPaiId: item.id,
-          reg: p.data || sortBase,
-          sortKey: p.data || sortBase,
-          createdAt: p.data || sortBase,
+          reg: tsRec,
+          sortKey: tsRec,
+          createdAt: tsRec,
           reciboUrl: null,
         });
       });
     }
   });
 
-  return linhas.sort((a, b) => (b.sortKey || 0) - (a.sortKey || 0));
+  // Mais novo no topo (data decrescente)
+  return linhas.sort((a, b) => {
+    const da = Number(a.sortKey || a.data || a.reg || 0) || 0;
+    const db = Number(b.sortKey || b.data || b.reg || 0) || 0;
+    if (db !== da) return db - da;
+    // desempate estável
+    return String(b.rowId || "").localeCompare(String(a.rowId || ""));
+  });
 }
 
 export default function Historico() {

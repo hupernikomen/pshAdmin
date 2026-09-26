@@ -31,7 +31,6 @@ function normalizarEmail(email) {
     .toLowerCase();
 }
 
-/** Fim do dia de hoje (ms) — movimentos futuros não entram no saldo */
 function fimDoDiaTs(d = new Date()) {
   const x = new Date(d);
   x.setHours(23, 59, 59, 999);
@@ -42,22 +41,68 @@ function dataDoMovimento(item) {
   return Number(item?.data || item?.createdAt || item?.reg || 0) || 0;
 }
 
+/** Entradas realizadas até limiteTs — pela data de cada recebimento */
+function valorRealizadoEntradaAte(item, limiteTs) {
+  const recebidos = Array.isArray(item.valoresRecebidos)
+    ? item.valoresRecebidos
+    : [];
+
+  if (recebidos.length > 0) {
+    return recebidos.reduce((acc, r) => {
+      const ts = Number(r.data || 0);
+      if (ts && ts <= limiteTs) return acc + (Number(r.valor) || 0);
+      return acc;
+    }, 0);
+  }
+
+  const ts = dataDoMovimento(item);
+  if (ts && ts <= limiteTs) return Number(item.valorRecebidoTotal) || 0;
+  return 0;
+}
+
+/** Saídas realizadas até limiteTs — pela data de cada pagamento */
+function valorRealizadoSaidaAte(item, limiteTs) {
+  const pagos = Array.isArray(item.valoresPagos) ? item.valoresPagos : [];
+
+  if (pagos.length > 0) {
+    return pagos.reduce((acc, p) => {
+      const ts = Number(p.data || 0);
+      if (ts && ts <= limiteTs) return acc + (Number(p.valor) || 0);
+      return acc;
+    }, 0);
+  }
+
+  const parcelas = Array.isArray(item.parcelas) ? item.parcelas : [];
+  const pagas = parcelas.filter(
+    (p) => p.status === "paga" || p.status === "quitada" || !!p.pago
+  );
+
+  if (pagas.length > 0) {
+    return pagas.reduce((acc, p) => {
+      const ts = Number(p.dataPagamento || p.pagoEm || p.data || 0);
+      if (ts && ts <= limiteTs) return acc + (Number(p.valor) || 0);
+      return acc;
+    }, 0);
+  }
+
+  const ts = dataDoMovimento(item);
+  if (ts && ts <= limiteTs) return Number(item.valorPagoTotal) || 0;
+  return 0;
+}
+
 /**
- * Saldo realizado: só entradas/saídas com data <= hoje.
- * Valor futuro (ex.: dízimo em 02/10 lançado em 25/09) NÃO entra.
+ * Saldo realizado: cada pagamento/recebimento pela SUA data.
+ * Parcela paga este mês não altera o saldo do mês passado.
  */
 function calcularSaldoRealizado(lista) {
   const limite = fimDoDiaTs();
   let total = 0;
 
   (lista || []).forEach((item) => {
-    const ts = dataDoMovimento(item);
-    if (!ts || ts > limite) return;
-
     if (item.tipoMovimento === "entrada") {
-      total += Number(item.valorRecebidoTotal) || 0;
+      total += valorRealizadoEntradaAte(item, limite);
     } else if (item.tipoMovimento === "saida") {
-      total -= Number(item.valorPagoTotal) || 0;
+      total -= valorRealizadoSaidaAte(item, limite);
     }
   });
 

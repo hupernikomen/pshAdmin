@@ -64,14 +64,6 @@ function arred(v) {
   return Math.round((Number(v) || 0) * 100) / 100;
 }
 
-function valorEntrada(item) {
-  return Number(item.valorRecebidoTotal) || 0;
-}
-
-function valorSaida(item) {
-  return Number(item.valorPagoTotal) || 0;
-}
-
 function isDizimo(item) {
   const t = String(item.tipo || "").toLowerCase();
   return t.includes("dizimo") || t.includes("dízimo");
@@ -85,11 +77,6 @@ function hojeFimTs() {
   return fimDoDia(new Date()).getTime();
 }
 
-function itemNoFuturo(item) {
-  const ts = tsItem(item);
-  return ts > hojeFimTs();
-}
-
 function seedSaldoInicial(lista, igreja) {
   const item = (lista || []).find((i) => i.tipo === "Saldo inicial");
   if (item) {
@@ -100,7 +87,10 @@ function seedSaldoInicial(lista, igreja) {
   return arred(Number(igreja?.saldoInicial) || 0);
 }
 
-/** Só o que já aconteceu (data até hoje) dentro do intervalo */
+/**
+ * Movimentos realizados no intervalo pela DATA DE CADA PAGAMENTO/RECEBIMENTO.
+ * Não usa valorPagoTotal inteiro na data do documento.
+ */
 function realizadoNoIntervalo(lista, iniTs, fimTs) {
   const teto = Math.min(fimTs, hojeFimTs());
   let entradas = 0;
@@ -112,25 +102,73 @@ function realizadoNoIntervalo(lista, iniTs, fimTs) {
 
   (lista || []).forEach((item) => {
     if (item.tipo === "Saldo inicial") return;
-    const ts = tsItem(item);
-    if (!ts || ts < iniTs || ts > teto) return;
-
-    quantidade += 1;
     const tipo = item.tipo || "Outros";
 
     if (item.tipoMovimento === "entrada") {
-      const v = valorEntrada(item);
+      const recebidos = Array.isArray(item.valoresRecebidos)
+        ? item.valoresRecebidos
+        : [];
+
+      if (recebidos.length > 0) {
+        recebidos.forEach((r) => {
+          const ts = Number(r.data || 0);
+          if (!ts || ts < iniTs || ts > teto) return;
+          const v = Number(r.valor) || 0;
+          entradas += v;
+          porTipoEntrada[tipo] = (porTipoEntrada[tipo] || 0) + v;
+          if (isDizimo(item)) dizimos += v;
+          quantidade += 1;
+        });
+        return;
+      }
+
+      const ts = tsItem(item);
+      if (!ts || ts < iniTs || ts > teto) return;
+      const v = Number(item.valorRecebidoTotal) || 0;
       entradas += v;
       porTipoEntrada[tipo] = (porTipoEntrada[tipo] || 0) + v;
       if (isDizimo(item)) dizimos += v;
+      quantidade += 1;
       return;
     }
 
-    if (item.tipoMovimento === "saida") {
-      const v = valorSaida(item);
-      saidas += v;
-      porTipoSaida[tipo] = (porTipoSaida[tipo] || 0) + v;
+    if (item.tipoMovimento !== "saida") return;
+
+    const pagos = Array.isArray(item.valoresPagos) ? item.valoresPagos : [];
+    if (pagos.length > 0) {
+      pagos.forEach((p) => {
+        const ts = Number(p.data || 0);
+        if (!ts || ts < iniTs || ts > teto) return;
+        const v = Number(p.valor) || 0;
+        saidas += v;
+        porTipoSaida[tipo] = (porTipoSaida[tipo] || 0) + v;
+        quantidade += 1;
+      });
+      return;
     }
+
+    const parcelas = Array.isArray(item.parcelas) ? item.parcelas : [];
+    const pagas = parcelas.filter(
+      (p) => p.status === "paga" || p.status === "quitada" || !!p.pago
+    );
+    if (pagas.length > 0) {
+      pagas.forEach((p) => {
+        const ts = Number(p.dataPagamento || p.pagoEm || p.data || 0);
+        if (!ts || ts < iniTs || ts > teto) return;
+        const v = Number(p.valor) || 0;
+        saidas += v;
+        porTipoSaida[tipo] = (porTipoSaida[tipo] || 0) + v;
+        quantidade += 1;
+      });
+      return;
+    }
+
+    const ts = tsItem(item);
+    if (!ts || ts < iniTs || ts > teto) return;
+    const v = Number(item.valorPagoTotal) || 0;
+    saidas += v;
+    porTipoSaida[tipo] = (porTipoSaida[tipo] || 0) + v;
+    quantidade += 1;
   });
 
   return {
@@ -143,52 +181,158 @@ function realizadoNoIntervalo(lista, iniTs, fimTs) {
   };
 }
 
-/** Saldo fechado até ateTs: inicial + receitas − despesas, mês a mês */
 function acumuladoAte(lista, seed, ateTs) {
+  if (ateTs < 0) return arred(seed);
   const mov = realizadoNoIntervalo(lista, 0, ateTs);
   return arred(seed + mov.entradas - mov.saidas);
 }
 
+/** A receber — mesma lógica da Home */
 function valorAReceberItem(item) {
   if (item.tipoMovimento !== "entrada") return 0;
   if (item.tipo === "Saldo inicial") return 0;
 
+  const ts = tsItem(item);
+  if (!ts) return 0;
+
   const total = Number(item.valorTotal) || 0;
   const recebido = Number(item.valorRecebidoTotal) || 0;
-  const falta = arred(total - recebido);
-  const futuro = itemNoFuturo(item);
+  const falta = Math.max(0, arred(total - recebido));
+  const limite = hojeFimTs();
 
-  if (futuro) return falta > 0 ? falta : arred(total || recebido);
-  if (item.status === "quitada") return 0;
+  if (ts > limite) {
+    const v = arred(recebido + falta);
+    return v > 0 ? v : 0;
+  }
   return falta > 0 ? falta : 0;
 }
 
 function valorAPagarItem(item) {
   if (item.tipoMovimento !== "saida") return 0;
 
-  const hoje = hojeFimTs();
   const parcelas = Array.isArray(item.parcelas) ? item.parcelas : [];
-
   if (parcelas.length > 0) {
     return arred(
       parcelas.reduce((acc, p) => {
-        const pts = Number(p.data || p.vencimento || 0) || 0;
-        const aberta = p.status === "aberta" || !p.status;
-        const futura = pts > hoje;
-        if (aberta || futura) return acc + (Number(p.valor) || 0);
+        if (p.status === "aberta" || !p.status) {
+          return acc + (Number(p.valor) || 0);
+        }
         return acc;
       }, 0)
     );
   }
 
+  if (item.status === "quitada") return 0;
   const total = Number(item.valorTotal) || 0;
   const pago = Number(item.valorPagoTotal) || 0;
   const falta = arred(total - pago);
-  const futuro = itemNoFuturo(item);
-
-  if (futuro) return falta > 0 ? falta : arred(total || pago);
-  if (item.status === "quitada") return 0;
   return falta > 0 ? falta : 0;
+}
+
+/**
+ * Linhas do histórico do período: um evento por pagamento/recebimento
+ * (para a coluna direita do PDF bater com o saldo).
+ */
+function montarHistoricoPeriodo(lista, iniTs, fimTs) {
+  const teto = Math.min(fimTs, hojeFimTs());
+  const rows = [];
+
+  (lista || []).forEach((item) => {
+    if (item.tipo === "Saldo inicial") return;
+    const baseDesc = item.descricao || item.tipo || "Movimento";
+    const tipo = item.tipo || "Outros";
+
+    if (item.tipoMovimento === "entrada") {
+      const recebidos = Array.isArray(item.valoresRecebidos)
+        ? item.valoresRecebidos
+        : [];
+      if (recebidos.length > 0) {
+        recebidos.forEach((r, idx) => {
+          const ts = Number(r.data || 0);
+          if (!ts || ts < iniTs || ts > teto) return;
+          rows.push({
+            id: `${item.id}_r_${idx}`,
+            tipoMovimento: "entrada",
+            tipo,
+            descricao: baseDesc,
+            data: ts,
+            valorRecebidoTotal: Number(r.valor) || 0,
+            valorPagoTotal: 0,
+          });
+        });
+        return;
+      }
+      const ts = tsItem(item);
+      if (!ts || ts < iniTs || ts > teto) return;
+      rows.push({
+        id: item.id,
+        tipoMovimento: "entrada",
+        tipo,
+        descricao: baseDesc,
+        data: ts,
+        valorRecebidoTotal: Number(item.valorRecebidoTotal) || 0,
+        valorPagoTotal: 0,
+      });
+      return;
+    }
+
+    if (item.tipoMovimento !== "saida") return;
+
+    const pagos = Array.isArray(item.valoresPagos) ? item.valoresPagos : [];
+    if (pagos.length > 0) {
+      pagos.forEach((p, idx) => {
+        const ts = Number(p.data || 0);
+        if (!ts || ts < iniTs || ts > teto) return;
+        const parc =
+          p.parcelaNumero != null ? ` (${p.parcelaNumero}ª parc.)` : "";
+        rows.push({
+          id: `${item.id}_p_${idx}`,
+          tipoMovimento: "saida",
+          tipo,
+          descricao: `${baseDesc}${parc}`,
+          data: ts,
+          valorRecebidoTotal: 0,
+          valorPagoTotal: Number(p.valor) || 0,
+        });
+      });
+      return;
+    }
+
+    const parcelas = Array.isArray(item.parcelas) ? item.parcelas : [];
+    const pagas = parcelas.filter(
+      (p) => p.status === "paga" || p.status === "quitada" || !!p.pago
+    );
+    if (pagas.length > 0) {
+      pagas.forEach((p, idx) => {
+        const ts = Number(p.dataPagamento || p.pagoEm || p.data || 0);
+        if (!ts || ts < iniTs || ts > teto) return;
+        rows.push({
+          id: `${item.id}_parc_${p.numero || idx}`,
+          tipoMovimento: "saida",
+          tipo,
+          descricao: `${baseDesc} (${p.numero || "?"}ª parc.)`,
+          data: ts,
+          valorRecebidoTotal: 0,
+          valorPagoTotal: Number(p.valor) || 0,
+        });
+      });
+      return;
+    }
+
+    const ts = tsItem(item);
+    if (!ts || ts < iniTs || ts > teto) return;
+    rows.push({
+      id: item.id,
+      tipoMovimento: "saida",
+      tipo,
+      descricao: baseDesc,
+      data: ts,
+      valorRecebidoTotal: 0,
+      valorPagoTotal: Number(item.valorPagoTotal) || 0,
+    });
+  });
+
+  return rows.sort((a, b) => (a.data || 0) - (b.data || 0));
 }
 
 function pontoOuNulo(isFuturo, valor) {
@@ -227,6 +371,12 @@ function montarJanelaMesesGrafico() {
     }
   }
   return pontos;
+}
+
+function noMes(ts, ano, mes) {
+  if (!ts) return false;
+  const d = new Date(ts);
+  return d.getFullYear() === ano && d.getMonth() === mes;
 }
 
 export default function Relatorio() {
@@ -280,22 +430,9 @@ export default function Relatorio() {
     };
   }, [modoFiltro, dataDe, dataAte, mesSelecionado, anoSelecionado]);
 
-  const filtrados = useMemo(() => {
-    const lista = dadosFinancas || [];
-    return lista.filter((item) => {
-      if (item.tipo === "Saldo inicial") return false;
-      const ts = tsItem(item);
-      if (!ts) return false;
-      return ts >= intervalo.ini && ts <= intervalo.fim;
-    });
-  }, [dadosFinancas, intervalo]);
-
   const historicoPeriodo = useMemo(
-    () =>
-      [...filtrados].sort(
-        (a, b) => (a.data || a.reg || 0) - (b.data || b.reg || 0)
-      ),
-    [filtrados]
+    () => montarHistoricoPeriodo(dadosFinancas || [], intervalo.ini, intervalo.fim),
+    [dadosFinancas, intervalo]
   );
 
   const resumo = useMemo(() => {
@@ -336,6 +473,7 @@ export default function Relatorio() {
   const seriesGraficos = useMemo(() => {
     const lista = dadosFinancas || [];
     const janela = montarJanelaMesesGrafico();
+    const limite = hojeFimTs();
 
     return janela.map((slot) => {
       let receita = 0;
@@ -346,14 +484,39 @@ export default function Relatorio() {
         if (item.tipo === "Saldo inicial") return;
 
         if (item.tipoMovimento === "entrada") {
-          const ts = tsItem(item);
-          if (!ts) return;
-          const d = new Date(ts);
-          if (d.getFullYear() !== slot.ano || d.getMonth() !== slot.mes) return;
+          const recebidos = Array.isArray(item.valoresRecebidos)
+            ? item.valoresRecebidos
+            : [];
 
-          const v = slot.isFuturo
-            ? Number(item.valorTotal) || valorEntrada(item) || 0
-            : valorEntrada(item);
+          if (slot.isFuturo) {
+            const ts = tsItem(item);
+            if (!ts || !noMes(ts, slot.ano, slot.mes)) return;
+            if (ts <= limite) return;
+            const v =
+              Number(item.valorTotal) ||
+              Number(item.valorRecebidoTotal) ||
+              0;
+            receita += v;
+            if (isDizimo(item)) dizimo += v;
+            return;
+          }
+
+          if (recebidos.length > 0) {
+            recebidos.forEach((r) => {
+              const ts = Number(r.data || 0);
+              if (!ts || ts > limite) return;
+              if (!noMes(ts, slot.ano, slot.mes)) return;
+              const v = Number(r.valor) || 0;
+              receita += v;
+              if (isDizimo(item)) dizimo += v;
+            });
+            return;
+          }
+
+          const ts = tsItem(item);
+          if (!ts || ts > limite) return;
+          if (!noMes(ts, slot.ano, slot.mes)) return;
+          const v = Number(item.valorRecebidoTotal) || 0;
           receita += v;
           if (isDizimo(item)) dizimo += v;
           return;
@@ -362,33 +525,51 @@ export default function Relatorio() {
         if (item.tipoMovimento !== "saida") return;
 
         const parcelas = Array.isArray(item.parcelas) ? item.parcelas : [];
+        const pagos = Array.isArray(item.valoresPagos) ? item.valoresPagos : [];
+
+        if (slot.isFuturo) {
+          if (parcelas.length > 0) {
+            parcelas.forEach((p) => {
+              if (p.status !== "aberta" && p.status) return;
+              const pts = Number(p.vencimento || p.data || 0) || 0;
+              if (!pts || !noMes(pts, slot.ano, slot.mes)) return;
+              despesa += Number(p.valor) || 0;
+            });
+            return;
+          }
+          const ts = tsItem(item);
+          if (!ts || ts <= limite) return;
+          if (!noMes(ts, slot.ano, slot.mes)) return;
+          despesa +=
+            Number(item.valorTotal) || Number(item.valorPagoTotal) || 0;
+          return;
+        }
+
+        if (pagos.length > 0) {
+          pagos.forEach((p) => {
+            const ts = Number(p.data || 0);
+            if (!ts || ts > limite) return;
+            if (!noMes(ts, slot.ano, slot.mes)) return;
+            despesa += Number(p.valor) || 0;
+          });
+          return;
+        }
+
         if (parcelas.length > 0) {
           parcelas.forEach((p) => {
-            const pts = Number(p.data || p.vencimento || 0) || 0;
-            if (!pts) return;
-            const d = new Date(pts);
-            if (d.getFullYear() !== slot.ano || d.getMonth() !== slot.mes)
-              return;
-            const val = Number(p.valor) || 0;
-            if (slot.isFuturo) {
-              if (p.status === "aberta" || !p.status) despesa += val;
-            } else {
-              despesa += val;
-            }
+            if (p.status === "aberta" || !p.status) return;
+            const ts = Number(p.dataPagamento || p.pagoEm || p.data || 0);
+            if (!ts || ts > limite) return;
+            if (!noMes(ts, slot.ano, slot.mes)) return;
+            despesa += Number(p.valor) || 0;
           });
           return;
         }
 
         const ts = tsItem(item);
-        if (!ts) return;
-        const d = new Date(ts);
-        if (d.getFullYear() !== slot.ano || d.getMonth() !== slot.mes) return;
-
-        if (slot.isFuturo) {
-          despesa += Number(item.valorTotal) || valorSaida(item) || 0;
-        } else {
-          despesa += valorSaida(item);
-        }
+        if (!ts || ts > limite) return;
+        if (!noMes(ts, slot.ano, slot.mes)) return;
+        despesa += Number(item.valorPagoTotal) || 0;
       });
 
       return {
