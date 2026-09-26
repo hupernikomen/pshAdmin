@@ -7,8 +7,10 @@ import {
   TextInput,
   TouchableOpacity,
   Alert,
+  Platform,
 } from "react-native";
 import { useNavigation, useRoute, useTheme } from "@react-navigation/native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   doc,
   getDoc,
@@ -44,11 +46,17 @@ function arred(v) {
   return Math.round((Number(v) || 0) * 100) / 100;
 }
 
-/**
- * Soma quanto foi tirado de cada caixinha neste registro
- * (valoresPagos + parcelas pagas + origem no doc).
- * Retorna Map: caixinhaId -> valor a devolver
- */
+function tsParaDate(ts) {
+  const n = Number(ts) || 0;
+  const d = n ? new Date(n) : new Date();
+  return Number.isNaN(d.getTime()) ? new Date() : d;
+}
+
+function formatarData(d) {
+  if (!d) return "";
+  return d.toLocaleDateString("pt-BR");
+}
+
 function montarDevolucoesCaixinha(item) {
   const map = new Map();
 
@@ -71,7 +79,6 @@ function montarDevolucoesCaixinha(item) {
       p?.origemPagamento === "caixinha" &&
       p.caixinhaId
     ) {
-      // evita dobrar se o mesmo valor já estiver em valoresPagos com parcelaNumero
       const jaNoPagos = pagos.some(
         (vp) =>
           vp.parcelaNumero === p.numero &&
@@ -84,7 +91,6 @@ function montarDevolucoesCaixinha(item) {
     }
   });
 
-  // fallback: saída única marcada no documento
   if (
     item.tipoMovimento === "saida" &&
     item.origemPagamento === "caixinha" &&
@@ -122,6 +128,8 @@ export default function EditarRegistro() {
   const [descricao, setDescricao] = useState("");
   const [observacao, setObservacao] = useState("");
   const [valorTotal, setValorTotal] = useState("");
+  const [data, setData] = useState(new Date());
+  const [showDate, setShowDate] = useState(false);
 
   const igrejaId = getIgrejaId?.() || igrejaAtiva?.id || null;
   const podeEditar = podeEditarFinanceiro?.() !== false;
@@ -156,9 +164,9 @@ export default function EditarRegistro() {
         return;
       }
 
-      const data = { id: snap.id, ...snap.data() };
+      const dataDoc = { id: snap.id, ...snap.data() };
 
-      if (igrejaId && data.igrejaId && data.igrejaId !== igrejaId) {
+      if (igrejaId && dataDoc.igrejaId && dataDoc.igrejaId !== igrejaId) {
         Alert.alert(
           "Acesso negado",
           "Este registro não pertence à igreja selecionada."
@@ -167,7 +175,7 @@ export default function EditarRegistro() {
         return;
       }
 
-      const criado = data.createdAt || data.reg || 0;
+      const criado = dataDoc.createdAt || dataDoc.reg || 0;
       if (Date.now() - Number(criado) > LIMITE_MS) {
         Alert.alert(
           "Edição bloqueada",
@@ -177,16 +185,23 @@ export default function EditarRegistro() {
         return;
       }
 
-      setItem(data);
-      setDescricao(data.descricao || "");
-      setObservacao(data.observacao || "");
-      setValorTotal(String(data.valorTotal ?? "").replace(".", ","));
+      setItem(dataDoc);
+      setDescricao(dataDoc.descricao || "");
+      setObservacao(dataDoc.observacao || "");
+      setValorTotal(String(dataDoc.valorTotal ?? "").replace(".", ","));
+      setData(tsParaDate(dataDoc.data || dataDoc.createdAt || dataDoc.reg));
     } catch (e) {
       Alert.alert("Erro", "Não foi possível carregar o registro.");
       navigation.goBack();
     } finally {
       setLoad(false);
     }
+  }
+
+  function onChangeData(event, selected) {
+    if (Platform.OS === "android") setShowDate(false);
+    if (event?.type === "dismissed") return;
+    if (selected) setData(selected);
   }
 
   async function salvar() {
@@ -226,6 +241,10 @@ export default function EditarRegistro() {
       Alert.alert("Atenção", "Informe um valor total válido.");
       return;
     }
+    if (!data || Number.isNaN(data.getTime())) {
+      Alert.alert("Atenção", "Informe uma data válida.");
+      return;
+    }
 
     const pago =
       Number(item.valorPagoTotal || item.valorRecebidoTotal || 0) || 0;
@@ -242,11 +261,13 @@ export default function EditarRegistro() {
     setSalvando(true);
     try {
       const status = novoTotal <= pago ? "quitada" : "aberta";
+      const dataTs = data.getTime();
 
       await updateDoc(doc(db, "registros", item.id), {
         descricao: descricao.trim(),
         observacao: (observacao || "").trim(),
         valorTotal: novoTotal,
+        data: dataTs,
         status,
         atualizadoEm: Date.now(),
       });
@@ -296,15 +317,14 @@ export default function EditarRegistro() {
     );
   }
 
-  async function devolverParaCaixinhas(item) {
-    const devolucoes = montarDevolucoesCaixinha(item);
+  async function devolverParaCaixinhas(itemAtual) {
+    const devolucoes = montarDevolucoesCaixinha(itemAtual);
     if (devolucoes.size === 0) return;
 
     for (const [caixinhaId, valor] of devolucoes.entries()) {
       if (typeof DepositarNaCaixinha === "function") {
         await DepositarNaCaixinha(caixinhaId, valor);
       } else {
-        // fallback: soma direto no doc da caixinha
         const ref = doc(db, "caixinhas", caixinhaId);
         const snap = await getDoc(ref);
         if (!snap.exists()) continue;
@@ -322,10 +342,8 @@ export default function EditarRegistro() {
 
     setExcluindo(true);
     try {
-      // 1) Devolve à caixinha o que foi debitado nela
       await devolverParaCaixinhas(item);
 
-      // 2) Cópia na lixeira
       try {
         const { id: _id, ...resto } = item;
         await addDoc(collection(db, "lixeira"), {
@@ -339,7 +357,6 @@ export default function EditarRegistro() {
         console.log("Aviso lixeira:", eLixo);
       }
 
-      // 3) Remove o registro
       await deleteDoc(doc(db, "registros", item.id));
 
       await Promise.all([
@@ -359,13 +376,6 @@ export default function EditarRegistro() {
 
   if (load) return <Load />;
 
-  const horasRestantes = item
-    ? Math.max(
-        0,
-        (Number(item.createdAt || item.reg) + LIMITE_MS - Date.now()) / 3600000
-      )
-    : 0;
-
   const ocupado = salvando || excluindo;
 
   return (
@@ -374,7 +384,35 @@ export default function EditarRegistro() {
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
+      <TouchableOpacity
+        style={styles.field}
+        onPress={() => !ocupado && setShowDate(true)}
+        activeOpacity={0.8}
+        disabled={ocupado}
+      >
+        <Text style={styles.label}>Data</Text>
+        <Text style={styles.input}>{formatarData(data)}</Text>
+      </TouchableOpacity>
 
+      {showDate && (
+        <DateTimePicker
+          value={data}
+          mode="date"
+          display={Platform.OS === "ios" ? "spinner" : "default"}
+          onChange={onChangeData}
+        />
+      )}
+
+      {Platform.OS === "ios" && showDate ? (
+        <TouchableOpacity
+          style={styles.dateOk}
+          onPress={() => setShowDate(false)}
+        >
+          <Text style={[styles.dateOkText, { color: colors.principal }]}>
+            Confirmar data
+          </Text>
+        </TouchableOpacity>
+      ) : null}
 
       <View style={styles.field}>
         <Text style={styles.label}>Descrição</Text>
@@ -444,6 +482,7 @@ export default function EditarRegistro() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    paddingHorizontal:14
   },
   content: {
     paddingVertical: 14,
@@ -465,6 +504,16 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Regular",
     color: "#1f2933",
     padding: 0,
+  },
+  dateOk: {
+    alignSelf: "flex-end",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    marginBottom: 10,
+  },
+  dateOkText: {
+    fontSize: 14,
+    fontFamily: "Roboto-Medium",
   },
   saveBtn: {
     height: 52,

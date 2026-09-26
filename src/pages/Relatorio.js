@@ -14,6 +14,8 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
 import Load from "../componentes/Load";
+import GrafBarras from "../componentes/GrafBarras";
+import GrafLinhas from "../componentes/GrafLinhas";
 import { exportarRelatorioPDF } from "../utils/relatorioPdf";
 
 const MESES = [
@@ -75,6 +77,16 @@ function isDizimo(item) {
   return t.includes("dizimo") || t.includes("dízimo");
 }
 
+function tsItem(item) {
+  return Number(item?.data || item?.createdAt || item?.reg || 0) || 0;
+}
+
+function pontoOuNulo(isFuturo, valor) {
+  const n = arred(valor);
+  if (isFuturo && n <= 0) return null;
+  return n;
+}
+
 function resumoDeLista(lista) {
   let entradas = 0;
   let saidas = 0;
@@ -108,43 +120,32 @@ function resumoDeLista(lista) {
   };
 }
 
-/** Criação da igreja → agora; após 12 meses, últimos 12 (rolante) */
-function montarJanelaMesesGrafico(createdAtTs) {
+function montarJanelaMesesGrafico() {
+  const TOTAL = 12;
+  const FUTUROS = 3; // ← mude só este número se quiser mais/menos futuro
+  const PASSADOS = TOTAL - 1 - FUTUROS;
+
   const agora = new Date();
   const fimAno = agora.getFullYear();
   const fimMes = agora.getMonth();
 
-  let iniAno = fimAno;
-  let iniMes = fimMes;
-
-  if (createdAtTs) {
-    const criacao = new Date(Number(createdAtTs));
-    if (!isNaN(criacao.getTime())) {
-      iniAno = criacao.getFullYear();
-      iniMes = criacao.getMonth();
-    }
-  }
-
-  const totalMeses = (fimAno - iniAno) * 12 + (fimMes - iniMes) + 1;
-  let startAno = iniAno;
-  let startMes = iniMes;
-  let qtd = Math.max(totalMeses, 1);
-
-  if (totalMeses > 12) {
-    qtd = 12;
-    startMes = fimMes - 11;
-    startAno = fimAno;
-    while (startMes < 0) {
-      startMes += 12;
-      startAno -= 1;
-    }
+  let y = fimAno;
+  let m = fimMes - PASSADOS;
+  while (m < 0) {
+    m += 12;
+    y -= 1;
   }
 
   const pontos = [];
-  let y = startAno;
-  let m = startMes;
-  for (let i = 0; i < qtd; i++) {
-    pontos.push({ ano: y, mes: m, label: MESES_CURTO[m] });
+  for (let i = 0; i < TOTAL; i++) {
+    pontos.push({
+      ano: y,
+      mes: m,
+      label: MESES_CURTO[m],
+      isAtual: i === PASSADOS,
+      isFuturo: i > PASSADOS,
+      isPassado: i < PASSADOS,
+    });
     m += 1;
     if (m > 11) {
       m = 0;
@@ -152,185 +153,6 @@ function montarJanelaMesesGrafico(createdAtTs) {
     }
   }
   return pontos;
-}
-
-function formatCompacto(v, formatoMoeda) {
-  const n = Number(v) || 0;
-  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`;
-  return formatoMoeda.format(n);
-}
-
-/** Barras alinhadas à esquerda */
-function ChartBarras({ dados, cor, formatoMoeda, altura = 140 }) {
-  const max = Math.max(...dados.map((d) => d.value), 1);
-  const barMaxH = altura - 36;
-  const barSlot = Math.min(
-    36,
-    Math.max(24, Math.floor(300 / Math.max(dados.length, 1)))
-  );
-
-  return (
-    <View style={[styles.chartBox, { height: altura + 8 }]}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={dados.length > 8}
-        contentContainerStyle={styles.barsRowStart}
-      >
-        {dados.map((d, i) => {
-          const h = Math.max(4, (d.value / max) * barMaxH);
-          return (
-            <View
-              key={`${d.label}-${i}`}
-              style={[styles.barColFixed, { width: barSlot }]}
-            >
-              <Text style={styles.barValue} numberOfLines={1}>
-                {d.value > 0 ? formatCompacto(d.value, formatoMoeda) : "—"}
-              </Text>
-              <View style={[styles.barTrack, { height: barMaxH }]}>
-                <View
-                  style={[styles.barFill, { height: h, backgroundColor: cor }]}
-                />
-              </View>
-              <Text style={styles.barLabel}>{d.label}</Text>
-            </View>
-          );
-        })}
-      </ScrollView>
-    </View>
-  );
-}
-
-/** Linhas a partir da esquerda (1 ponto no início) */
-function ChartLinhas({ dados, corReceita, corDespesa, altura = 150 }) {
-  const max = Math.max(
-    ...dados.flatMap((d) => [d.receita, d.despesa]),
-    1
-  );
-  const plotH = altura - 28;
-  const n = dados.length;
-  const plotW = Math.max(n * 28, 120);
-  const stepX = n <= 1 ? 0 : plotW / (n - 1);
-
-  const pts = (key) =>
-    dados.map((d, i) => ({
-      x: i * stepX,
-      y: plotH - (Number(d[key]) / max) * plotH,
-    }));
-
-  const rec = pts("receita");
-  const des = pts("despesa");
-
-  return (
-    <View style={[styles.chartBox, { height: altura + 24 }]}>
-      <View style={styles.legendRow}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: corReceita }]} />
-          <Text style={styles.legendText}>Receitas</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: corDespesa }]} />
-          <Text style={styles.legendText}>Despesas</Text>
-        </View>
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={n > 8}
-        contentContainerStyle={{ minWidth: plotW + 16 }}
-      >
-        <View style={{ height: plotH, width: plotW, marginTop: 4 }}>
-          <View style={[styles.axisBase, { top: plotH - 1 }]} />
-
-          {rec.slice(0, -1).map((p, i) => {
-            const n2 = rec[i + 1];
-            const dx = n2.x - p.x;
-            const dy = n2.y - p.y;
-            const len = Math.sqrt(dx * dx + dy * dy) || 1;
-            const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-            return (
-              <View
-                key={`r-${i}`}
-                style={{
-                  position: "absolute",
-                  left: p.x,
-                  top: p.y,
-                  width: len,
-                  height: 2,
-                  backgroundColor: corReceita,
-                  transform: [{ rotate: `${angle}deg` }],
-                  transformOrigin: "left center",
-                }}
-              />
-            );
-          })}
-          {des.slice(0, -1).map((p, i) => {
-            const n2 = des[i + 1];
-            const dx = n2.x - p.x;
-            const dy = n2.y - p.y;
-            const len = Math.sqrt(dx * dx + dy * dy) || 1;
-            const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-            return (
-              <View
-                key={`d-${i}`}
-                style={{
-                  position: "absolute",
-                  left: p.x,
-                  top: p.y,
-                  width: len,
-                  height: 2,
-                  backgroundColor: corDespesa,
-                  transform: [{ rotate: `${angle}deg` }],
-                  transformOrigin: "left center",
-                }}
-              />
-            );
-          })}
-
-          {rec.map((p, i) => (
-            <View
-              key={`rp-${i}`}
-              style={[
-                styles.lineDot,
-                {
-                  left: p.x - 3,
-                  top: p.y - 3,
-                  backgroundColor: corReceita,
-                },
-              ]}
-            />
-          ))}
-          {des.map((p, i) => (
-            <View
-              key={`dp-${i}`}
-              style={[
-                styles.lineDot,
-                {
-                  left: p.x - 3,
-                  top: p.y - 3,
-                  backgroundColor: corDespesa,
-                },
-              ]}
-            />
-          ))}
-        </View>
-      </ScrollView>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={[styles.lineLabels, { minWidth: plotW + 16 }]}
-      >
-        {dados.map((d, i) => (
-          <Text
-            key={i}
-            style={[styles.barLabel, { width: n <= 1 ? 40 : stepX || 28 }]}
-          >
-            {d.label}
-          </Text>
-        ))}
-      </ScrollView>
-    </View>
-  );
 }
 
 export default function Relatorio() {
@@ -371,14 +193,14 @@ export default function Relatorio() {
       const fim = fimDoDia(dataAte).getTime();
       return lista.filter((item) => {
         if (item.tipo === "Saldo inicial") return false;
-        const ts = item.data || item.createdAt || item.reg;
+        const ts = tsItem(item);
         if (!ts) return false;
         return ts >= ini && ts <= fim;
       });
     }
     return lista.filter((item) => {
       if (item.tipo === "Saldo inicial") return false;
-      const ts = item.data || item.createdAt || item.reg;
+      const ts = tsItem(item);
       if (!ts) return false;
       const d = new Date(ts);
       return (
@@ -442,39 +264,90 @@ export default function Relatorio() {
 
   const seriesGraficos = useMemo(() => {
     const lista = dadosFinancas || [];
-    const janela = montarJanelaMesesGrafico(igrejaAtiva?.createdAt);
-    return janela.map(({ ano, mes, label }) => {
+    const janela = montarJanelaMesesGrafico();
+
+    return janela.map((slot) => {
       let receita = 0;
       let despesa = 0;
       let dizimo = 0;
+
       lista.forEach((item) => {
         if (item.tipo === "Saldo inicial") return;
-        const ts = item.data || item.createdAt || item.reg;
-        if (!ts) return;
-        const d = new Date(ts);
-        if (d.getFullYear() !== ano || d.getMonth() !== mes) return;
+
         if (item.tipoMovimento === "entrada") {
-          const v = valorEntrada(item);
+          const ts = tsItem(item);
+          if (!ts) return;
+          const d = new Date(ts);
+          if (d.getFullYear() !== slot.ano || d.getMonth() !== slot.mes) return;
+
+          const v = slot.isFuturo
+            ? valorEntrada(item) || Number(item.valorTotal) || 0
+            : valorEntrada(item);
           receita += v;
           if (isDizimo(item)) dizimo += v;
-        } else if (item.tipoMovimento === "saida") {
+          return;
+        }
+
+        if (item.tipoMovimento !== "saida") return;
+
+        const parcelas = Array.isArray(item.parcelas) ? item.parcelas : [];
+        if (parcelas.length > 0) {
+          parcelas.forEach((p) => {
+            const pts = Number(p.data || p.vencimento || 0) || 0;
+            if (!pts) return;
+            const d = new Date(pts);
+            if (d.getFullYear() !== slot.ano || d.getMonth() !== slot.mes)
+              return;
+            const val = Number(p.valor) || 0;
+            if (slot.isFuturo) {
+              if (p.status === "aberta") despesa += val;
+            } else {
+              despesa += val;
+            }
+          });
+          return;
+        }
+
+        const ts = tsItem(item);
+        if (!ts) return;
+        const d = new Date(ts);
+        if (d.getFullYear() !== slot.ano || d.getMonth() !== slot.mes) return;
+
+        if (slot.isFuturo) {
+          const falta =
+            (Number(item.valorTotal) || 0) - (Number(item.valorPagoTotal) || 0);
+          despesa += falta > 0 ? falta : valorSaida(item);
+        } else {
           despesa += valorSaida(item);
         }
       });
+
       return {
-        label,
-        receita: arred(receita),
-        despesa: arred(despesa),
-        dizimo: arred(dizimo),
+        ...slot,
+        receita: pontoOuNulo(slot.isFuturo, receita),
+        despesa: pontoOuNulo(slot.isFuturo, despesa),
+        dizimo: pontoOuNulo(slot.isFuturo, dizimo),
       };
     });
-  }, [dadosFinancas, igrejaAtiva?.createdAt]);
+  }, [dadosFinancas]);
+
+  const dadosBarrasDizimo = useMemo(
+    () =>
+      seriesGraficos.map((s) => ({
+        label: s.label,
+        value: s.dizimo,
+        isAtual: s.isAtual,
+      })),
+    [seriesGraficos]
+  );
 
   const labelJanelaGrafico = useMemo(() => {
     if (!seriesGraficos.length) return "";
-    if (seriesGraficos.length === 1) return seriesGraficos[0].label;
-    return `${seriesGraficos[0].label} – ${
-      seriesGraficos[seriesGraficos.length - 1].label
+    const a = seriesGraficos[0];
+    const b = seriesGraficos[seriesGraficos.length - 1];
+    const centro = seriesGraficos.find((s) => s.isAtual);
+    return `${a.label} – ${b.label}${
+      centro ? `  ·  centro: ${centro.label}` : ""
     }`;
   }, [seriesGraficos]);
 
@@ -516,11 +389,6 @@ export default function Relatorio() {
   }
 
   if ((!authPronto || load) && !(dadosFinancas || []).length) return <Load />;
-
-  const dadosBarrasDizimo = seriesGraficos.map((s) => ({
-    label: s.label,
-    value: s.dizimo,
-  }));
 
   return (
     <View style={styles.container}>
@@ -634,7 +502,7 @@ export default function Relatorio() {
               mode="date"
               display="default"
               maximumDate={dataAte}
-              onChange={(e, selected) => {
+              onValueChange={(e, selected) => {
                 setShowDe(false);
                 if (selected) setDataDe(selected);
               }}
@@ -647,7 +515,7 @@ export default function Relatorio() {
               display="default"
               minimumDate={dataDe}
               maximumDate={new Date()}
-              onChange={(e, selected) => {
+              onValueChange={(e, selected) => {
                 setShowAte(false);
                 if (selected) setDataAte(selected);
               }}
@@ -683,19 +551,17 @@ export default function Relatorio() {
 
         <View style={styles.block}>
           <Text style={styles.previewTitle}>Dízimos</Text>
-          <Text style={styles.previewSub}>{labelJanelaGrafico}</Text>
-          <ChartBarras
+          <Text style={styles.previewSub}>Evolução das Coletas</Text>
+          <GrafBarras
             dados={dadosBarrasDizimo}
             cor={corPrincipal}
-            formatoMoeda={formatoMoeda}
             altura={150}
           />
         </View>
 
         <View style={styles.block}>
           <Text style={styles.previewTitle}>Receitas e despesas</Text>
-          <Text style={styles.previewSub}>{labelJanelaGrafico}</Text>
-          <ChartLinhas
+          <GrafLinhas
             dados={seriesGraficos}
             corReceita={corPrincipal}
             corDespesa={corDespesa}
@@ -841,79 +707,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Roboto-Regular",
     color: "#9aa0a6",
-  },
-  chartBox: { width: "100%" },
-  barsRowStart: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "flex-start",
-    paddingRight: 8,
-  },
-  barColFixed: {
-    alignItems: "center",
-    paddingHorizontal: 2,
-  },
-  barValue: {
-    fontSize: 9,
-    fontFamily: "Roboto-Medium",
-    color: "#555",
-    marginBottom: 4,
-  },
-  barTrack: {
-    width: "70%",
-    maxWidth: 28,
-    justifyContent: "flex-end",
-    backgroundColor: "#f4f5f7",
-    borderRadius: 6,
-    overflow: "hidden",
-  },
-  barFill: {
-    width: "100%",
-    borderRadius: 6,
-    minHeight: 3,
-  },
-  barLabel: {
-    marginTop: 6,
-    fontSize: 10,
-    fontFamily: "Roboto-Regular",
-    color: "#888",
-    textAlign: "center",
-  },
-  legendRow: {
-    flexDirection: "row",
-    gap: 16,
-    marginBottom: 4,
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  legendText: {
-    fontSize: 11,
-    fontFamily: "Roboto-Regular",
-    color: "#666",
-  },
-  axisBase: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: "#ececec",
-  },
-  lineDot: {
-    position: "absolute",
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  lineLabels: {
-    flexDirection: "row",
-    marginTop: 8,
   },
 });

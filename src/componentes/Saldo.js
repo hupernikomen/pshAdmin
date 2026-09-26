@@ -147,8 +147,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   balanceLabel: {
-    fontSize: 13,
-    fontFamily: "Roboto-Regular",
+    fontSize: 12,
+    fontFamily: "Roboto-Light",
+    color:'#000'
   },
   balanceValue: {
     fontSize: 30,
@@ -161,6 +162,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   miniLabel: {
+    color:'#000',
     fontSize: 12,
     fontFamily: "Roboto-Light",
     marginBottom: 3,
@@ -182,6 +184,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   chipLabel: {
+    color:'#000',
     fontSize: 12,
     fontFamily: "Roboto-Light",
     marginBottom: 3,

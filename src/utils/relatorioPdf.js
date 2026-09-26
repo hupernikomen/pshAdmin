@@ -83,22 +83,27 @@ function desenharLinhaChart(page, font, opts) {
     color: lineColor,
   });
 
-  const allVals = series.flatMap((s) => s.values);
+  const allVals = series.flatMap((s) =>
+    (s.values || []).filter((v) => v != null && Number.isFinite(Number(v)))
+  );
   const maxV = Math.max(...allVals, 1);
   const n = Math.max(labels.length, 1);
-  // 1 ponto no início; vários distribuídos da esquerda para a direita
   const stepX = n <= 1 ? 0 : plotW / (n - 1);
 
   const pointsFor = (values) =>
     values.map((v, i) => ({
       px: x + padL + i * stepX,
-      py: baseY + (Number(v) / maxV) * plotH,
+      py:
+        v == null || !Number.isFinite(Number(v))
+          ? null
+          : baseY + (Number(v) / maxV) * plotH,
     }));
 
   series.forEach((s, si) => {
     const pts = pointsFor(s.values);
     const col = colors[si] || C.ink;
     for (let i = 0; i < pts.length - 1; i++) {
+      if (pts[i].py == null || pts[i + 1].py == null) continue;
       page.drawLine({
         start: { x: pts[i].px, y: pts[i].py },
         end: { x: pts[i + 1].px, y: pts[i + 1].py },
@@ -107,6 +112,7 @@ function desenharLinhaChart(page, font, opts) {
       });
     }
     pts.forEach((p) => {
+      if (p.py == null) return;
       page.drawCircle({ x: p.px, y: p.py, size: 2.2, color: col });
     });
   });
@@ -125,8 +131,7 @@ function desenharLinhaChart(page, font, opts) {
   });
 }
 
-/** Barras verticais alinhadas à esquerda, valor no topo */
-function desenharBarrasChart(page, font, fontBold, opts) {
+function desenharBarrasChart(page, font, opts) {
   const {
     x,
     y,
@@ -137,12 +142,11 @@ function desenharBarrasChart(page, font, fontBold, opts) {
     barColor = C.green,
     lineColor = C.line,
     mutedColor = C.muted,
-    formatoMoeda,
   } = opts;
 
   const padL = 10;
   const padR = 10;
-  const padT = 22;
+  const padT = 10;
   const padB = 18;
   const plotW = width - padL - padR;
   const plotH = height - padT - padB;
@@ -166,44 +170,25 @@ function desenharBarrasChart(page, font, fontBold, opts) {
   });
 
   const n = Math.max(values.length, 1);
-  const maxV = Math.max(...values.map(Number), 1);
+  const maxV = Math.max(...values.map((v) => Number(v) || 0), 1);
   const gap = 4;
   const barW = Math.min(22, Math.max(8, (plotW - gap * (n - 1)) / n));
-  // sempre do início (esquerda)
   const startX = x + padL;
 
   values.forEach((v, i) => {
     const val = Number(v) || 0;
-    const h = Math.max(val > 0 ? 3 : 0, (val / maxV) * plotH);
+    const h = val > 0 ? Math.max(3, (val / maxV) * plotH) : 0;
     const bx = startX + i * (barW + gap);
-    const by = baseY;
 
     if (h > 0) {
       page.drawRectangle({
         x: bx,
-        y: by,
+        y: baseY,
         width: barW,
         height: h,
         color: barColor,
       });
     }
-
-    const txt =
-      val > 0
-        ? val >= 1000
-          ? `${(val / 1000).toFixed(val >= 10000 ? 0 : 1)}k`
-          : formatoMoeda
-            ? formatoMoeda.format(val)
-            : String(val)
-        : "—";
-    const tw = fontBold.widthOfTextAtSize(txt, 6.5);
-    page.drawText(txt, {
-      x: bx + barW / 2 - tw / 2,
-      y: by + h + 3,
-      size: 6.5,
-      font: fontBold,
-      color: C.ink,
-    });
 
     const lab = String(labels[i] || "");
     const lw = font.widthOfTextAtSize(lab, 7);
@@ -217,13 +202,9 @@ function desenharBarrasChart(page, font, fontBold, opts) {
   });
 }
 
-/**
- * Gera e compartilha o PDF do relatório.
- */
 export async function exportarRelatorioPDF({
   nomeIgreja,
   labelPeriodo,
-  labelJanelaGrafico,
   resumo,
   projecao,
   seriesGraficos,
@@ -434,9 +415,12 @@ export async function exportarRelatorioPDF({
   yLeft -= cardH + 18;
 
   const labels = (seriesGraficos || []).map((s) => s.label);
+  const receitaVals = (seriesGraficos || []).map((s) => s.receita);
+  const despesaVals = (seriesGraficos || []).map((s) => s.despesa);
+  const dizimoVals = (seriesGraficos || []).map((s) => s.dizimo);
 
   ensureLeft(110);
-  page.drawText(safe(`Dízimos (${labelJanelaGrafico || ""})`), {
+  page.drawText(safe(`Dízimos`), {
     x: xLeft,
     y: yLeft,
     size: 9,
@@ -445,20 +429,19 @@ export async function exportarRelatorioPDF({
   });
   yLeft -= 8;
   const chartH1 = 88;
-  desenharBarrasChart(page, font, fontBold, {
+  desenharBarrasChart(page, font, {
     x: xLeft,
     y: yLeft,
     width: colLeftW,
     height: chartH1,
-    values: (seriesGraficos || []).map((s) => s.dizimo),
+    values: dizimoVals,
     labels,
     barColor: C.green,
-    formatoMoeda,
   });
   yLeft -= chartH1 + 16;
 
   ensureLeft(110);
-  page.drawText(safe(`Receitas e despesas (${labelJanelaGrafico || ""})`), {
+  page.drawText(safe(`Receitas e despesas`), {
     x: xLeft,
     y: yLeft,
     size: 9,
@@ -473,10 +456,7 @@ export async function exportarRelatorioPDF({
     width: colLeftW,
     height: chartH2,
     labels,
-    series: [
-      { values: (seriesGraficos || []).map((s) => s.receita) },
-      { values: (seriesGraficos || []).map((s) => s.despesa) },
-    ],
+    series: [{ values: receitaVals }, { values: despesaVals }],
     colors: [C.green, C.red],
   });
   yLeft -= chartH2 + 16;
@@ -653,10 +633,7 @@ export async function exportarRelatorioPDF({
       failOnCancel: false,
     });
   } catch {
-    await RNFS.copyFile(
-      cachePath,
-      `${RNFS.DownloadDirectoryPath}/${fileName}`
-    );
+    await RNFS.copyFile(cachePath, `${RNFS.DownloadDirectoryPath}/${fileName}`);
   }
 
   return fileName;
