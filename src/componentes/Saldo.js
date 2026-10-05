@@ -17,7 +17,7 @@ export default function Saldo({
     useContext(AppContext);
   const navigation = useNavigation();
 
-  const mask = "000";
+  const mask = "R$ ***";
   const fmt = (v) =>
     ocultarValores ? mask : `R$ ${formatoMoeda.format(Number(v) || 0)}`;
 
@@ -54,7 +54,7 @@ export default function Saldo({
 
         <View style={styles.balanceBottom}>
           <View>
-            <Text style={styles.miniLabel}>Caixa geral</Text>
+            <Text style={styles.miniLabel}>Caixa livre</Text>
             <Text style={styles.miniValue}>{fmt(caixaGeral)}</Text>
           </View>
 
@@ -78,7 +78,7 @@ export default function Saldo({
           <Text style={styles.chipValue}>{fmt(saldoAnterior)}</Text>
         </View>
         <View style={styles.chip}>
-          <Text style={styles.chipLabel}>Projeção</Text>
+          <Text style={styles.chipLabel}>Projeção futura</Text>
           <Text style={styles.chipValue}>{fmt(projecaoFutura)}</Text>
         </View>
       </View>

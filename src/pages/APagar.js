@@ -212,7 +212,7 @@ export default function APagar() {
       if (valor > (Number(saldoDisponivel) || 0) + 0.001) {
         Alert.alert(
           "Saldo insuficiente",
-          `Caixa geral: R$ ${formatoMoeda.format(saldoDisponivel || 0)}`
+          `Caixa livre: R$ ${formatoMoeda.format(saldoDisponivel || 0)}`
         );
         return;
       }
@@ -472,7 +472,7 @@ export default function APagar() {
               <Text style={styles.inputLabel}>Pagar com</Text>
               <View style={styles.segment}>
                 {[
-                  { id: "geral", label: "Caixa geral" },
+                  { id: "geral", label: "Caixa livre" },
                   { id: "caixinha", label: "Caixinha" },
                 ].map((opt) => {
                   const ativo = origemPagamento === opt.id;

@@ -9,6 +9,7 @@ import AReceber from "../pages/AReceber";
 import EditarRegistro from "../pages/EditarRegistro";
 import Membros from "../pages/Membros";
 import Configuracoes from "../pages/Configuracoes";
+import Dizimos from "../pages/Dizimos";
 
 const Stack = createNativeStackNavigator();
 
@@ -17,10 +18,11 @@ export default function Rotas() {
     <SafeAreaView style={{ flex: 1 }} edges={["bottom"]}>
       <Stack.Navigator
         screenOptions={{
+          headerShadowVisible: false,
           headerTitleStyle: {
-          fontFamily: 'Roboto-Medium',
-          color: '#000',
-          fontSize:18
+            fontFamily: 'Roboto-Medium',
+            color: '#000',
+            fontSize: 18
           },
           contentStyle: {
             backgroundColor: "#f4f5f7",
@@ -70,6 +72,13 @@ export default function Rotas() {
           name="Registro"
           component={Registro}
           options={{ animation: "slide_from_left" }}
+        />
+
+
+        <Stack.Screen
+          name="Dizimos"
+          component={Dizimos}
+          options={{ title: "Dízimos" }}
         />
       </Stack.Navigator>
     </SafeAreaView>

@@ -18,20 +18,13 @@ import { useAuth } from "../context/AuthContext";
 import Load from "../componentes/Load";
 import Saldo from "../componentes/Saldo";
 import SwipeCard from "../componentes/SwipeCard";
-
-function fimDoDiaTs(d = new Date()) {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x.getTime();
-}
-
-function dataDoItem(item) {
-  return Number(item?.data || item?.createdAt || item?.reg || 0) || 0;
-}
-
-function arred(v) {
-  return Math.round((Number(v) || 0) * 100) / 100;
-}
+import {
+  arred,
+  fimDoDiaTs,
+  dataDoItem,
+  valorAReceberItem,
+  valorAPagarItem,
+} from "../utils/financeiro";
 
 function noMes(ts, mes, ano) {
   if (!ts) return false;
@@ -39,10 +32,6 @@ function noMes(ts, mes, ano) {
   return d.getMonth() === mes && d.getFullYear() === ano;
 }
 
-/**
- * Recebimentos no mês — pela data de cada pagamento recebido.
- * Saldo inicial NÃO entra aqui: fica no Saldo anterior (igual ao relatório).
- */
 function entradasNoMes(item, mes, ano, limiteHoje) {
   if (item?.tipoMovimento !== "entrada") return 0;
   if (item?.tipo === "Saldo inicial") return 0;
@@ -64,7 +53,6 @@ function entradasNoMes(item, mes, ano, limiteHoje) {
   return 0;
 }
 
-/** Pagamentos no mês — pela data de cada pagamento */
 function saidasNoMes(item, mes, ano, limiteHoje) {
   if (item?.tipoMovimento !== "saida") return 0;
 
@@ -98,25 +86,6 @@ function saidasNoMes(item, mes, ano, limiteHoje) {
     return Number(item.valorPagoTotal) || 0;
   }
   return 0;
-}
-
-function valorAReceberItem(item, limiteHoje) {
-  if (item?.tipoMovimento !== "entrada") return 0;
-  if (item?.tipo === "Saldo inicial") return 0;
-
-  const ts = dataDoItem(item);
-  if (!ts) return 0;
-
-  const total = Number(item.valorTotal) || 0;
-  const recebido = Number(item.valorRecebidoTotal) || 0;
-  const falta = Math.max(0, arred(total - recebido));
-
-  if (ts > limiteHoje) {
-    const v = arred(recebido + falta);
-    return v > 0 ? v : 0;
-  }
-
-  return falta > 0 ? falta : 0;
 }
 
 export default function Home() {
@@ -231,36 +200,20 @@ export default function Home() {
     0
   );
 
-  // saldo do context já inclui Saldo inicial (caixa real até hoje)
   const saldoAtual = Number(saldo) || 0;
   const caixaGeral = Number(saldoDisponivel) || 0;
   const emCaixinhas = Number(totalReservado) || 0;
   const qtdCaixinhas = (caixinhas || []).length;
 
-  // Inicial não está em entradasMes → permanece no Saldo anterior
   const saldoAnterior = arred(saldoAtual - entradasMesAtual + saidasMesAtual);
 
   const aReceberTotal = arred(
-    lista.reduce((acc, i) => acc + valorAReceberItem(i, limiteHoje), 0)
+    lista.reduce((acc, i) => acc + valorAReceberItem(i), 0)
   );
 
-  const despesasFuturas = lista
-    .filter((i) => i.tipoMovimento === "saida" && i.status === "aberta")
-    .reduce((acc, i) => {
-      const parcelas = Array.isArray(i.parcelas) ? i.parcelas : [];
-      if (parcelas.length > 0) {
-        return (
-          acc +
-          parcelas.reduce((s, p) => {
-            if (p.status === "aberta") return s + (Number(p.valor) || 0);
-            return s;
-          }, 0)
-        );
-      }
-      const falta =
-        (Number(i.valorTotal) || 0) - (Number(i.valorPagoTotal) || 0);
-      return acc + (falta > 0 ? falta : 0);
-    }, 0);
+  const despesasFuturas = arred(
+    lista.reduce((acc, i) => acc + valorAPagarItem(i), 0)
+  );
 
   const projecaoFutura = arred(saldoAtual + aReceberTotal - despesasFuturas);
 
@@ -356,6 +309,7 @@ export default function Home() {
         icon: "hand-left-outline",
         tint: "#E3F2FD",
         iconColor: "#1565C0",
+        route: "Dizimos",
       },
       {
         id: "4",
@@ -580,7 +534,7 @@ const styles = StyleSheet.create({
   },
   menuCard: {
     width: 260,
-  backgroundColor: "#fff",
+    backgroundColor: "#fff",
     borderRadius: 16,
     padding: 12,
     elevation: 6,

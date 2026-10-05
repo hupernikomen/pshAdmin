@@ -135,7 +135,7 @@ export default function Caixinhas() {
     }
     Alert.alert(
       "Excluir caixinha",
-      `Excluir "${cx.nome}"? O valor volta a contar só no caixa geral (não gera lançamento automático).`,
+      `Excluir "${cx.nome}"? O valor volta a contar só no caixa livre (não gera lançamento automático).`,
       [
         { text: "Cancelar", style: "cancel" },
         {
@@ -172,7 +172,7 @@ export default function Caixinhas() {
         if (v > (Number(saldoDisponivel) || 0) + 0.001) {
           Alert.alert(
             "Saldo insuficiente",
-            `Caixa geral disponível: R$ ${formatoMoeda.format(
+            `Caixa livre disponível: R$ ${formatoMoeda.format(
               saldoDisponivel || 0
             )}`
           );
@@ -187,7 +187,7 @@ export default function Caixinhas() {
         if (v > (Number(saldoDisponivel) || 0) + 0.001) {
           Alert.alert(
             "Saldo insuficiente",
-            `Caixa geral disponível: R$ ${formatoMoeda.format(
+            `Caixa livre disponível: R$ ${formatoMoeda.format(
               saldoDisponivel || 0
             )}`
           );
@@ -239,7 +239,7 @@ export default function Caixinhas() {
             </View>
             <Text style={styles.emptyTitle}>Nenhuma caixinha</Text>
             <Text style={styles.emptyText}>
-              Reserve valores do caixa geral para ministérios ou projetos.
+              Reserve valores do caixa livre para ministérios ou projetos.
             </Text>
             {podeEditar && (
               <TouchableOpacity
@@ -355,7 +355,7 @@ export default function Caixinhas() {
 
               {modoModal !== "retirar" && (
                 <Text style={styles.hint}>
-                  Disponível no caixa geral: R${" "}
+                  Disponível no caixa livre: R${" "}
                   {formatoMoeda.format(saldoDisponivel || 0)}
                 </Text>
               )}

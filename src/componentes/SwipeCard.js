@@ -29,7 +29,7 @@ export default function SwipeCard({
   canEdit = false,
 }) {
   const { ocultarValores } = useContext(AppContext);
-  const valorExibido = ocultarValores ? "000" : value;
+  const valorExibido = ocultarValores ? "R$ ***" : value;
 
   const qtd = Array.isArray(actions) ? actions.length : 0;
   const maxOpen = qtd * ACTION_WIDTH;

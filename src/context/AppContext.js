@@ -506,9 +506,10 @@ export function AppProvider({ children }) {
     return HistoricoMovimentos();
   }
 
+  /** Retorna o saldo fresco calculado (não o state desatualizado) */
   async function BuscarSaldo() {
-    await HistoricoMovimentos();
-    return saldo;
+    const lista = await HistoricoMovimentos();
+    return calcularSaldoRealizado(lista);
   }
 
   async function CarregarCaixinhas() {
@@ -558,6 +559,17 @@ export function AppProvider({ children }) {
     if (!podeEditarFinanceiro()) throw new Error("Sem permissão.");
 
     const valor = arredondarMoney(valorInicial);
+    if (valor > 0) {
+      const disponivel = arredondarMoney(
+        (Number(saldo) || 0) - (Number(totalReservado) || 0)
+      );
+      if (valor > disponivel + 0.001) {
+        throw new Error(
+          "Valor maior que o caixa geral disponível para reservar."
+        );
+      }
+    }
+
     await addDoc(collection(db, "caixinhas"), {
       igrejaId,
       idUsuario: userId,
@@ -573,6 +585,16 @@ export function AppProvider({ children }) {
     if (!podeEditarFinanceiro()) throw new Error("Sem permissão.");
     const v = arredondarMoney(valor);
     if (v <= 0) throw new Error("Valor inválido.");
+
+    const disponivel = arredondarMoney(
+      (Number(saldo) || 0) - (Number(totalReservado) || 0)
+    );
+    if (v > disponivel + 0.001) {
+      throw new Error(
+        "Valor maior que o caixa geral disponível para reservar."
+      );
+    }
+
     const cx = caixinhas.find((c) => c.id === caixinhaId);
     if (!cx) throw new Error("Caixinha não encontrada.");
     await updateDoc(doc(db, "caixinhas", caixinhaId), {

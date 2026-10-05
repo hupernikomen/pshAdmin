@@ -14,6 +14,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { useTheme } from "@react-navigation/native";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../context/AppContext";
 import { db } from "../firebaseConnection";
@@ -21,6 +22,14 @@ import { doc, updateDoc } from "firebase/firestore";
 import Load from "../componentes/Load";
 import SwipeCard from "../componentes/SwipeCard";
 import { useAuth } from "../context/AuthContext";
+import {
+  arred,
+  fimDoDiaTs,
+  dataDoItem,
+  valorAReceberItem,
+  isEntradaFutura,
+  tsDoDia,
+} from "../utils/financeiro";
 
 function parseNumero(txt) {
   if (txt === null || txt === undefined) return 0;
@@ -38,45 +47,6 @@ function parseNumero(txt) {
   }
   const n = Number(s);
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
-}
-
-function arred(v) {
-  return Math.round((Number(v) || 0) * 100) / 100;
-}
-
-function fimDoDiaTs(d = new Date()) {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x.getTime();
-}
-
-function dataDoItem(item) {
-  return Number(item?.data || item?.createdAt || item?.reg || 0) || 0;
-}
-
-/**
- * Mesma regra da Home:
- * - Data futura: ainda não entrou no saldo → recebido + falta
- * - Data <= hoje: só o que ainda falta
- * - Ignora Saldo inicial
- */
-function valorAReceberItem(item, limiteHoje) {
-  if (item?.tipoMovimento !== "entrada") return 0;
-  if (item?.tipo === "Saldo inicial") return 0;
-
-  const ts = dataDoItem(item);
-  if (!ts) return 0;
-
-  const total = Number(item.valorTotal) || 0;
-  const recebido = Number(item.valorRecebidoTotal) || 0;
-  const falta = Math.max(0, arred(total - recebido));
-
-  if (ts > limiteHoje) {
-    const v = arred(recebido + falta);
-    return v > 0 ? v : 0;
-  }
-
-  return falta > 0 ? falta : 0;
 }
 
 export default function AReceber() {
@@ -99,6 +69,8 @@ export default function AReceber() {
   const [modalVisible, setModalVisible] = useState(false);
   const [itemSel, setItemSel] = useState(null);
   const [valorRecebido, setValorRecebido] = useState("");
+  const [dataRecebimento, setDataRecebimento] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
   const podeEditar = podeEditarFinanceiro?.() !== false;
@@ -126,7 +98,7 @@ export default function AReceber() {
     const lista = [];
 
     (dadosFinancas || []).forEach((i) => {
-      const valor = valorAReceberItem(i, limiteHoje);
+      const valor = valorAReceberItem(i);
       if (valor <= 0.001) return;
 
       const ts = dataDoItem(i);
@@ -134,7 +106,7 @@ export default function AReceber() {
         ...i,
         rowId: i.id,
         falta: arred(valor),
-        isFuturo: ts > limiteHoje,
+        isFuturo: isEntradaFutura(i, limiteHoje),
       });
     });
 
@@ -151,6 +123,8 @@ export default function AReceber() {
     }
     setItemSel(item);
     setValorRecebido(String(item.falta).replace(".", ","));
+    setDataRecebimento(new Date());
+    setShowDatePicker(false);
     setModalVisible(true);
     setAbertoId(null);
   }
@@ -159,6 +133,15 @@ export default function AReceber() {
     setModalVisible(false);
     setItemSel(null);
     setValorRecebido("");
+    setShowDatePicker(false);
+  }
+
+  function onChangeData(event, selected) {
+    if (Platform.OS === "android") {
+      setShowDatePicker(false);
+    }
+    if (event?.type === "dismissed") return;
+    if (selected) setDataRecebimento(selected);
   }
 
   async function confirmarRecebimento() {
@@ -185,55 +168,41 @@ export default function AReceber() {
       return;
     }
 
+    const listaAtual = itemSel.valoresRecebidos || [];
+    const dataRecTs = tsDoDia(dataRecebimento);
+    const idRec = `${dataRecTs}_${Date.now()}`;
+    const novoTotal = arred(
+      (Number(itemSel.valorRecebidoTotal) || 0) + valor
+    );
+    const totalDoc = Number(itemSel.valorTotal) || 0;
+    const status =
+      totalDoc > 0 && novoTotal >= totalDoc - 0.001 ? "quitada" : "aberta";
+
     setSalvando(true);
     try {
-      const listaAtual = itemSel.valoresRecebidos || [];
-      const agora = Date.now();
+      const payload = {
+        valoresRecebidos: [
+          ...listaAtual,
+          {
+            valor,
+            data: dataRecTs,
+            id: idRec,
+          },
+        ],
+        valorRecebidoTotal: novoTotal,
+        status,
+        updatedAt: Date.now(),
+      };
 
+      // Entrada futura: ao baixar, a data do documento passa a ser a do recebimento
       if (itemSel.isFuturo) {
-        const total = Number(itemSel.valorTotal) || Number(itemSel.falta) || 0;
-        const novoRecebido = arred(valor);
-
-        await updateDoc(doc(db, "registros", itemSel.id), {
-          data: agora,
-          valoresRecebidos: [
-            ...listaAtual,
-            {
-              valor: novoRecebido,
-              data: agora,
-              id: agora.toString(),
-            },
-          ],
-          valorRecebidoTotal: novoRecebido,
-          valorTotal: total > 0 ? total : novoRecebido,
-          status:
-            novoRecebido >= (total > 0 ? total : novoRecebido) - 0.001
-              ? "quitada"
-              : "aberta",
-          updatedAt: agora,
-        });
-      } else {
-        const novoTotal = arred(
-          (Number(itemSel.valorRecebidoTotal) || 0) + valor
-        );
-
-        await updateDoc(doc(db, "registros", itemSel.id), {
-          valoresRecebidos: [
-            ...listaAtual,
-            {
-              valor,
-              data: agora,
-              id: agora.toString(),
-            },
-          ],
-          valorRecebidoTotal: novoTotal,
-          status:
-            novoTotal >= (Number(itemSel.valorTotal) || 0) - 0.001
-              ? "quitada"
-              : "aberta",
-          updatedAt: agora,
-        });
+        payload.data = dataRecTs;
+        if (!(totalDoc > 0)) {
+          payload.valorTotal = novoTotal;
+        }
       }
+
+      await updateDoc(doc(db, "registros", itemSel.id), payload);
 
       await Promise.all([HistoricoMovimentos(), ResumoFinanceiro?.()]);
       fecharModal();
@@ -347,9 +316,43 @@ export default function AReceber() {
 
               {!!itemSel?.isFuturo && (
                 <Text style={styles.hintFuturo}>
-                  Esta entrada tem data futura. Ao confirmar, a data passa a ser
-                  hoje e o valor entra no saldo atual.
+                  Esta entrada tem data futura. Ao confirmar, a data do registro
+                  passa a ser a data do recebimento e o valor entra no caixa
+                  nessa data.
                 </Text>
+              )}
+
+              <Text style={styles.inputLabel}>Data do recebimento</Text>
+              <TouchableOpacity
+                style={styles.dateBox}
+                onPress={() => setShowDatePicker(true)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="calendar-outline" size={18} color="#666" />
+                <Text style={styles.dateText}>
+                  {dataRecebimento.toLocaleDateString("pt-BR")}
+                </Text>
+              </TouchableOpacity>
+
+              {showDatePicker && (
+                <DateTimePicker
+                  value={dataRecebimento}
+                  mode="date"
+                  display={Platform.OS === "ios" ? "spinner" : "default"}
+                  maximumDate={new Date()}
+                  onChange={onChangeData}
+                />
+              )}
+
+              {Platform.OS === "ios" && showDatePicker && (
+                <TouchableOpacity
+                  style={styles.dateOk}
+                  onPress={() => setShowDatePicker(false)}
+                >
+                  <Text style={[styles.dateOkText, { color: colors.principal }]}>
+                    OK
+                  </Text>
+                </TouchableOpacity>
               )}
 
               <Text style={styles.inputLabel}>Valor recebido</Text>
@@ -464,6 +467,31 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Roboto-Regular",
     marginBottom: 12,
+  },
+  dateBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#f4f5f7",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
+  },
+  dateText: {
+    fontSize: 15,
+    fontFamily: "Roboto-Medium",
+    color: "#1f2933",
+  },
+  dateOk: {
+    alignSelf: "flex-end",
+    marginBottom: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+  },
+  dateOkText: {
+    fontSize: 15,
+    fontFamily: "Roboto-Bold",
   },
   modalActions: { flexDirection: "row", gap: 10, marginTop: 8 },
   btnCancel: {

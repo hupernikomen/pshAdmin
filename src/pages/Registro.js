@@ -142,6 +142,7 @@ export default function Registro() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [descricao, setDescricao] = useState("");
   const [valorTotal, setValorTotal] = useState("");
+  const [temAdiantamento, setTemAdiantamento] = useState(false);
   const [valorParcial, setValorParcial] = useState("");
   const [observacao, setObservacao] = useState("");
   const [qtdParcelas, setQtdParcelas] = useState("1");
@@ -149,8 +150,8 @@ export default function Registro() {
   const [origemPagamento, setOrigemPagamento] = useState("geral");
   const [caixinhaId, setCaixinhaId] = useState(null);
 
-  const tiposEntrada = ["Dízimo", "Oferta", "Bazar"];
-  const tiposSaida = ["Conta Fixa", "Parcelada"];
+  const tiposEntrada = ["Dízimo", "Oferta", "Campanhas", "Outros"];
+  const tiposSaida = ["Conta Única", "Parcelada"];
 
   const igrejaId = getIgrejaId?.() || igrejaAtiva?.id || null;
 
@@ -163,7 +164,7 @@ export default function Registro() {
 
   async function salvarImagemLocal(uri) {
     const nomeArquivo = `recibo_${Date.now()}.jpg`;
-    const pastaDestino = `${RNFS.ExternalStorageDirectoryPath}/Pictures/PSH_App`;
+    const pastaDestino = `${RNFS.DocumentDirectoryPath}/recibos`;
     const pastaExiste = await RNFS.exists(pastaDestino);
     if (!pastaExiste) await RNFS.mkdir(pastaDestino);
     const caminhoFinal = `${pastaDestino}/${nomeArquivo}`;
@@ -199,13 +200,20 @@ export default function Registro() {
     }
   }
 
+  function valorDoAdiantamento(total) {
+    if (!temAdiantamento) {
+      return tipo === "Parcelada" ? 0 : total;
+    }
+    return parseNumero(valorParcial);
+  }
+
   function validarOrigemSaida(valorPagoAgora) {
     if (tipoMovimento !== "saida") return true;
     if (origemPagamento === "geral") {
       if (valorPagoAgora > (Number(saldoDisponivel) || 0) + 0.001) {
         Alert.alert(
           "Saldo insuficiente",
-          `Caixa geral disponível: R$ ${formatoMoeda.format(
+          `Caixa livre disponível: R$ ${formatoMoeda.format(
             saldoDisponivel || 0
           )}`
         );
@@ -266,11 +274,28 @@ export default function Registro() {
 
     const caixinhaSel = (caixinhas || []).find((c) => c.id === caixinhaId);
     const valor = parseNumero(valorTotal);
-    const parcial = valorParcial
-      ? parseNumero(valorParcial)
-      : tipo === "Parcelada"
-      ? 0
-      : valor;
+
+    if (!(valor > 0)) {
+      Alert.alert("Atenção", "Informe o valor total.");
+      return;
+    }
+
+    if (temAdiantamento) {
+      const adiant = parseNumero(valorParcial);
+      if (!(adiant > 0)) {
+        Alert.alert("Atenção", "Informe o valor do adiantamento.");
+        return;
+      }
+      if (adiant > valor + 0.001) {
+        Alert.alert(
+          "Atenção",
+          "O adiantamento não pode ser maior que o valor total."
+        );
+        return;
+      }
+    }
+
+    const parcial = valorDoAdiantamento(valor);
 
     if (tipo === "Parcelada") {
       const qtd = parseInt(qtdParcelas, 10) || 1;
@@ -352,36 +377,41 @@ export default function Registro() {
       };
 
       if (tipoMovimento === "entrada") {
-        base.valoresRecebidos = [
-          { valor: parcial, data: data.getTime(), id: Date.now().toString() },
-        ];
+        base.valoresRecebidos =
+          parcial > 0
+            ? [
+                {
+                  valor: parcial,
+                  data: data.getTime(),
+                  id: Date.now().toString(),
+                },
+              ]
+            : [];
         base.valorRecebidoTotal = parcial;
       } else {
-        base.valoresPagos = [
-          {
-            valor: parcial,
-            data: data.getTime(),
-            id: Date.now().toString(),
-            origemPagamento,
-            caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
-            caixinhaNome:
-              origemPagamento === "caixinha"
-                ? caixinhaSel?.nome || null
-                : null,
-          },
-        ];
+        base.valoresPagos =
+          parcial > 0
+            ? [
+                {
+                  valor: parcial,
+                  data: data.getTime(),
+                  id: Date.now().toString(),
+                  origemPagamento,
+                  caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
+                  caixinhaNome:
+                    origemPagamento === "caixinha"
+                      ? caixinhaSel?.nome || null
+                      : null,
+                },
+              ]
+            : [];
         base.valorPagoTotal = parcial;
         base.quantidadeParcelas = 1;
         base.origemPagamento = origemPagamento;
-        base.caixinhaId =
-          origemPagamento === "caixinha" ? caixinhaId : null;
+        base.caixinhaId = origemPagamento === "caixinha" ? caixinhaId : null;
         base.caixinhaNome =
-          origemPagamento === "caixinha"
-            ? caixinhaSel?.nome || null
-            : null;
-        base.reciboUrl = reciboUri
-          ? await salvarImagemLocal(reciboUri)
-          : null;
+          origemPagamento === "caixinha" ? caixinhaSel?.nome || null : null;
+        base.reciboUrl = reciboUri ? await salvarImagemLocal(reciboUri) : null;
       }
 
       await addDoc(collection(db, "registros"), base);
@@ -413,6 +443,11 @@ export default function Registro() {
       ? arred(totalNum / qtdNum)
       : 0;
 
+  const labelAdiantamento =
+    tipoMovimento === "entrada"
+      ? "Houve adiantamento recebido"
+      : "Houve adiantamento pago";
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -439,6 +474,8 @@ export default function Registro() {
                 onPress={() => {
                   setTipoMovimento(item);
                   setTipo(null);
+                  setTemAdiantamento(false);
+                  setValorParcial("");
                 }}
               >
                 <Text
@@ -450,6 +487,80 @@ export default function Registro() {
             );
           })}
         </View>
+
+        {tipoMovimento === "saida" && (
+          <View style={styles.section}>
+            <View style={styles.segment}>
+              {[
+                { id: "geral", label: "Caixa livre" },
+                { id: "caixinha", label: "Caixinha" },
+              ].map((opt) => {
+                const ativo = origemPagamento === opt.id;
+                return (
+                  <TouchableOpacity
+                    key={opt.id}
+                    style={[
+                      styles.segmentBtn,
+                      ativo && { backgroundColor: colors.principal },
+                    ]}
+                    onPress={() => {
+                      setOrigemPagamento(opt.id);
+                      if (opt.id === "geral") setCaixinhaId(null);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.segmentText,
+                        ativo && { color: "#fff" },
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {origemPagamento === "geral" ? (
+              <Text style={styles.hint}>
+                Disponível: R$ {formatoMoeda.format(saldoDisponivel || 0)}
+              </Text>
+            ) : caixinhasComSaldo.length === 0 ? (
+              <Text style={styles.empty}>Nenhuma caixinha com saldo</Text>
+            ) : (
+              caixinhasComSaldo.map((cx) => {
+                const ativo = caixinhaId === cx.id;
+                return (
+                  <TouchableOpacity
+                    key={cx.id}
+                    style={[
+                      styles.selectCard,
+                      ativo && {
+                        borderColor: colors.principal,
+                        backgroundColor: "#fff",
+                      },
+                    ]}
+                    onPress={() => setCaixinhaId(cx.id)}
+                  >
+                    <View style={styles.selectIcon}>
+                      <Ionicons
+                        name="wallet-outline"
+                        size={16}
+                        color={ativo ? colors.principal : "#9aa0a6"}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.selectTitle}>{cx.nome}</Text>
+                      <Text style={styles.selectSub}>
+                        R$ {formatoMoeda.format(cx.valor || 0)}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </View>
+        )}
 
         {tipoMovimento && (
           <>
@@ -487,81 +598,6 @@ export default function Registro() {
                 )}
               </View>
             </View>
-
-            {tipoMovimento === "saida" && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Pagar com</Text>
-                <View style={styles.segment}>
-                  {[
-                    { id: "geral", label: "Caixa geral" },
-                    { id: "caixinha", label: "Caixinha" },
-                  ].map((opt) => {
-                    const ativo = origemPagamento === opt.id;
-                    return (
-                      <TouchableOpacity
-                        key={opt.id}
-                        style={[
-                          styles.segmentBtn,
-                          ativo && { backgroundColor: colors.principal },
-                        ]}
-                        onPress={() => {
-                          setOrigemPagamento(opt.id);
-                          if (opt.id === "geral") setCaixinhaId(null);
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.segmentText,
-                            ativo && { color: "#fff" },
-                          ]}
-                        >
-                          {opt.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                {origemPagamento === "geral" ? (
-                  <Text style={styles.hint}>
-                    Disponível: R$ {formatoMoeda.format(saldoDisponivel || 0)}
-                  </Text>
-                ) : caixinhasComSaldo.length === 0 ? (
-                  <Text style={styles.empty}>Nenhuma caixinha com saldo</Text>
-                ) : (
-                  caixinhasComSaldo.map((cx) => {
-                    const ativo = caixinhaId === cx.id;
-                    return (
-                      <TouchableOpacity
-                        key={cx.id}
-                        style={[
-                          styles.selectCard,
-                          ativo && {
-                            borderColor: colors.principal,
-                            backgroundColor: "#fff",
-                          },
-                        ]}
-                        onPress={() => setCaixinhaId(cx.id)}
-                      >
-                        <View style={styles.selectIcon}>
-                          <Ionicons
-                            name="wallet-outline"
-                            size={16}
-                            color={ativo ? colors.principal : "#9aa0a6"}
-                          />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.selectTitle}>{cx.nome}</Text>
-                          <Text style={styles.selectSub}>
-                            R$ {formatoMoeda.format(cx.valor || 0)}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })
-                )}
-              </View>
-            )}
 
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Dados</Text>
@@ -634,21 +670,37 @@ export default function Registro() {
                 </>
               )}
 
-              <View style={styles.field}>
-                <Text style={styles.fieldLabel}>
-                  {tipo === "Parcelada"
-                    ? "Valor pago agora (parcelas iniciais)"
-                    : "Valor agora"}
-                </Text>
-                <TextInput
-                  style={styles.fieldInput}
-                  value={valorParcial}
-                  onChangeText={setValorParcial}
-                  keyboardType="decimal-pad"
-                  placeholder="0,00"
-                  placeholderTextColor="#b0b5ba"
+              <TouchableOpacity
+                style={styles.checkRow}
+                onPress={() => {
+                  setTemAdiantamento((v) => {
+                    if (v) setValorParcial("");
+                    return !v;
+                  });
+                }}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name={temAdiantamento ? "checkbox" : "square-outline"}
+                  size={22}
+                  color={temAdiantamento ? colors.principal : "#9aa0a6"}
                 />
-              </View>
+                <Text style={styles.checkText}>{labelAdiantamento}</Text>
+              </TouchableOpacity>
+
+              {temAdiantamento && (
+                <View style={styles.field}>
+                  <Text style={styles.fieldLabel}>Adiantamento</Text>
+                  <TextInput
+                    style={styles.fieldInput}
+                    value={valorParcial}
+                    onChangeText={setValorParcial}
+                    keyboardType="decimal-pad"
+                    placeholder="0,00"
+                    placeholderTextColor="#b0b5ba"
+                  />
+                </View>
+              )}
 
               {tipoMovimento === "saida" && (
                 <View style={styles.reciboRow}>
@@ -664,10 +716,7 @@ export default function Registro() {
                     <Text style={styles.reciboLabel}>Recibo</Text>
                   </TouchableOpacity>
                   {reciboUri && (
-                    <Image
-                      source={{ uri: reciboUri }}
-                      style={styles.preview}
-                    />
+                    <Image source={{ uri: reciboUri }} style={styles.preview} />
                   )}
                 </View>
               )}
@@ -700,7 +749,7 @@ export default function Registro() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal:14 },
+  container: { flex: 1, paddingHorizontal: 14 },
   content: {
     paddingTop: 12,
     paddingBottom: 120,
@@ -784,6 +833,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Roboto-Regular",
     color: "#9aa0a6",
+  },
+  checkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 10,
+  },
+  checkText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: "Roboto-Regular",
+    color: "#1f2933",
   },
   field: {
     backgroundColor: "#fff",

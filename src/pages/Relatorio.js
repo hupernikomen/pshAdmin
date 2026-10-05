@@ -17,6 +17,13 @@ import Load from "../componentes/Load";
 import GrafBarras from "../componentes/GrafBarras";
 import GrafLinhas from "../componentes/GrafLinhas";
 import { exportarRelatorioPDF } from "../utils/relatorioPdf";
+import {
+  arred,
+  fimDoDiaTs,
+  dataDoItem,
+  valorAReceberItem,
+  valorAPagarItem,
+} from "../utils/financeiro";
 
 const MESES = [
   "Janeiro",
@@ -60,21 +67,17 @@ function fimDoDia(d) {
   return x;
 }
 
-function arred(v) {
-  return Math.round((Number(v) || 0) * 100) / 100;
-}
-
 function isDizimo(item) {
   const t = String(item.tipo || "").toLowerCase();
   return t.includes("dizimo") || t.includes("dízimo");
 }
 
 function tsItem(item) {
-  return Number(item?.data || item?.createdAt || item?.reg || 0) || 0;
+  return dataDoItem(item);
 }
 
 function hojeFimTs() {
-  return fimDoDia(new Date()).getTime();
+  return fimDoDiaTs();
 }
 
 function seedSaldoInicial(lista, igreja) {
@@ -87,10 +90,6 @@ function seedSaldoInicial(lista, igreja) {
   return arred(Number(igreja?.saldoInicial) || 0);
 }
 
-/**
- * Movimentos realizados no intervalo pela DATA DE CADA PAGAMENTO/RECEBIMENTO.
- * Não usa valorPagoTotal inteiro na data do documento.
- */
 function realizadoNoIntervalo(lista, iniTs, fimTs) {
   const teto = Math.min(fimTs, hojeFimTs());
   let entradas = 0;
@@ -187,52 +186,6 @@ function acumuladoAte(lista, seed, ateTs) {
   return arred(seed + mov.entradas - mov.saidas);
 }
 
-/** A receber — mesma lógica da Home */
-function valorAReceberItem(item) {
-  if (item.tipoMovimento !== "entrada") return 0;
-  if (item.tipo === "Saldo inicial") return 0;
-
-  const ts = tsItem(item);
-  if (!ts) return 0;
-
-  const total = Number(item.valorTotal) || 0;
-  const recebido = Number(item.valorRecebidoTotal) || 0;
-  const falta = Math.max(0, arred(total - recebido));
-  const limite = hojeFimTs();
-
-  if (ts > limite) {
-    const v = arred(recebido + falta);
-    return v > 0 ? v : 0;
-  }
-  return falta > 0 ? falta : 0;
-}
-
-function valorAPagarItem(item) {
-  if (item.tipoMovimento !== "saida") return 0;
-
-  const parcelas = Array.isArray(item.parcelas) ? item.parcelas : [];
-  if (parcelas.length > 0) {
-    return arred(
-      parcelas.reduce((acc, p) => {
-        if (p.status === "aberta" || !p.status) {
-          return acc + (Number(p.valor) || 0);
-        }
-        return acc;
-      }, 0)
-    );
-  }
-
-  if (item.status === "quitada") return 0;
-  const total = Number(item.valorTotal) || 0;
-  const pago = Number(item.valorPagoTotal) || 0;
-  const falta = arred(total - pago);
-  return falta > 0 ? falta : 0;
-}
-
-/**
- * Linhas do histórico do período: um evento por pagamento/recebimento
- * (para a coluna direita do PDF bater com o saldo).
- */
 function montarHistoricoPeriodo(lista, iniTs, fimTs) {
   const teto = Math.min(fimTs, hojeFimTs());
   const rows = [];
@@ -431,7 +384,12 @@ export default function Relatorio() {
   }, [modoFiltro, dataDe, dataAte, mesSelecionado, anoSelecionado]);
 
   const historicoPeriodo = useMemo(
-    () => montarHistoricoPeriodo(dadosFinancas || [], intervalo.ini, intervalo.fim),
+    () =>
+      montarHistoricoPeriodo(
+        dadosFinancas || [],
+        intervalo.ini,
+        intervalo.fim
+      ),
     [dadosFinancas, intervalo]
   );
 

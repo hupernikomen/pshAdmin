@@ -10,8 +10,6 @@ import {
   TouchableOpacity,
   Pressable,
   Alert,
-  Platform,
-  PermissionsAndroid,
   ScrollView,
 } from "react-native";
 import { useNavigation, useTheme } from "@react-navigation/native";
@@ -49,7 +47,7 @@ function textoOrigem(item) {
     return item.caixinhaNome || "Caixinha";
   }
   if (item.origemPagamento === "geral") {
-    return "Caixa geral";
+    return "Caixa livre";
   }
 
   const pagos = item.valoresPagos || [];
@@ -59,19 +57,20 @@ function textoOrigem(item) {
       return ultimo.caixinhaNome || "Caixinha";
     }
     if (ultimo?.origemPagamento === "geral") {
-      return "Caixa geral";
+      return "Caixa livre";
     }
   }
 
   return null;
 }
 
-/**
- * Histórico por evento de caixa:
- * - cada item de valoresPagos / valoresRecebidos = 1 linha (data + valor da parcela)
- * - não mostra card "pai" agregando total da dívida
- * - sem pagamentos ainda: 1 linha do registro em aberto (se houver saldo em aberto)
- */
+function ehSaidaParcelada(item, parcelas) {
+  if (item?.tipoMovimento !== "saida") return false;
+  if (Array.isArray(parcelas) && parcelas.length > 0) return true;
+  if ((Number(item.quantidadeParcelas) || 0) > 1) return true;
+  return false;
+}
+
 function montarLinhasHistorico(dadosFinancas) {
   const linhas = [];
 
@@ -79,6 +78,7 @@ function montarLinhasHistorico(dadosFinancas) {
     if (item.tipo === "Saldo inicial") return;
 
     const sortBase = Number(item.data || item.reg || item.createdAt || 0) || 0;
+    const createdAtPai = Number(item.createdAt || item.reg || sortBase) || 0;
     const pagos = Array.isArray(item.valoresPagos) ? item.valoresPagos : [];
     const recebidos = Array.isArray(item.valoresRecebidos)
       ? item.valoresRecebidos
@@ -88,7 +88,6 @@ function montarLinhasHistorico(dadosFinancas) {
       item.quantidadeParcelas ||
       (parcelas.length > 0 ? parcelas.length : null);
 
-    // --- SAÍDA: uma linha por pagamento ---
     if (item.tipoMovimento === "saida" && pagos.length > 0) {
       pagos.forEach((p, idx) => {
         const tsPag = Number(p.data || sortBase) || sortBase;
@@ -116,16 +115,15 @@ function montarLinhasHistorico(dadosFinancas) {
           parcelaNumero: nParc,
           parcelaTotal: totalParcelas,
           registroPaiId: item.id,
-          reg: tsPag,
+          reg: createdAtPai,
           sortKey: tsPag,
-          createdAt: tsPag,
-          reciboUrl: idx === 0 ? item.reciboUrl || null : null,
+          createdAt: createdAtPai,
+          reciboUrl: item.reciboUrl || null,
         });
       });
       return;
     }
 
-    // Fallback parcelas pagas sem valoresPagos preenchido
     if (item.tipoMovimento === "saida" && parcelas.length > 0) {
       const pagas = parcelas.filter(
         (p) => p.status === "paga" || p.status === "quitada" || !!p.pago
@@ -137,7 +135,7 @@ function montarLinhasHistorico(dadosFinancas) {
             sortBase;
           linhas.push({
             kind: "pagamento",
-            rowId: `${item.id}_parc_${p.id || idx}`,
+            rowId: `${item.id}_parc_${p.numero || p.id || idx}`,
             id: item.id,
             tipoMovimento: "saida",
             tipo: item.tipo || "Pagamento",
@@ -146,23 +144,26 @@ function montarLinhasHistorico(dadosFinancas) {
             valorTotal: Number(p.valor) || 0,
             valorPagoTotal: Number(p.valor) || 0,
             status: "quitada",
-            origemPagamento: item.origemPagamento || null,
-            caixinhaNome: item.caixinhaNome || null,
-            caixinhaId: item.caixinhaId || null,
+            origemPagamento: p.origemPagamento || item.origemPagamento || null,
+            caixinhaNome: p.caixinhaNome || item.caixinhaNome || null,
+            caixinhaId: p.caixinhaId || item.caixinhaId || null,
             parcelaNumero: p.numero != null ? p.numero : idx + 1,
             parcelaTotal: totalParcelas || parcelas.length,
             registroPaiId: item.id,
-            reg: tsPag,
+            reg: createdAtPai,
             sortKey: tsPag,
-            createdAt: tsPag,
-            reciboUrl: null,
+            createdAt: createdAtPai,
+            reciboUrl: item.reciboUrl || null,
           });
         });
         return;
       }
     }
 
-    // --- ENTRADA: uma linha por recebimento ---
+    if (ehSaidaParcelada(item, parcelas)) {
+      return;
+    }
+
     if (item.tipoMovimento === "entrada" && recebidos.length > 0) {
       recebidos.forEach((p, idx) => {
         const tsRec = Number(p.data || sortBase) || sortBase;
@@ -178,21 +179,22 @@ function montarLinhasHistorico(dadosFinancas) {
           valorRecebidoTotal: Number(p.valor) || 0,
           status: "quitada",
           registroPaiId: item.id,
-          reg: tsRec,
+          reg: createdAtPai,
           sortKey: tsRec,
-          createdAt: tsRec,
-          reciboUrl: idx === 0 ? item.reciboUrl || null : null,
+          createdAt: createdAtPai,
+          reciboUrl: item.reciboUrl || null,
         });
       });
       return;
     }
 
-    // Sem eventos parciais: movimento simples (à vista) ou ainda em aberto
     linhas.push({
       ...item,
       kind: "registro",
       rowId: item.id,
       sortKey: sortBase,
+      createdAt: createdAtPai,
+      reg: createdAtPai,
     });
   });
 
@@ -241,34 +243,8 @@ export default function Historico() {
     setRefreshing(false);
   };
 
-  async function pedirPermissaoLeitura() {
-    if (Platform.OS !== "android") return true;
-    try {
-      if (Platform.Version >= 33) {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES
-        );
-        return granted === PermissionsAndroid.RESULTS.GRANTED;
-      }
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE
-      );
-      return granted === PermissionsAndroid.RESULTS.GRANTED;
-    } catch (e) {
-      return false;
-    }
-  }
-
   async function abrirRecibo(reciboUrl) {
     if (!reciboUrl) return;
-    const ok = await pedirPermissaoLeitura();
-    if (!ok) {
-      Alert.alert(
-        "Permissão negada",
-        "Precisamos de acesso às imagens para abrir o recibo."
-      );
-      return;
-    }
     const uri = normalizarUri(reciboUrl);
     const path = caminhoSemPrefixo(uri);
     try {
@@ -361,9 +337,6 @@ export default function Historico() {
           />
         }
         renderItem={({ item }) => {
-          const isPagamento = item.kind === "pagamento";
-          const isRecebimento = item.kind === "recebimento";
-          const isParcela = isPagamento || isRecebimento;
           const isEntrada = item.tipoMovimento === "entrada";
 
           const textoParcela =
@@ -379,11 +352,9 @@ export default function Historico() {
             item.valorTotal ||
             0;
 
-          const temRecibo = !!item.reciboUrl && !isParcela;
+          const temRecibo = !!item.reciboUrl;
           const origem = textoOrigem(item);
-
-          const editavel =
-            podeEditarPapel && !isParcela && podeEditarRegistro(item);
+          const editavel = podeEditarPapel && podeEditarRegistro(item);
 
           const dataStr = item.data
             ? new Date(item.data).toLocaleDateString("pt-BR")
