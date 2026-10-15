@@ -16,6 +16,7 @@ import {
 } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AuthContext } from "./AuthContext";
+import { excluirIgrejaDefinitivo } from "../utils/igreja";
 
 export const AppContext = createContext({});
 
@@ -108,6 +109,19 @@ function calcularSaldoRealizado(lista) {
   });
 
   return arredondarMoney(total);
+}
+
+function montarIgrejaAtiva(item) {
+  if (!item) return null;
+  return {
+    id: item.igrejaId,
+    nome: item.nome,
+    papel: item.papel,
+    membroId: item.membroId,
+    createdAt: item.createdAt || null,
+    exclusaoAgendadaEm: item.exclusaoAgendadaEm || null,
+    exclusaoPrevistaEm: item.exclusaoPrevistaEm || null,
+  };
 }
 
 export function AppProvider({ children }) {
@@ -260,21 +274,38 @@ export function AppProvider({ children }) {
         })
       );
 
+      const agora = Date.now();
       const lista = [];
+
       for (const m of membros) {
         try {
           const ref = doc(db, "igrejas", m.igrejaId);
           const snap = await getDoc(ref);
-          if (snap.exists()) {
-            const data = snap.data();
-            lista.push({
-              igrejaId: m.igrejaId,
-              nome: data.nome || "Igreja",
-              papel: m.papel,
-              membroId: m.membroId,
-              createdAt: data.createdAt || null,
-            });
+          if (!snap.exists()) continue;
+
+          const data = snap.data();
+          const exclusaoPrevistaEm = Number(data.exclusaoPrevistaEm) || 0;
+          const exclusaoAgendadaEm = Number(data.exclusaoAgendadaEm) || 0;
+
+          // 30 dias passaram → exclusão definitiva
+          if (exclusaoPrevistaEm > 0 && exclusaoPrevistaEm <= agora) {
+            try {
+              await excluirIgrejaDefinitivo(m.igrejaId);
+            } catch (eDel) {
+              console.log("Erro exclusão definitiva igreja:", m.igrejaId, eDel);
+            }
+            continue;
           }
+
+          lista.push({
+            igrejaId: m.igrejaId,
+            nome: data.nome || "Igreja",
+            papel: m.papel,
+            membroId: m.membroId,
+            createdAt: data.createdAt || null,
+            exclusaoAgendadaEm: exclusaoAgendadaEm || null,
+            exclusaoPrevistaEm: exclusaoPrevistaEm || null,
+          });
         } catch (e) {
           console.log("Erro ao ler igreja:", m.igrejaId, e);
         }
@@ -287,15 +318,12 @@ export function AppProvider({ children }) {
         (salva && lista.find((i) => i.igrejaId === salva)) || lista[0] || null;
 
       if (escolhida) {
-        setIgrejaAtiva({
-          id: escolhida.igrejaId,
-          nome: escolhida.nome,
-          papel: escolhida.papel,
-          membroId: escolhida.membroId,
-          createdAt: escolhida.createdAt || null,
-        });
+        setIgrejaAtiva(montarIgrejaAtiva(escolhida));
       } else {
         setIgrejaAtiva(null);
+        try {
+          await AsyncStorage.removeItem(KEY_IGREJA_ATIVA);
+        } catch (_) {}
       }
     } catch (e) {
       console.log("Erro carregarIgrejasDoUsuario:", e);
@@ -310,13 +338,7 @@ export function AppProvider({ children }) {
     const item = igrejasDoUsuario.find((i) => i.igrejaId === igrejaId);
     if (!item) return;
 
-    setIgrejaAtiva({
-      id: item.igrejaId,
-      nome: item.nome,
-      papel: item.papel,
-      membroId: item.membroId,
-      createdAt: item.createdAt || null,
-    });
+    setIgrejaAtiva(montarIgrejaAtiva(item));
 
     try {
       await AsyncStorage.setItem(KEY_IGREJA_ATIVA, igrejaId);
@@ -356,16 +378,12 @@ export function AppProvider({ children }) {
       papel: "admin",
       membroId: membroRef.id,
       createdAt: Date.now(),
+      exclusaoAgendadaEm: null,
+      exclusaoPrevistaEm: null,
     };
 
     setIgrejasDoUsuario((prev) => [...prev, nova]);
-    setIgrejaAtiva({
-      id: igrejaRef.id,
-      nome: nomeLimpo,
-      papel: "admin",
-      membroId: membroRef.id,
-      createdAt: Date.now(),
-    });
+    setIgrejaAtiva(montarIgrejaAtiva(nova));
     await AsyncStorage.setItem(KEY_IGREJA_ATIVA, igrejaRef.id);
 
     return igrejaRef.id;

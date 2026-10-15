@@ -57,6 +57,45 @@ function formatarData(d) {
   return d.toLocaleDateString("pt-BR");
 }
 
+/**
+ * A data do card vem do pagamento, não só do campo data do documento.
+ * 1 pagamento: sempre segue a nova data.
+ * Vários: só os que tinham a data antiga (ou sem data).
+ */
+function alinharDatasLista(lista, dataAntiga, dataNova) {
+  if (!Array.isArray(lista) || lista.length === 0) return lista;
+
+  if (lista.length === 1) {
+    return [{ ...lista[0], data: dataNova }];
+  }
+
+  return lista.map((p) => {
+    const ts = Number(p?.data || 0);
+    if (!ts || ts === dataAntiga) return { ...p, data: dataNova };
+    return p;
+  });
+}
+
+function alinharParcelasPagas(parcelas, dataAntiga, dataNova) {
+  if (!Array.isArray(parcelas) || parcelas.length === 0) return parcelas;
+
+  const pagas = parcelas.filter(
+    (p) => p?.status === "paga" || p?.status === "quitada" || p?.pago
+  );
+
+  return parcelas.map((p) => {
+    const paga = p?.status === "paga" || p?.status === "quitada" || p?.pago;
+    if (!paga) return p;
+
+    const ts = Number(p.dataPagamento || p.pagoEm || 0);
+    const unica = pagas.length === 1;
+    if (unica || !ts || ts === dataAntiga) {
+      return { ...p, dataPagamento: dataNova, pagoEm: dataNova };
+    }
+    return p;
+  });
+}
+
 function montarDevolucoesCaixinha(item) {
   const map = new Map();
 
@@ -261,19 +300,47 @@ export default function EditarRegistro() {
     setSalvando(true);
     try {
       const status = novoTotal <= pago ? "quitada" : "aberta";
-      const dataTs = data.getTime();
+      const dataAntiga = Number(item.data || 0);
+      const dataNova = data.getTime();
 
-      await updateDoc(doc(db, "registros", item.id), {
+      const patch = {
         descricao: descricao.trim(),
         observacao: (observacao || "").trim(),
         valorTotal: novoTotal,
-        data: dataTs,
+        data: dataNova,
         status,
         atualizadoEm: Date.now(),
-      });
+      };
 
+      if (Array.isArray(item.valoresPagos) && item.valoresPagos.length) {
+        patch.valoresPagos = alinharDatasLista(
+          item.valoresPagos,
+          dataAntiga,
+          dataNova
+        );
+      }
+
+      if (
+        Array.isArray(item.valoresRecebidos) &&
+        item.valoresRecebidos.length
+      ) {
+        patch.valoresRecebidos = alinharDatasLista(
+          item.valoresRecebidos,
+          dataAntiga,
+          dataNova
+        );
+      }
+
+      if (Array.isArray(item.parcelas) && item.parcelas.length) {
+        patch.parcelas = alinharParcelasPagas(
+          item.parcelas,
+          dataAntiga,
+          dataNova
+        );
+      }
+
+      await updateDoc(doc(db, "registros", item.id), patch);
       await Promise.all([HistoricoMovimentos(), ResumoFinanceiro?.()]);
-      Alert.alert("Sucesso", "Registro atualizado.");
       navigation.goBack();
     } catch (e) {
       Alert.alert("Erro", e?.message || "Não foi possível salvar.");
@@ -482,7 +549,7 @@ export default function EditarRegistro() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal:14
+    paddingHorizontal: 14,
   },
   content: {
     paddingVertical: 14,

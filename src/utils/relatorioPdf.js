@@ -6,7 +6,7 @@ const C = {
   ink: rgb(0.12, 0.16, 0.2),
   muted: rgb(0.55, 0.58, 0.62),
   line: rgb(0.9, 0.91, 0.92),
-  card: rgb(0.96, 0.96, 0.97),
+  card: rgb(0.94, 0.94, 0.94),
   green: rgb(0.18, 0.42, 0.31),
   red: rgb(0.61, 0.13, 0.15),
 };
@@ -24,6 +24,11 @@ function isDizimo(item) {
   return t.includes("dizimo") || t.includes("dízimo");
 }
 
+function isOferta(item) {
+  const t = String(item.tipo || "").toLowerCase();
+  return t.includes("oferta");
+}
+
 function valorEntrada(item) {
   return Number(item.valorRecebidoTotal) || 0;
 }
@@ -32,11 +37,20 @@ function valorSaida(item) {
   return Number(item.valorPagoTotal) || 0;
 }
 
+/**
+ * Retorna { main, ocultado }.
+ * Dízimo / Oferta: nome fixo + sufixo "(ocultado)" (sem descrição do doador).
+ */
 function labelMovimento(item) {
-  if (isDizimo(item)) return "Diz. ***";
+  if (isDizimo(item)) {
+    return { main: "Dizimo", ocultado: true };
+  }
+  if (isOferta(item)) {
+    return { main: "Oferta", ocultado: true };
+  }
   const desc = String(item.descricao || "").trim();
-  if (desc) return desc;
-  return String(item.tipo || "Movimento");
+  if (desc) return { main: desc, ocultado: false };
+  return { main: String(item.tipo || "Movimento"), ocultado: false };
 }
 
 function valorMovimento(item) {
@@ -202,6 +216,59 @@ function desenharBarrasChart(page, font, opts) {
   });
 }
 
+/** Desenha rótulo: nome em tinta + "(ocultado)" itálico cinza, se aplicável */
+function drawLabelOcultavel(page, font, fontOblique, { x, y, maxW, info }) {
+  const main = safe(info.main || "");
+  const size = 8;
+
+  if (!info.ocultado) {
+    let lab = main;
+    if (lab.length > 22) lab = lab.slice(0, 21) + ".";
+    page.drawText(lab, {
+      x,
+      y,
+      size,
+      font,
+      color: C.ink,
+      maxWidth: maxW,
+    });
+    return;
+  }
+
+  const sufixo = " (ocultado)";
+  let nome = main;
+  const nomeW = font.widthOfTextAtSize(nome, size);
+  const sufW = fontOblique.widthOfTextAtSize(sufixo, size);
+
+  // Se não couber, encurta só o nome
+  if (nomeW + sufW > maxW && maxW > sufW + 20) {
+    while (
+      nome.length > 3 &&
+      font.widthOfTextAtSize(nome + "…", size) + sufW > maxW
+    ) {
+      nome = nome.slice(0, -1);
+    }
+    nome = nome + "…";
+  }
+
+  page.drawText(nome, {
+    x,
+    y,
+    size,
+    font,
+    color: C.ink,
+  });
+
+  const wNome = font.widthOfTextAtSize(nome, size);
+  page.drawText(sufixo, {
+    x: x + wNome,
+    y,
+    size,
+    font: fontOblique,
+    color: C.muted,
+  });
+}
+
 export async function exportarRelatorioPDF({
   nomeIgreja,
   labelPeriodo,
@@ -210,10 +277,12 @@ export async function exportarRelatorioPDF({
   seriesGraficos,
   historicoPeriodo,
   formatoMoeda,
+  comentario
 }) {
   const pdfDoc = await PDFDocument.create();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const fontOblique = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
 
   const pageWidth = 595;
   const pageHeight = 842;
@@ -350,43 +419,73 @@ export async function exportarRelatorioPDF({
   lineLeft(yLeft);
   yLeft -= 14;
 
-  const textoExec = safe(
-    `Saldo anterior R$ ${formatoMoeda.format(
-      resumo.saldoAnterior || 0
-    )}. Receitas R$ ${formatoMoeda.format(
-      resumo.entradas
-    )}, despesas R$ ${formatoMoeda.format(
-      resumo.saidas
-    )}. Saldo atual R$ ${formatoMoeda.format(
-      resumo.saldoAtual || 0
-    )}. A receber R$ ${formatoMoeda.format(
-      projecao.aReceber
-    )}, a pagar R$ ${formatoMoeda.format(
-      projecao.aPagar
-    )}. Projecao futura R$ ${formatoMoeda.format(projecao.saldoProjetado)}.`
-  );
+  // Comentário narrativo do período (offline / regras)
+  const textoComentario = String(comentario || "").trim();
+  if (textoComentario) {
+    drawSectionTitle("Comentario do periodo");
 
-  let resto = textoExec;
-  const maxChars = 58;
-  while (resto.length > 0) {
-    ensureLeft(12);
-    let chunk = resto.slice(0, maxChars);
-    if (resto.length > maxChars) {
-      const sp = chunk.lastIndexOf(" ");
-      if (sp > 28) chunk = chunk.slice(0, sp);
+    const paragrafos = textoComentario
+      .split(/\n+/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+
+    for (const par of paragrafos) {
+      let restoPar = safe(par);
+      const maxChars = 90; // era 58 — aproveita melhor a coluna esquerda
+      while (restoPar.length > 0) {
+        ensureLeft(11);
+        let chunk = restoPar.slice(0, maxChars);
+        if (restoPar.length > maxChars) {
+          const sp = chunk.lastIndexOf(" ");
+          if (sp > 30) chunk = chunk.slice(0, sp);
+        }
+        page.drawText(chunk, {
+          x: xLeft,
+          y: yLeft,
+          size: 8,
+          font,
+          color: C.ink,
+          maxWidth: colLeftW,
+        });
+        yLeft -= 10.5; // era 11 — um pouco mais denso
+        restoPar = restoPar.slice(chunk.length).trim();
+      }
+      yLeft -= 6; // era 8 — menos vazio entre parágrafos
     }
-    page.drawText(chunk, {
-      x: xLeft,
-      y: yLeft,
-      size: 8,
-      font,
-      color: C.ink,
-      maxWidth: colLeftW,
-    });
-    yLeft -= 11;
-    resto = resto.slice(chunk.length).trim();
+    yLeft -= 6;
+  } else {
+    // Fallback curto se não houver comentário
+    const textoExec = safe(
+      `Saldo anterior R$ ${formatoMoeda.format(
+        resumo.saldoAnterior || 0
+      )}. Receitas R$ ${formatoMoeda.format(
+        resumo.entradas
+      )}, despesas R$ ${formatoMoeda.format(
+        resumo.saidas
+      )}. Saldo atual R$ ${formatoMoeda.format(resumo.saldoAtual || 0)}.`
+    );
+    let resto = textoExec;
+    const maxChars = 58;
+    while (resto.length > 0) {
+      ensureLeft(12);
+      let chunk = resto.slice(0, maxChars);
+      if (resto.length > maxChars) {
+        const sp = chunk.lastIndexOf(" ");
+        if (sp > 28) chunk = chunk.slice(0, sp);
+      }
+      page.drawText(chunk, {
+        x: xLeft,
+        y: yLeft,
+        size: 8,
+        font,
+        color: C.ink,
+        maxWidth: colLeftW,
+      });
+      yLeft -= 11;
+      resto = resto.slice(chunk.length).trim();
+    }
+    yLeft -= 10;
   }
-  yLeft -= 10;
 
   drawSectionTitle("Resultado do mes");
   drawKpiRow([
@@ -406,13 +505,12 @@ export async function exportarRelatorioPDF({
     },
   ]);
 
-  drawSectionTitle("Projecao futura");
+  drawSectionTitle("Projeção");
   drawKpiRow([
     { label: "A RECEBER", value: projecao.aReceber, color: C.green },
     { label: "A PAGAR", value: projecao.aPagar, color: C.red },
     {
-      label: "PROJECAO",
-      sub: "FUTURA",
+      label: "PROJEÇÃO",
       value: projecao.saldoProjetado,
       color: C.ink,
     },
@@ -522,7 +620,7 @@ export async function exportarRelatorioPDF({
   );
 
   const drawRightHeader = () => {
-    page.drawText(safe("Movimentacoes"), {
+    page.drawText(safe("Movimentações"), {
       x: xRight,
       y: yRight,
       size: 9,
@@ -555,7 +653,7 @@ export async function exportarRelatorioPDF({
   } else {
     for (let i = 0; i < hist.length; i++) {
       const item = hist[i];
-      const label = labelMovimento(item);
+      const info = labelMovimento(item);
       const valor = valorMovimento(item);
       const isEnt = item.tipoMovimento === "entrada";
       const sinal = isEnt ? "+" : "-";
@@ -575,19 +673,16 @@ export async function exportarRelatorioPDF({
         drawRightHeader();
       }
 
-      let lab = safe(label);
-      if (lab.length > 18) lab = lab.slice(0, 17) + ".";
+      const vw = fontBold.widthOfTextAtSize(valorTxt, 8);
+      const maxLabelW = colRightW - vw - 8;
 
-      page.drawText(lab, {
+      drawLabelOcultavel(page, font, fontOblique, {
         x: xRight,
         y: yRight,
-        size: 8,
-        font,
-        color: C.ink,
-        maxWidth: colRightW - 52,
+        maxW: maxLabelW,
+        info,
       });
 
-      const vw = fontBold.widthOfTextAtSize(valorTxt, 8);
       page.drawText(valorTxt, {
         x: xRight + colRightW - vw,
         y: yRight,

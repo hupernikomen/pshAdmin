@@ -116,9 +116,10 @@ export default function Home() {
   const nome = user?.displayName || "Conta";
   const isAdmin = igrejaAtiva?.papel === "admin";
   const variasIgrejas = (igrejasDoUsuario || []).length > 1;
+  const semIgreja = !igrejaAtiva?.id;
 
   useEffect(() => {
-    carregar();
+    if (!semIgreja) carregar();
   }, [igrejaAtiva?.id]);
 
   useEffect(() => {
@@ -149,6 +150,10 @@ export default function Home() {
   }
 
   const onRefresh = async () => {
+    if (semIgreja) {
+      setRefreshing(false);
+      return;
+    }
     setRefreshing(true);
     await Promise.all([HistoricoMovimentos(), CarregarCaixinhas?.()]);
     setRefreshing(false);
@@ -330,59 +335,78 @@ export default function Home() {
     ]
   );
 
-  if (load && !refreshing) return <Load />;
+  if (load && !refreshing && !semIgreja) return <Load />;
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={resumoItens}
-        keyExtractor={(item) => item.id}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[colors.principal]}
-          />
-        }
-        ListHeaderComponent={
-          <Saldo
-            caixaGeral={caixaGeral}
-            saldoAtual={saldoAtual}
-            saldoAnterior={saldoAnterior}
-            projecaoFutura={projecaoFutura}
-            qtdCaixinhas={qtdCaixinhas}
-            emCaixinhas={emCaixinhas}
-          />
-        }
-        renderItem={({ item }) => (
-          <SwipeCard
-            icon={item.icon}
-            iconColor={item.iconColor}
-            tint={item.tint}
-            title={item.label}
-            subtitle={item.sub}
-            value={item.value}
-            actions={
-              item.route
-                ? [
-                    {
-                      key: "go",
-                      icon: "arrow-forward",
-                      backgroundColor: colors.principal,
-                      onPress: () => navigation.navigate(item.route),
-                    },
-                  ]
-                : []
-            }
-            onPress={
-              item.route ? () => navigation.navigate(item.route) : undefined
-            }
-          />
-        )}
-        ListFooterComponent={<View style={{ height: 100 }} />}
-      />
+      {semIgreja ? (
+        <View style={styles.emptyContainer}>
+          <View style={styles.emptyIcon}>
+            <Ionicons name="business-outline" size={28} color="#9aa0a6" />
+          </View>
+          <Text style={styles.emptyTitle}>Nenhuma igreja criada</Text>
+          <Text style={styles.emptyText}>
+            Para começar a usar o App, crie uma igreja.
+          </Text>
+          <TouchableOpacity
+            style={[styles.emptyBtn, { backgroundColor: colors.principal }]}
+            onPress={() => navigation.navigate("Configuracoes")}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.emptyBtnText}>Criar Igreja</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
+          data={resumoItens}
+          keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.content}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[colors.principal]}
+            />
+          }
+          ListHeaderComponent={
+            <Saldo
+              caixaGeral={caixaGeral}
+              saldoAtual={saldoAtual}
+              saldoAnterior={saldoAnterior}
+              projecaoFutura={projecaoFutura}
+              qtdCaixinhas={qtdCaixinhas}
+              emCaixinhas={emCaixinhas}
+            />
+          }
+          renderItem={({ item }) => (
+            <SwipeCard
+              icon={item.icon}
+              iconColor={item.iconColor}
+              tint={item.tint}
+              title={item.label}
+              subtitle={item.sub}
+              value={item.value}
+              actions={
+                item.route
+                  ? [
+                      {
+                        key: "go",
+                        icon: "arrow-forward",
+                        backgroundColor: colors.principal,
+                        onPress: () => navigation.navigate(item.route),
+                      },
+                    ]
+                  : []
+              }
+              onPress={
+                item.route ? () => navigation.navigate(item.route) : undefined
+              }
+            />
+          )}
+          ListFooterComponent={<View style={{ height: 100 }} />}
+        />
+      )}
 
       <Modal
         visible={menuAberto}
@@ -524,6 +548,49 @@ const styles = StyleSheet.create({
     backgroundColor: "#66796b",
     alignItems: "center",
     justifyContent: "center",
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+    paddingBottom: 80,
+  },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontFamily: "Roboto-Medium",
+    color: "#1f2933",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  emptyText: {
+    fontSize: 14,
+    fontFamily: "Roboto-Regular",
+    color: "#9aa0a6",
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  emptyBtn: {
+    height: 48,
+    paddingHorizontal: 24,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyBtnText: {
+    color: "#fff",
+    fontSize: 15,
+    fontFamily: "Roboto-Bold",
   },
   menuOverlay: {
     flex: 1,

@@ -78,7 +78,7 @@ export default function Saldo({
           <Text style={styles.chipValue}>{fmt(saldoAnterior)}</Text>
         </View>
         <View style={styles.chip}>
-          <Text style={styles.chipLabel}>Projeção futura</Text>
+          <Text style={styles.chipLabel}>Projeção</Text>
           <Text style={styles.chipValue}>{fmt(projecaoFutura)}</Text>
         </View>
       </View>

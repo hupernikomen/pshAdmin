@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
   FlatList,
@@ -12,7 +12,7 @@ import {
   Alert,
   ScrollView,
 } from "react-native";
-import { useNavigation, useTheme } from "@react-navigation/native";
+import { useNavigation, useTheme, useFocusEffect } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import RNFS from "react-native-fs";
 import { AppContext } from "../context/AppContext";
@@ -21,7 +21,10 @@ import Load from "../componentes/Load";
 import SwipeCard from "../componentes/SwipeCard";
 import { podeEditarRegistro } from "../utils/registroEdit";
 
+
 const LIMITES = [30, 60, 90, 150];
+
+
 
 function normalizarUri(uri) {
   if (!uri) return null;
@@ -95,8 +98,8 @@ function montarLinhasHistorico(dadosFinancas) {
           p.parcelaNumero != null
             ? p.parcelaNumero
             : totalParcelas
-            ? idx + 1
-            : null;
+              ? idx + 1
+              : null;
 
         linhas.push({
           kind: "pagamento",

@@ -14,7 +14,8 @@ import {
 } from "react-native";
 import { useTheme, useNavigation } from "@react-navigation/native";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { launchCamera } from "react-native-image-picker";
+import { Picker } from "@react-native-picker/picker";
+import { launchCamera, launchImageLibrary } from "react-native-image-picker";
 import RNFS from "react-native-fs";
 import { AppContext } from "../context/AppContext";
 import { db } from "../firebaseConnection";
@@ -22,6 +23,7 @@ import { collection, addDoc } from "firebase/firestore";
 import Load from "../componentes/Load";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { useAuth } from "../context/AuthContext";
+import { MINISTERIOS } from "../constants/ministerios";
 
 function parseNumero(txt) {
   if (txt === null || txt === undefined) return 0;
@@ -149,6 +151,7 @@ export default function Registro() {
   const [reciboUri, setReciboUri] = useState(null);
   const [origemPagamento, setOrigemPagamento] = useState("geral");
   const [caixinhaId, setCaixinhaId] = useState(null);
+  const [ministerio, setMinisterio] = useState("");
 
   const tiposEntrada = ["Dízimo", "Oferta", "Campanhas", "Outros"];
   const tiposSaida = ["Conta Única", "Parcelada"];
@@ -159,6 +162,7 @@ export default function Registro() {
     if (tipoMovimento !== "saida") {
       setOrigemPagamento("geral");
       setCaixinhaId(null);
+      setMinisterio("");
     }
   }, [tipoMovimento]);
 
@@ -197,6 +201,22 @@ export default function Registro() {
       if (result.assets?.length > 0) setReciboUri(result.assets[0].uri);
     } catch (error) {
       Alert.alert("Erro", "Não foi possível abrir a câmera.");
+    }
+  }
+
+  async function escolherDaGaleria() {
+    try {
+      const result = await launchImageLibrary({
+        mediaType: "photo",
+        quality: 0.6,
+        maxWidth: 700,
+        maxHeight: 700,
+        selectionLimit: 1,
+      });
+      if (result.didCancel || result.errorCode) return;
+      if (result.assets?.length > 0) setReciboUri(result.assets[0].uri);
+    } catch (error) {
+      Alert.alert("Erro", "Não foi possível abrir a galeria.");
     }
   }
 
@@ -335,6 +355,7 @@ export default function Registro() {
           caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
           caixinhaNome:
             origemPagamento === "caixinha" ? caixinhaSel?.nome || null : null,
+          ministerio: ministerio || null,
           reciboUrl: reciboUri ? await salvarImagemLocal(reciboUri) : null,
           reg: Date.now(),
           createdAt: Date.now(),
@@ -411,6 +432,7 @@ export default function Registro() {
         base.caixinhaId = origemPagamento === "caixinha" ? caixinhaId : null;
         base.caixinhaNome =
           origemPagamento === "caixinha" ? caixinhaSel?.nome || null : null;
+        base.ministerio = ministerio || null;
         base.reciboUrl = reciboUri ? await salvarImagemLocal(reciboUri) : null;
       }
 
@@ -624,6 +646,29 @@ export default function Registro() {
                 />
               )}
 
+              {tipoMovimento === "saida" && (
+                <View style={styles.field}>
+                  <Text style={styles.fieldLabel}>Ministério (opcional)</Text>
+                  <View style={styles.pickerWrap}>
+                    <Picker
+                      selectedValue={ministerio}
+                      onValueChange={(v) => setMinisterio(v)}
+                      style={styles.picker}
+                      dropdownIconColor="#1f2933"
+                    >
+                      <Picker.Item
+                        label="Selecione o ministério"
+                        value=""
+                        color="#9aa0a6"
+                      />
+                      {MINISTERIOS.map((m) => (
+                        <Picker.Item key={m} label={m} value={m} />
+                      ))}
+                    </Picker>
+                  </View>
+                </View>
+              )}
+
               <View style={styles.field}>
                 <Text style={styles.fieldLabel}>Descrição</Text>
                 <TextInput
@@ -713,8 +758,21 @@ export default function Registro() {
                       size={22}
                       color={reciboUri ? colors.principal : "#9aa0a6"}
                     />
-                    <Text style={styles.reciboLabel}>Recibo</Text>
+                    <Text style={styles.reciboLabel}>Câmera</Text>
                   </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.reciboBtn}
+                    onPress={escolherDaGaleria}
+                  >
+                    <Ionicons
+                      name="images-outline"
+                      size={22}
+                      color={reciboUri ? colors.principal : "#9aa0a6"}
+                    />
+                    <Text style={styles.reciboLabel}>Galeria</Text>
+                  </TouchableOpacity>
+
                   {reciboUri && (
                     <Image source={{ uri: reciboUri }} style={styles.preview} />
                   )}
@@ -874,7 +932,21 @@ const styles = StyleSheet.create({
     color: "#1f2933",
     padding: 0,
   },
-  reciboRow: { flexDirection: "row", gap: 12, marginBottom: 10 },
+  pickerWrap: {
+    marginHorizontal: -8,
+    marginBottom: Platform.OS === "ios" ? 0 : -8,
+  },
+  picker: {
+    marginTop:-12,
+    color: "#1f2933",
+    ...(Platform.OS === "android" ? { height: 55 } : { height: 140 }),
+  },
+  reciboRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 10,
+    alignItems: "center",
+  },
   reciboBtn: {
     width: 100,
     height: 110,

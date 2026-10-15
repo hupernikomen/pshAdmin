@@ -7,7 +7,6 @@ import AuthProvider, { AuthContext } from "./src/context/AuthContext";
 import AppProvider, { AppContext } from "./src/context/AppContext";
 import Rotas from "./src/rotas";
 import Login from "./src/pages/Login";
-import CriarIgreja from "./src/pages/CriarIgreja";
 
 const Tema = {
   ...DefaultTheme,
@@ -37,8 +36,7 @@ function TelaCarregamento() {
 
 function AppNavigator() {
   const { user, authPronto } = useContext(AuthContext);
-  const { igrejasProntas, igrejasDoUsuario, igrejaAtiva } =
-    useContext(AppContext);
+  const { igrejasProntas } = useContext(AppContext);
 
   if (!authPronto) {
     return <TelaCarregamento />;
@@ -48,19 +46,13 @@ function AppNavigator() {
     return <Login />;
   }
 
+  // Aguarda carregar a lista de igrejas do usuário
   if (!igrejasProntas) {
     return <TelaCarregamento />;
   }
 
-  if (!igrejasDoUsuario?.length || !igrejaAtiva) {
-    return (
-      <NavigationContainer theme={Tema}>
-        <StatusBar barStyle="dark-content" />
-        <CriarIgreja />
-      </NavigationContainer>
-    );
-  }
-
+  // Sempre entra no app (Rotas). Se não houver igreja,
+  // a Home mostra o empty state e o botão para Configurações.
   return (
     <NavigationContainer theme={Tema}>
       <StatusBar barStyle="dark-content" />

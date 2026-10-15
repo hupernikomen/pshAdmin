@@ -17,6 +17,8 @@ import Load from "../componentes/Load";
 import GrafBarras from "../componentes/GrafBarras";
 import GrafLinhas from "../componentes/GrafLinhas";
 import { exportarRelatorioPDF } from "../utils/relatorioPdf";
+import { montarComentarioRelatorio } from "../utils/comentarioRelatorioOffline";
+
 import {
   arred,
   fimDoDiaTs,
@@ -574,6 +576,13 @@ export default function Relatorio() {
   async function onExportar() {
     setGerando(true);
     try {
+      const comentario = montarComentarioRelatorio({
+        labelPeriodo,
+        resumo,
+        projecao,
+        formatoMoeda,
+      });
+
       await exportarRelatorioPDF({
         nomeIgreja: igrejaAtiva?.nome || "Tesouraria",
         labelPeriodo,
@@ -583,6 +592,7 @@ export default function Relatorio() {
         seriesGraficos,
         historicoPeriodo,
         formatoMoeda,
+        comentario,
       });
     } catch (e) {
       console.log("ERRO PDF:", e);

@@ -7,6 +7,7 @@ import {
   Alert,
   ActivityIndicator,
   ScrollView,
+  TouchableOpacity,
 } from "react-native";
 import { useTheme, useFocusEffect } from "@react-navigation/native";
 import {
@@ -21,6 +22,8 @@ import {
 import { db } from "../firebaseConnection";
 import { AppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
+
+const MS_30_DIAS = 30 * 24 * 60 * 60 * 1000;
 
 function parseNumero(txt) {
   if (txt === null || txt === undefined) return 0;
@@ -44,36 +47,55 @@ function arred(v) {
   return Math.round((Number(v) || 0) * 100) / 100;
 }
 
+function formatarData(ts) {
+  if (!ts) return "—";
+  return new Date(ts).toLocaleDateString("pt-BR");
+}
+
+function diasRestantes(previstaEm) {
+  if (!previstaEm) return 0;
+  const diff = previstaEm - Date.now();
+  if (diff <= 0) return 0;
+  return Math.ceil(diff / (24 * 60 * 60 * 1000));
+}
+
 export default function Configuracoes() {
   const { colors } = useTheme();
   const { uid } = useAuth();
   const {
     igrejaAtiva,
     atualizarNomeIgreja,
+    criarIgreja,
     getIgrejaId,
     HistoricoMovimentos,
     ResumoFinanceiro,
+    carregarIgrejasDoUsuario,
   } = useContext(AppContext);
 
   const [nome, setNome] = useState("");
   const [saldoInicialId, setSaldoInicialId] = useState(null);
   const [valorSaldo, setValorSaldo] = useState("");
   const [carregando, setCarregando] = useState(true);
+  const [criando, setCriando] = useState(false);
+  const [processandoExclusao, setProcessandoExclusao] = useState(false);
 
-  // valores “oficiais” já gravados (para comparar e só salvar se mudou)
   const nomeSalvoRef = useRef("");
-  const saldoSalvoRef = useRef(null); // number | null
+  const saldoSalvoRef = useRef(null);
   const saldoIdRef = useRef(null);
   const nomeAtualRef = useRef("");
   const valorAtualRef = useRef("");
   const salvandoRef = useRef(false);
 
+  const semIgreja = !igrejaAtiva?.id;
   const isAdmin = igrejaAtiva?.papel === "admin";
   const podeFinanceiro =
     igrejaAtiva?.papel === "admin" || igrejaAtiva?.papel === "tesoureiro";
   const igrejaId = getIgrejaId?.() || igrejaAtiva?.id || null;
 
-  // mantém refs sincronizadas com o estado (para o cleanup ao sair)
+  const exclusaoPrevistaEm = Number(igrejaAtiva?.exclusaoPrevistaEm) || 0;
+  const exclusaoAgendada = exclusaoPrevistaEm > 0;
+  const dias = diasRestantes(exclusaoPrevistaEm);
+
   useEffect(() => {
     nomeAtualRef.current = nome;
   }, [nome]);
@@ -88,7 +110,7 @@ export default function Configuracoes() {
 
   useEffect(() => {
     carregar();
-  }, [igrejaId, igrejaAtiva?.nome]);
+  }, [igrejaId, igrejaAtiva?.nome, igrejaAtiva?.exclusaoPrevistaEm]);
 
   async function carregar() {
     setCarregando(true);
@@ -138,8 +160,33 @@ export default function Configuracoes() {
     }
   }
 
+  async function handleCriarIgreja() {
+    const limpo = String(nome || "").trim();
+    if (!limpo) {
+      Alert.alert("Atenção", "Informe o nome da igreja.");
+      return;
+    }
+    if (!criarIgreja) {
+      Alert.alert("Erro", "Função de criar igreja indisponível.");
+      return;
+    }
+    if (criando) return;
+
+    try {
+      setCriando(true);
+      await criarIgreja(limpo);
+    } catch (e) {
+      Alert.alert(
+        "Erro",
+        e?.message || "Não foi possível criar a igreja."
+      );
+    } finally {
+      setCriando(false);
+    }
+  }
+
   async function persistirNome(nomeNovo) {
-    if (!isAdmin) return;
+    if (semIgreja || !isAdmin) return;
     const limpo = String(nomeNovo || "").trim();
     if (!limpo) return;
     if (limpo === nomeSalvoRef.current) return;
@@ -157,12 +204,11 @@ export default function Configuracoes() {
   }
 
   async function persistirSaldo(textoValor) {
-    if (!podeFinanceiro || !uid || !igrejaId) return;
+    if (semIgreja || !podeFinanceiro || !uid || !igrejaId) return;
 
     const valor = arred(parseNumero(textoValor));
     if (valor < 0) return;
 
-    // se campo vazio e nunca teve saldo, não grava
     if (!String(textoValor || "").trim() && saldoSalvoRef.current == null) {
       return;
     }
@@ -223,14 +269,113 @@ export default function Configuracoes() {
     }
   }
 
-  // ao sair da tela, grava o que estiver diferente
+  function pedirAgendarExclusao() {
+    if (!isAdmin || !igrejaId || processandoExclusao) return;
+
+    const nomeIg = igrejaAtiva?.nome || "esta igreja";
+    const prevista = formatarData(Date.now() + MS_30_DIAS);
+
+    Alert.alert(
+      "Agendar exclusão",
+      `A igreja "${nomeIg}" será excluída permanentemente em 30 dias (${prevista}).\n\nAté lá você pode cancelar a exclusão. Depois dessa data, registros, caixinhas e membros serão apagados.`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Agendar exclusão",
+          style: "destructive",
+          onPress: agendarExclusao,
+        },
+      ]
+    );
+  }
+
+  async function agendarExclusao() {
+    if (!igrejaId) return;
+
+    try {
+      setProcessandoExclusao(true);
+      const agora = Date.now();
+      await updateDoc(doc(db, "igrejas", igrejaId), {
+        exclusaoAgendadaEm: agora,
+        exclusaoPrevistaEm: agora + MS_30_DIAS,
+        exclusaoSolicitadaPor: uid || null,
+        updatedAt: agora,
+      });
+
+      if (typeof carregarIgrejasDoUsuario === "function") {
+        await carregarIgrejasDoUsuario();
+      }
+
+      Alert.alert(
+        "Exclusão agendada",
+        `A igreja será excluída em ${formatarData(
+          agora + MS_30_DIAS
+        )}. Você pode cancelar antes disso nesta tela.`
+      );
+    } catch (e) {
+      console.log("Erro agendar exclusão:", e);
+      Alert.alert(
+        "Erro",
+        e?.message || "Não foi possível agendar a exclusão."
+      );
+    } finally {
+      setProcessandoExclusao(false);
+    }
+  }
+
+  function pedirCancelarExclusao() {
+    if (!isAdmin || !igrejaId || processandoExclusao) return;
+
+    Alert.alert(
+      "Cancelar exclusão",
+      "A igreja deixará de estar marcada para exclusão e continuará ativa normalmente.",
+      [
+        { text: "Voltar", style: "cancel" },
+        {
+          text: "Manter igreja",
+          onPress: cancelarExclusao,
+        },
+      ]
+    );
+  }
+
+  async function cancelarExclusao() {
+    if (!igrejaId) return;
+
+    try {
+      setProcessandoExclusao(true);
+      await updateDoc(doc(db, "igrejas", igrejaId), {
+        exclusaoAgendadaEm: null,
+        exclusaoPrevistaEm: null,
+        exclusaoSolicitadaPor: null,
+        updatedAt: Date.now(),
+      });
+
+      if (typeof carregarIgrejasDoUsuario === "function") {
+        await carregarIgrejasDoUsuario();
+      }
+
+      Alert.alert("Exclusão cancelada", "A igreja permanece ativa.");
+    } catch (e) {
+      console.log("Erro cancelar exclusão:", e);
+      Alert.alert(
+        "Erro",
+        e?.message || "Não foi possível cancelar a exclusão."
+      );
+    } finally {
+      setProcessandoExclusao(false);
+    }
+  }
+
   useFocusEffect(
     useCallback(() => {
       return () => {
-        persistirNome(nomeAtualRef.current);
-        persistirSaldo(valorAtualRef.current);
+        if (!semIgreja) {
+          persistirNome(nomeAtualRef.current);
+          persistirSaldo(valorAtualRef.current);
+        }
       };
-    }, [isAdmin, podeFinanceiro, uid, igrejaId])
+    }, [semIgreja, isAdmin, podeFinanceiro, uid, igrejaId])
   );
 
   if (carregando) {
@@ -241,14 +386,73 @@ export default function Configuracoes() {
     );
   }
 
+  if (semIgreja) {
+    return (
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+
+
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <Text style={styles.rowLabel}>Nome da igreja</Text>
+            <TextInput
+              style={styles.rowInput}
+              value={nome}
+              maxLength={25}
+              onChangeText={setNome}
+              placeholder="Ex.: Igreja Central"
+              placeholderTextColor="#bbb"
+              autoCapitalize="words"
+              textAlign="right"
+              returnKeyType="done"
+              onSubmitEditing={handleCriarIgreja}
+            />
+          </View>
+        </View>
+
+        <TouchableOpacity
+          style={[
+            styles.createBtn,
+            { backgroundColor: colors.principal || "#65C556" },
+            criando && { opacity: 0.7 },
+          ]}
+          onPress={handleCriarIgreja}
+          disabled={criando}
+          activeOpacity={0.85}
+        >
+          {criando ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.createBtnText}>Criar igreja</Text>
+          )}
+        </TouchableOpacity>
+
+
+      </ScrollView>
+    );
+  }
+
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
+      {exclusaoAgendada && (
+        <View style={styles.warningBanner}>
+          <Text style={styles.warningTitle}>Exclusão agendada</Text>
+          <Text style={styles.warningText}>
+            Esta igreja será excluída em{" "}
+            {dias > 0 ? `${dias} dia(s)` : "breve"} (
+            {formatarData(exclusaoPrevistaEm)}). Até lá você pode cancelar.
+          </Text>
+        </View>
+      )}
+
       <View style={styles.card}>
-        {/* Nome */}
         <View style={styles.row}>
           <Text style={styles.rowLabel}>Nome da igreja</Text>
           <TextInput
@@ -258,7 +462,7 @@ export default function Configuracoes() {
             onChangeText={setNome}
             placeholder="—"
             placeholderTextColor="#bbb"
-            editable={isAdmin}
+            editable={isAdmin && !exclusaoAgendada}
             autoCapitalize="words"
             textAlign="right"
             onBlur={() => persistirNome(nome)}
@@ -269,19 +473,21 @@ export default function Configuracoes() {
 
         <View style={styles.separator} />
 
-        {/* Saldo inicial */}
         <View style={styles.row}>
           <Text style={styles.rowLabel}>Saldo inicial</Text>
           <View style={styles.valorWrap}>
             <Text style={styles.prefixo}>R$</Text>
             <TextInput
-              style={[styles.rowInput, !podeFinanceiro && styles.inputDisabled]}
+              style={[
+                styles.rowInput,
+                (!podeFinanceiro || exclusaoAgendada) && styles.inputDisabled,
+              ]}
               value={valorSaldo}
               onChangeText={setValorSaldo}
               placeholder="0,00"
               placeholderTextColor="#bbb"
               keyboardType="decimal-pad"
-              editable={podeFinanceiro}
+              editable={podeFinanceiro && !exclusaoAgendada}
               textAlign="right"
               onBlur={() => persistirSaldo(valorSaldo)}
               returnKeyType="done"
@@ -294,6 +500,67 @@ export default function Configuracoes() {
       <Text style={styles.hint}>
         As alterações são salvas ao sair do campo ou da página.
       </Text>
+
+      {isAdmin && (
+        <View style={styles.dangerZone}>
+          {exclusaoAgendada ? (
+            <>
+              <TouchableOpacity
+                style={[
+                  styles.cancelDeleteBtn,
+                  { borderColor: colors.principal || "#65C556" },
+                  processandoExclusao && { opacity: 0.6 },
+                ]}
+                onPress={pedirCancelarExclusao}
+                disabled={processandoExclusao}
+                activeOpacity={0.85}
+              >
+                {processandoExclusao ? (
+                  <ActivityIndicator color={colors.principal || "#65C556"} />
+                ) : (
+                  <Text
+                    style={[
+                      styles.cancelDeleteBtnText,
+                      { color: colors.principal || "#65C556" },
+                    ]}
+                  >
+                    Cancelar exclusão
+                  </Text>
+                )}
+              </TouchableOpacity>
+              <Text style={styles.deleteHint}>
+                A exclusão definitiva está marcada para{" "}
+                {formatarData(exclusaoPrevistaEm)}.
+              </Text>
+            </>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={[
+                  styles.deleteBtn,
+                  processandoExclusao && { opacity: 0.6 },
+                ]}
+                onPress={pedirAgendarExclusao}
+                disabled={processandoExclusao}
+                activeOpacity={0.85}
+              >
+                {processandoExclusao ? (
+                  <ActivityIndicator color="#C62828" />
+                ) : (
+                  <Text style={styles.deleteBtnText}>
+                    Excluir igreja em 30 dias
+                  </Text>
+                )}
+              </TouchableOpacity>
+              <Text style={styles.deleteHint}>
+                Os dados não são apagados agora. Após 30 dias da confirmação,
+                igreja, registros, caixinhas e membros serão removidos
+                automaticamente.
+              </Text>
+            </>
+          )}
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -301,7 +568,7 @@ export default function Configuracoes() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal:14
+    paddingHorizontal: 14,
   },
   content: {
     paddingVertical: 16,
@@ -312,6 +579,32 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#f4f5f7",
+  },
+  sectionHint: {
+    fontSize: 14,
+    fontFamily: "Roboto-Regular",
+    color: "#666",
+    lineHeight: 20,
+    marginBottom: 14,
+    paddingHorizontal: 2,
+  },
+  warningBanner: {
+    backgroundColor: "#FFF3E0",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+  },
+  warningTitle: {
+    fontSize: 14,
+    fontFamily: "Roboto-Bold",
+    color: "#E65100",
+    marginBottom: 4,
+  },
+  warningText: {
+    fontSize: 13,
+    fontFamily: "Roboto-Regular",
+    color: "#BF360C",
+    lineHeight: 18,
   },
   card: {
     backgroundColor: "#fff",
@@ -359,8 +652,58 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     backgroundColor: "#ececec",
   },
+  createBtn: {
+    marginTop: 16,
+    height: 50,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  createBtnText: {
+    color: "#fff",
+    fontSize: 15,
+    fontFamily: "Roboto-Bold",
+  },
   hint: {
     marginTop: 12,
+    paddingHorizontal: 4,
+    fontSize: 12,
+    fontFamily: "Roboto-Regular",
+    color: "#9aa0a6",
+    lineHeight: 18,
+  },
+  dangerZone: {
+    marginTop: 32,
+    paddingTop: 8,
+  },
+  deleteBtn: {
+    height: 50,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#ffcdd2",
+  },
+  deleteBtnText: {
+    color: "#C62828",
+    fontSize: 15,
+    fontFamily: "Roboto-Medium",
+  },
+  cancelDeleteBtn: {
+    height: 50,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    borderWidth: 1.5,
+  },
+  cancelDeleteBtnText: {
+    fontSize: 15,
+    fontFamily: "Roboto-Medium",
+  },
+  deleteHint: {
+    marginTop: 10,
     paddingHorizontal: 4,
     fontSize: 12,
     fontFamily: "Roboto-Regular",

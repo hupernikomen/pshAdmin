@@ -111,119 +111,132 @@ export default function Login() {
         <ScrollView
           contentContainerStyle={[
             styles.content,
-            { paddingBottom: Math.max(insets.bottom, 20) + 12 },
+            { paddingBottom: Math.max(insets.bottom, 24) + 16 },
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.logoArea}>
-            <Text style={styles.logo}>Tesouraria</Text>
+          {/* Cabeçalho */}
+          <View style={styles.header}>
+            <Text style={styles.title}>
+              {modo === "entrar" ? "Bem-vindo de volta" : "Criar conta"}
+            </Text>
+            <Text style={styles.subtitle}>
+              {modo === "entrar"
+                ? "Entre para acompanhar a tesouraria da igreja"
+                : "Preencha os dados para começar a usar o app"}
+            </Text>
           </View>
 
-          <Text style={styles.title}>
-            {modo === "entrar" ? "Bem-vindo de volta" : "Criar conta"}
-          </Text>
-          <Text style={styles.subtitle}>
-            {modo === "entrar"
-              ? "Entre para acompanhar a tesouraria"
-              : "Preencha os dados para começar"}
-          </Text>
+          {/* Formulário */}
+          <View style={styles.form}>
+            {modo === "cadastrar" && (
+              <View style={styles.inputWrap}>
+                <Ionicons name="person-outline" size={18} color={MUTED} />
+                <TextInput
+                  style={styles.input}
+                  value={nome}
+                  onChangeText={setNome}
+                  placeholder="Nome"
+                  placeholderTextColor={MUTED}
+                  autoCapitalize="words"
+                />
+              </View>
+            )}
 
-          {modo === "cadastrar" && (
             <View style={styles.inputWrap}>
-              <Ionicons name="person-outline" size={16} color={MUTED} />
+              <Ionicons name="mail-outline" size={18} color={MUTED} />
               <TextInput
                 style={styles.input}
-                value={nome}
-                onChangeText={setNome}
-                placeholder="Nome"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="E-mail"
                 placeholderTextColor={MUTED}
-                autoCapitalize="words"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
               />
             </View>
-          )}
 
-          <View style={styles.inputWrap}>
-            <Ionicons name="mail-outline" size={16} color={MUTED} />
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="E-mail"
-              placeholderTextColor={MUTED}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-
-          <View style={styles.inputWrap}>
-            <Ionicons name="lock-closed-outline" size={16} color={MUTED} />
-            <TextInput
-              style={styles.input}
-              value={senha}
-              onChangeText={setSenha}
-              placeholder="Senha"
-              placeholderTextColor={MUTED}
-              secureTextEntry={!mostrarSenha}
-            />
-            <Pressable onPress={() => setMostrarSenha((v) => !v)} hitSlop={10}>
-              <Ionicons
-                name={mostrarSenha ? "eye-off-outline" : "eye-outline"}
-                size={18}
-                color={MUTED}
+            <View style={styles.inputWrap}>
+              <Ionicons name="lock-closed-outline" size={18} color={MUTED} />
+              <TextInput
+                style={styles.input}
+                value={senha}
+                onChangeText={setSenha}
+                placeholder="Senha"
+                placeholderTextColor={MUTED}
+                secureTextEntry={!mostrarSenha}
               />
+              <Pressable onPress={() => setMostrarSenha((v) => !v)} hitSlop={12}>
+                <Ionicons
+                  name={mostrarSenha ? "eye-off-outline" : "eye-outline"}
+                  size={18}
+                  color={MUTED}
+                />
+              </Pressable>
+            </View>
+
+            {modo === "entrar" && (
+              <Pressable onPress={handleEsqueciSenha} style={styles.forgotRow}>
+                <Text style={styles.forgot}>Esqueceu a senha?</Text>
+              </Pressable>
+            )}
+
+            <Pressable
+              onPress={handleEmail}
+              disabled={loading}
+              style={[
+                styles.btnLogin,
+                modo === "cadastrar" && styles.btnLoginSpaced,
+                loading && { opacity: 0.75 },
+              ]}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.btnLoginText}>
+                  {modo === "cadastrar" ? "Cadastrar" : "Entrar"}
+                </Text>
+              )}
             </Pressable>
           </View>
 
-          {modo === "entrar" && (
-            <Pressable onPress={handleEsqueciSenha} style={styles.forgotRow}>
-              <Text style={styles.forgot}>Esqueceu a senha?</Text>
-            </Pressable>
-          )}
+          {/* Alternativas de acesso */}
+          <View style={styles.altBlock}>
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.orText}>ou entre com</Text>
+              <View style={styles.dividerLine} />
+            </View>
 
-          <Pressable
-            onPress={handleEmail}
-            disabled={loading}
-            style={[styles.btnLogin, loading && { opacity: 0.75 }]}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.btnLoginText}>
-                {modo === "cadastrar" ? "Cadastrar" : "Entrar"}
-              </Text>
-            )}
-          </Pressable>
-
-          <Text style={styles.orText}>Ou entre com</Text>
-
-          <View style={styles.socialRow}>
             <Pressable
               onPress={handleGoogle}
               disabled={loading}
-              style={styles.socialBtn}
+              style={[styles.socialBtn, loading && { opacity: 0.75 }]}
             >
               <Image
                 source={require("../../assets/google-logo.png")}
                 style={styles.googleLogo}
                 resizeMode="contain"
               />
+              <Text style={styles.socialText}>Google</Text>
             </Pressable>
           </View>
 
-          <View style={styles.switchRow}>
+          {/* Rodapé */}
+          <View style={styles.footer}>
             {modo === "entrar" ? (
               <>
                 <Text style={styles.switchMuted}>Não tem conta? </Text>
-                <Pressable onPress={() => setModo("cadastrar")}>
+                <Pressable onPress={() => setModo("cadastrar")} hitSlop={8}>
                   <Text style={styles.switchLink}>Cadastre-se</Text>
                 </Pressable>
               </>
             ) : (
               <>
                 <Text style={styles.switchMuted}>Já tem conta? </Text>
-                <Pressable onPress={() => setModo("entrar")}>
+                <Pressable onPress={() => setModo("entrar")} hitSlop={8}>
                   <Text style={styles.switchLink}>Entrar</Text>
                 </Pressable>
               </>
@@ -242,115 +255,138 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 40,
+    paddingHorizontal: 28,
     justifyContent: "center",
   },
-  logoArea: {
-    alignItems: "center",
-    marginBottom: 24,
+
+  header: {
+    marginBottom: 28,
   },
-  logo: {
-    fontFamily: "Roboto-Bold",
-    fontSize: 24,
-    color: INK,
-    letterSpacing: -0.3,
+  brand: {
+    fontFamily: "Roboto-Medium",
+    fontSize: 13,
+    color: PRINCIPAL,
+    letterSpacing: 0.6,
+    marginBottom: 12,
+    textTransform: "uppercase",
   },
   title: {
-    fontFamily: "Roboto-Medium",
-    fontSize: 18,
+    fontFamily: "Roboto-Bold",
+    fontSize: 26,
     color: INK,
-    marginBottom: 4,
+    letterSpacing: -0.4,
+    marginBottom: 8,
   },
   subtitle: {
     fontFamily: "Roboto-Regular",
-    fontSize: 13,
+    fontSize: 14,
+    lineHeight: 20,
     color: MUTED,
-    marginBottom: 22,
+    maxWidth: 300,
+  },
+
+  form: {
+    marginBottom: 8,
   },
   inputWrap: {
     flexDirection: "row",
     alignItems: "center",
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: LINE,
-    paddingVertical: 10,
-    marginBottom: 14,
-    gap: 10,
+    paddingVertical: 14,
+    marginBottom: 4,
+    gap: 12,
   },
   input: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: "Roboto-Regular",
     color: INK,
     padding: 0,
   },
   forgotRow: {
     alignSelf: "flex-end",
-    marginBottom: 18,
-    marginTop: -2,
+    marginTop: 10,
+    marginBottom: 20,
+    paddingVertical: 4,
   },
   forgot: {
-    fontFamily: "Roboto-Regular",
-    fontSize: 12,
-    color: INK,
+    fontFamily: "Roboto-Medium",
+    fontSize: 13,
+    color: MUTED,
   },
   btnLogin: {
-    height: 46,
-    borderRadius: 24,
+    height: 50,
+    borderRadius: 14,
     backgroundColor: PRINCIPAL,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 2,
+  },
+  btnLoginSpaced: {
+    marginTop: 18,
   },
   btnLoginText: {
     color: "#fff",
-    fontSize: 15,
+    fontSize: 16,
     fontFamily: "Roboto-Bold",
   },
+
+  altBlock: {
+    marginTop: 28,
+    marginBottom: 8,
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    gap: 12,
+  },
+  dividerLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: LINE,
+  },
   orText: {
-    textAlign: "center",
-    marginTop: 22,
-    marginBottom: 12,
     fontFamily: "Roboto-Regular",
-    fontSize: 12,
+    fontSize: 13,
     color: MUTED,
   },
-  socialRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginBottom: 22,
-  },
   socialBtn: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    height: 50,
+    borderRadius: 14,
     backgroundColor: "#fff",
     borderWidth: 1,
-    borderColor: "#e0e0e0",
-    alignItems: "center",
-    justifyContent: "center",
-    elevation: 1,
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
+    borderColor: LINE,
   },
   googleLogo: {
-    width: 18,
-    height: 18,
+    width: 20,
+    height: 20,
   },
-  switchRow: {
+  socialText: {
+    fontFamily: "Roboto-Medium",
+    fontSize: 15,
+    color: INK,
+  },
+
+  footer: {
+    marginTop: 32,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
+    flexWrap: "wrap",
   },
   switchMuted: {
     fontFamily: "Roboto-Regular",
-    fontSize: 13,
+    fontSize: 14,
     color: MUTED,
   },
   switchLink: {
     fontFamily: "Roboto-Medium",
-    fontSize: 13,
-    color: INK,
+    fontSize: 14,
+    color: PRINCIPAL,
   },
 });

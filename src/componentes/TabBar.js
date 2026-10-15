@@ -5,18 +5,10 @@ import {
   View,
   StyleSheet,
   Animated,
-  Platform,
-  UIManager,
 } from "react-native";
 
 import Ionicons from "react-native-vector-icons/Ionicons";
 
-if (
-  Platform.OS === "android" &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 const TAB_SIZE = 58;
 const PILL_SIZE = 52;
@@ -135,8 +127,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     position: "absolute",
     bottom: -10,
-    marginBottom: 28,
-    padding: 2,
+    marginBottom: 21,
+    padding: 1,
     borderRadius: 35,
   },
   pill: {
