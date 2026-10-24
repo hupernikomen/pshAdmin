@@ -5,6 +5,7 @@ import TabBar from '../componentes/TabBar';
 import Home from '../pages/Home';
 import Relatorio from '../pages/Relatorio'
 import Historico from '../pages/Historico'
+import { useTheme } from '@react-navigation/native';
 
 const Tab = createBottomTabNavigator();
 
@@ -12,6 +13,10 @@ const Tab = createBottomTabNavigator();
 
 
 export default function Tabs() {
+
+  const {colors} = useTheme()
+
+
   return (
 
 
@@ -20,13 +25,12 @@ export default function Tabs() {
       tabBar={(props) => <TabBar {...props} />}
       screenOptions={{
         headerTitleStyle: {
-          fontFamily: 'Roboto-Medium',
-          color: '#000',
+          fontFamily: 'Roboto-Bold',
+          color: colors.text,
           fontSize:18,
         },
-        headerShadowVisible: false,
         sceneStyle: {
-          backgroundColor: "#f4f5f7",
+          backgroundColor: colors.background,
 
         }
 

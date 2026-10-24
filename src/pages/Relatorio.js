@@ -343,7 +343,7 @@ export default function Relatorio() {
     igrejaAtiva,
   } = useContext(AppContext);
   const { uid, authPronto } = useAuth();
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
 
   const agora = new Date();
   const [modoFiltro, setModoFiltro] = useState("mes");
@@ -358,6 +358,15 @@ export default function Relatorio() {
   const [showDe, setShowDe] = useState(false);
   const [showAte, setShowAte] = useState(false);
   const [gerando, setGerando] = useState(false);
+
+  const principal = colors.principal || colors.primary || "#65C556";
+  const text = colors.text;
+  const muted = colors.muted || (dark ? "#9aa0a6" : "#888");
+  const card = colors.card;
+  const bg = colors.background;
+  const surface = dark ? "#2a2a2a" : "#f4f5f7";
+  const border = colors.border || (dark ? "#333" : "#ececec");
+  const corDespesa = dark ? "#E57373" : "#C62828";
 
   useEffect(() => {
     if (!authPronto || !uid) return;
@@ -570,9 +579,6 @@ export default function Relatorio() {
     return `${MESES[mesSelecionado]} de ${anoSelecionado}`;
   }, [modoFiltro, dataDe, dataAte, mesSelecionado, anoSelecionado]);
 
-  const corPrincipal = colors.principal || "#65C556";
-  const corDespesa = "#C62828";
-
   async function onExportar() {
     setGerando(true);
     try {
@@ -605,23 +611,24 @@ export default function Relatorio() {
   if ((!authPronto || load) && !(dadosFinancas || []).length) return <Load />;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: bg }]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
       >
-        <View style={styles.block}>
-          <View style={styles.segment}>
+        <View style={[styles.block, { backgroundColor: card }]}>
+          <View style={[styles.segment, { backgroundColor: surface }]}>
             <TouchableOpacity
               style={[
                 styles.segmentBtn,
-                modoFiltro === "mes" && { backgroundColor: colors.principal },
+                modoFiltro === "mes" && { backgroundColor: principal },
               ]}
               onPress={() => setModoFiltro("mes")}
             >
               <Text
                 style={[
                   styles.segmentText,
+                  { color: muted },
                   modoFiltro === "mes" && { color: "#fff" },
                 ]}
               >
@@ -631,15 +638,14 @@ export default function Relatorio() {
             <TouchableOpacity
               style={[
                 styles.segmentBtn,
-                modoFiltro === "periodo" && {
-                  backgroundColor: colors.principal,
-                },
+                modoFiltro === "periodo" && { backgroundColor: principal },
               ]}
               onPress={() => setModoFiltro("periodo")}
             >
               <Text
                 style={[
                   styles.segmentText,
+                  { color: muted },
                   modoFiltro === "periodo" && { color: "#fff" },
                 ]}
               >
@@ -652,17 +658,19 @@ export default function Relatorio() {
             <>
               <View style={styles.anoRow}>
                 <TouchableOpacity
-                  style={styles.anoBtn}
+                  style={[styles.anoBtn, { backgroundColor: surface }]}
                   onPress={() => setAnoSelecionado((a) => a - 1)}
                 >
-                  <Ionicons name="chevron-back" size={18} color="#444" />
+                  <Ionicons name="chevron-back" size={18} color={text} />
                 </TouchableOpacity>
-                <Text style={styles.anoText}>{anoSelecionado}</Text>
+                <Text style={[styles.anoText, { color: text }]}>
+                  {anoSelecionado}
+                </Text>
                 <TouchableOpacity
-                  style={styles.anoBtn}
+                  style={[styles.anoBtn, { backgroundColor: surface }]}
                   onPress={() => setAnoSelecionado((a) => a + 1)}
                 >
-                  <Ionicons name="chevron-forward" size={18} color="#444" />
+                  <Ionicons name="chevron-forward" size={18} color={text} />
                 </TouchableOpacity>
               </View>
               <View style={styles.mesesGrid}>
@@ -673,12 +681,17 @@ export default function Relatorio() {
                       key={nome}
                       style={[
                         styles.mesChip,
-                        ativo && { backgroundColor: colors.principal },
+                        { backgroundColor: surface },
+                        ativo && { backgroundColor: principal },
                       ]}
                       onPress={() => setMesSelecionado(index)}
                     >
                       <Text
-                        style={[styles.mesText, ativo && { color: "#fff" }]}
+                        style={[
+                          styles.mesText,
+                          { color: text },
+                          ativo && { color: "#fff" },
+                        ]}
                       >
                         {nome.substring(0, 3)}
                       </Text>
@@ -690,20 +703,20 @@ export default function Relatorio() {
           ) : (
             <View style={styles.customRow}>
               <TouchableOpacity
-                style={styles.dateBox}
+                style={[styles.dateBox, { backgroundColor: surface }]}
                 onPress={() => setShowDe(true)}
               >
-                <Text style={styles.dateLabel}>De</Text>
-                <Text style={styles.dateValue}>
+                <Text style={[styles.dateLabel, { color: muted }]}>De</Text>
+                <Text style={[styles.dateValue, { color: text }]}>
                   {dataDe.toLocaleDateString("pt-BR")}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.dateBox}
+                style={[styles.dateBox, { backgroundColor: surface }]}
                 onPress={() => setShowAte(true)}
               >
-                <Text style={styles.dateLabel}>Até</Text>
-                <Text style={styles.dateValue}>
+                <Text style={[styles.dateLabel, { color: muted }]}>Até</Text>
+                <Text style={[styles.dateValue, { color: text }]}>
                   {dataAte.toLocaleDateString("pt-BR")}
                 </Text>
               </TouchableOpacity>
@@ -735,16 +748,20 @@ export default function Relatorio() {
             />
           )}
 
-          <View style={styles.filtroAtivo}>
-            <Ionicons name="calendar-outline" size={14} color="#9aa0a6" />
-            <Text style={styles.filtroAtivoText}>{labelPeriodo}</Text>
-            <Text style={styles.filtroQtd}>{resumo.quantidade} reg.</Text>
+          <View style={[styles.filtroAtivo, { borderTopColor: border }]}>
+            <Ionicons name="calendar-outline" size={14} color={muted} />
+            <Text style={[styles.filtroAtivoText, { color: muted }]}>
+              {labelPeriodo}
+            </Text>
+            <Text style={[styles.filtroQtd, { color: muted }]}>
+              {resumo.quantidade} reg.
+            </Text>
           </View>
 
           <TouchableOpacity
             style={[
               styles.pdfBtn,
-              { backgroundColor: corPrincipal },
+              { backgroundColor: principal },
               gerando && { opacity: 0.75 },
             ]}
             onPress={onExportar}
@@ -762,21 +779,25 @@ export default function Relatorio() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.block}>
-          <Text style={styles.previewTitle}>Dízimos</Text>
-          <Text style={styles.previewSub}>Evolução das Coletas</Text>
+        <View style={[styles.block, { backgroundColor: card }]}>
+          <Text style={[styles.previewTitle, { color: text }]}>Dízimos</Text>
+          <Text style={[styles.previewSub, { color: muted }]}>
+            Evolução das Coletas
+          </Text>
           <GrafBarras
             dados={dadosBarrasDizimo}
-            cor={corPrincipal}
+            cor={principal}
             altura={150}
           />
         </View>
 
-        <View style={styles.block}>
-          <Text style={styles.previewTitle}>Receitas e despesas</Text>
+        <View style={[styles.block, { backgroundColor: card }]}>
+          <Text style={[styles.previewTitle, { color: text }]}>
+            Receitas e despesas
+          </Text>
           <GrafLinhas
             dados={seriesGraficos}
-            corReceita={corPrincipal}
+            corReceita={principal}
             corDespesa={corDespesa}
             altura={150}
           />
@@ -794,14 +815,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   block: {
-    backgroundColor: "#fff",
     borderRadius: 18,
     padding: 14,
     marginBottom: 14,
   },
   segment: {
     flexDirection: "row",
-    backgroundColor: "#f4f5f7",
     borderRadius: 14,
     padding: 4,
     marginBottom: 14,
@@ -815,7 +834,6 @@ const styles = StyleSheet.create({
   segmentText: {
     fontSize: 13,
     fontFamily: "Roboto-Medium",
-    color: "#555",
   },
   anoRow: {
     flexDirection: "row",
@@ -828,14 +846,12 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: "#f4f5f7",
     alignItems: "center",
     justifyContent: "center",
   },
   anoText: {
     fontSize: 17,
     fontFamily: "Roboto-Bold",
-    color: "#1f2933",
     minWidth: 64,
     textAlign: "center",
   },
@@ -849,17 +865,14 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 12,
     alignItems: "center",
-    backgroundColor: "#f4f5f7",
   },
   mesText: {
     fontSize: 12,
     fontFamily: "Roboto-Medium",
-    color: "#333",
   },
   customRow: { flexDirection: "row", gap: 10 },
   dateBox: {
     flex: 1,
-    backgroundColor: "#f4f5f7",
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -867,19 +880,16 @@ const styles = StyleSheet.create({
   dateLabel: {
     fontSize: 11,
     fontFamily: "Roboto-Regular",
-    color: "#9aa0a6",
     marginBottom: 2,
   },
   dateValue: {
     fontSize: 14,
     fontFamily: "Roboto-Medium",
-    color: "#1f2933",
   },
   filtroAtivo: {
     marginTop: 14,
     paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#ececec",
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
@@ -888,12 +898,10 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     fontFamily: "Roboto-Regular",
-    color: "#555",
   },
   filtroQtd: {
     fontSize: 12,
     fontFamily: "Roboto-Medium",
-    color: "#9aa0a6",
   },
   pdfBtn: {
     marginTop: 16,
@@ -912,13 +920,11 @@ const styles = StyleSheet.create({
   previewTitle: {
     fontSize: 15,
     fontFamily: "Roboto-Medium",
-    color: "#1f2933",
   },
   previewSub: {
     marginTop: 2,
     marginBottom: 12,
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    color: "#9aa0a6",
   },
 });

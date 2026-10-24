@@ -6,12 +6,10 @@ import {
   StyleSheet,
   Animated,
 } from "react-native";
-
 import Ionicons from "react-native-vector-icons/Ionicons";
 
-
-const TAB_SIZE = 58;
-const PILL_SIZE = 52;
+const TAB_SIZE = 52;
+const PILL_SIZE = 50;
 
 function nomeIcone(nome, focado) {
   if (!nome) return "ellipse-outline";
@@ -24,7 +22,11 @@ export default function TabbarPersonalizada({
   descriptors,
   navigation,
 }) {
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
+
+  const principal = colors.principal || colors.primary;
+  const card = colors.card;
+  const iconInativo = colors.muted || (dark ? "#9aa0a6" : "#777");
 
   const slideX = useRef(new Animated.Value(state.index * TAB_SIZE)).current;
   const scales = useRef(
@@ -66,13 +68,13 @@ export default function TabbarPersonalizada({
 
   return (
     <Animated.View style={styles.container}>
-      <View style={styles.content}>
+      <View style={[styles.content, { backgroundColor: card }]}>
         <Animated.View
           pointerEvents="none"
           style={[
             styles.pill,
             {
-              backgroundColor: colors.principal,
+              backgroundColor: principal,
               transform: [{ translateX: slideX }],
             },
           ]}
@@ -104,7 +106,7 @@ export default function TabbarPersonalizada({
               <Ionicons
                 name={nomeIcone(options.tabBarIcon, isFocused)}
                 size={26}
-                color={isFocused ? "#fff" : "#777"}
+                color={isFocused ? "#fff" : iconInativo}
               />
             </TouchableOpacity>
           );
@@ -120,8 +122,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   content: {
-    elevation: .5,
-    backgroundColor: "#fff",
+    elevation: 3,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

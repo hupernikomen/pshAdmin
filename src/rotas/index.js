@@ -10,22 +10,25 @@ import EditarRegistro from "../pages/EditarRegistro";
 import Membros from "../pages/Membros";
 import Configuracoes from "../pages/Configuracoes";
 import Dizimos from "../pages/Dizimos";
+import { useTheme } from "@react-navigation/native";
 
 const Stack = createNativeStackNavigator();
 
 export default function Rotas() {
+
+const {colors} = useTheme()
+
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["bottom"]}>
       <Stack.Navigator
         screenOptions={{
-          headerShadowVisible: false,
           headerTitleStyle: {
-            fontFamily: 'Roboto-Medium',
-            color: '#000',
+            fontFamily: 'Roboto-Bold',
+            color: colors.text,
             fontSize: 18
           },
           contentStyle: {
-            backgroundColor: "#f4f5f7",
+            backgroundColor: colors.background,
           },
 
         }}

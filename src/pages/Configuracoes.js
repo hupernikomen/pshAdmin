@@ -60,7 +60,7 @@ function diasRestantes(previstaEm) {
 }
 
 export default function Configuracoes() {
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
   const { uid } = useAuth();
   const {
     igrejaAtiva,
@@ -95,6 +95,9 @@ export default function Configuracoes() {
   const exclusaoPrevistaEm = Number(igrejaAtiva?.exclusaoPrevistaEm) || 0;
   const exclusaoAgendada = exclusaoPrevistaEm > 0;
   const dias = diasRestantes(exclusaoPrevistaEm);
+
+  const principal = colors.principal || colors.primary || "#65C556";
+  const placeholder = colors.muted || (dark ? "#666" : "#bbb");
 
   useEffect(() => {
     nomeAtualRef.current = nome;
@@ -176,10 +179,7 @@ export default function Configuracoes() {
       setCriando(true);
       await criarIgreja(limpo);
     } catch (e) {
-      Alert.alert(
-        "Erro",
-        e?.message || "Não foi possível criar a igreja."
-      );
+      Alert.alert("Erro", e?.message || "Não foi possível criar a igreja.");
     } finally {
       setCriando(false);
     }
@@ -380,8 +380,8 @@ export default function Configuracoes() {
 
   if (carregando) {
     return (
-      <View style={styles.loadingBox}>
-        <ActivityIndicator color={colors.principal || "#65C556"} />
+      <View style={[styles.loadingBox, { backgroundColor: colors.background }]}>
+        <ActivityIndicator color={principal} />
       </View>
     );
   }
@@ -389,22 +389,22 @@ export default function Configuracoes() {
   if (semIgreja) {
     return (
       <ScrollView
-        style={styles.container}
+        style={[styles.container, { backgroundColor: colors.background }]}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-
-
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: colors.card }]}>
           <View style={styles.row}>
-            <Text style={styles.rowLabel}>Nome da igreja</Text>
+            <Text style={[styles.rowLabel, { color: colors.text }]}>
+              Nome da igreja
+            </Text>
             <TextInput
-              style={styles.rowInput}
+              style={[styles.rowInput, { color: colors.text }]}
               value={nome}
               maxLength={25}
               onChangeText={setNome}
               placeholder="Ex.: Igreja Central"
-              placeholderTextColor="#bbb"
+              placeholderTextColor={placeholder}
               autoCapitalize="words"
               textAlign="right"
               returnKeyType="done"
@@ -416,7 +416,7 @@ export default function Configuracoes() {
         <TouchableOpacity
           style={[
             styles.createBtn,
-            { backgroundColor: colors.principal || "#65C556" },
+            { backgroundColor: principal },
             criando && { opacity: 0.7 },
           ]}
           onPress={handleCriarIgreja}
@@ -429,22 +429,39 @@ export default function Configuracoes() {
             <Text style={styles.createBtnText}>Criar igreja</Text>
           )}
         </TouchableOpacity>
-
-
       </ScrollView>
     );
   }
 
   return (
     <ScrollView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
       {exclusaoAgendada && (
-        <View style={styles.warningBanner}>
-          <Text style={styles.warningTitle}>Exclusão agendada</Text>
-          <Text style={styles.warningText}>
+        <View
+          style={[
+            styles.warningBanner,
+            {
+              backgroundColor: dark ? "#3e2723" : "#FFF3E0",
+            },
+          ]}
+        >
+          <Text
+            style={[
+              styles.warningTitle,
+              { color: dark ? "#FFB74D" : "#E65100" },
+            ]}
+          >
+            Exclusão agendada
+          </Text>
+          <Text
+            style={[
+              styles.warningText,
+              { color: dark ? "#FFCCBC" : "#BF360C" },
+            ]}
+          >
             Esta igreja será excluída em{" "}
             {dias > 0 ? `${dias} dia(s)` : "breve"} (
             {formatarData(exclusaoPrevistaEm)}). Até lá você pode cancelar.
@@ -452,16 +469,22 @@ export default function Configuracoes() {
         </View>
       )}
 
-      <View style={styles.card}>
+      <View style={[styles.card, { backgroundColor: colors.card }]}>
         <View style={styles.row}>
-          <Text style={styles.rowLabel}>Nome da igreja</Text>
+          <Text style={[styles.rowLabel, { color: colors.text }]}>
+            Nome da igreja
+          </Text>
           <TextInput
-            style={[styles.rowInput, !isAdmin && styles.inputDisabled]}
+            style={[
+              styles.rowInput,
+              { color: colors.text },
+              !isAdmin && styles.inputDisabled,
+            ]}
             value={nome}
             maxLength={25}
             onChangeText={setNome}
             placeholder="—"
-            placeholderTextColor="#bbb"
+            placeholderTextColor={placeholder}
             editable={isAdmin && !exclusaoAgendada}
             autoCapitalize="words"
             textAlign="right"
@@ -471,21 +494,28 @@ export default function Configuracoes() {
           />
         </View>
 
-        <View style={styles.separator} />
+        <View
+          style={[styles.separator, { backgroundColor: colors.border }]}
+        />
 
         <View style={styles.row}>
-          <Text style={styles.rowLabel}>Saldo inicial</Text>
+          <Text style={[styles.rowLabel, { color: colors.text }]}>
+            Saldo inicial
+          </Text>
           <View style={styles.valorWrap}>
-            <Text style={styles.prefixo}>R$</Text>
+            <Text style={[styles.prefixo, { color: colors.muted || placeholder }]}>
+              R$
+            </Text>
             <TextInput
               style={[
                 styles.rowInput,
+                { color: colors.text },
                 (!podeFinanceiro || exclusaoAgendada) && styles.inputDisabled,
               ]}
               value={valorSaldo}
               onChangeText={setValorSaldo}
               placeholder="0,00"
-              placeholderTextColor="#bbb"
+              placeholderTextColor={placeholder}
               keyboardType="decimal-pad"
               editable={podeFinanceiro && !exclusaoAgendada}
               textAlign="right"
@@ -497,7 +527,7 @@ export default function Configuracoes() {
         </View>
       </View>
 
-      <Text style={styles.hint}>
+      <Text style={[styles.hint, { color: colors.muted || placeholder }]}>
         As alterações são salvas ao sair do campo ou da página.
       </Text>
 
@@ -508,7 +538,10 @@ export default function Configuracoes() {
               <TouchableOpacity
                 style={[
                   styles.cancelDeleteBtn,
-                  { borderColor: colors.principal || "#65C556" },
+                  {
+                    borderColor: principal,
+                    backgroundColor: colors.card,
+                  },
                   processandoExclusao && { opacity: 0.6 },
                 ]}
                 onPress={pedirCancelarExclusao}
@@ -516,19 +549,14 @@ export default function Configuracoes() {
                 activeOpacity={0.85}
               >
                 {processandoExclusao ? (
-                  <ActivityIndicator color={colors.principal || "#65C556"} />
+                  <ActivityIndicator color={principal} />
                 ) : (
-                  <Text
-                    style={[
-                      styles.cancelDeleteBtnText,
-                      { color: colors.principal || "#65C556" },
-                    ]}
-                  >
+                  <Text style={[styles.cancelDeleteBtnText, { color: principal }]}>
                     Cancelar exclusão
                   </Text>
                 )}
               </TouchableOpacity>
-              <Text style={styles.deleteHint}>
+              <Text style={[styles.deleteHint, { color: colors.muted || placeholder }]}>
                 A exclusão definitiva está marcada para{" "}
                 {formatarData(exclusaoPrevistaEm)}.
               </Text>
@@ -538,6 +566,10 @@ export default function Configuracoes() {
               <TouchableOpacity
                 style={[
                   styles.deleteBtn,
+                  {
+                    backgroundColor: colors.card,
+                    borderColor: dark ? "#5d1f1f" : "#ffcdd2",
+                  },
                   processandoExclusao && { opacity: 0.6 },
                 ]}
                 onPress={pedirAgendarExclusao}
@@ -545,14 +577,19 @@ export default function Configuracoes() {
                 activeOpacity={0.85}
               >
                 {processandoExclusao ? (
-                  <ActivityIndicator color="#C62828" />
+                  <ActivityIndicator color={colors.negativo || "#C62828"} />
                 ) : (
-                  <Text style={styles.deleteBtnText}>
+                  <Text
+                    style={[
+                      styles.deleteBtnText,
+                      { color: colors.negativo || "#C62828" },
+                    ]}
+                  >
                     Excluir igreja em 30 dias
                   </Text>
                 )}
               </TouchableOpacity>
-              <Text style={styles.deleteHint}>
+              <Text style={[styles.deleteHint, { color: colors.muted || placeholder }]}>
                 Os dados não são apagados agora. Após 30 dias da confirmação,
                 igreja, registros, caixinhas e membros serão removidos
                 automaticamente.
@@ -578,18 +615,8 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f4f5f7",
-  },
-  sectionHint: {
-    fontSize: 14,
-    fontFamily: "Roboto-Regular",
-    color: "#666",
-    lineHeight: 20,
-    marginBottom: 14,
-    paddingHorizontal: 2,
   },
   warningBanner: {
-    backgroundColor: "#FFF3E0",
     borderRadius: 14,
     padding: 14,
     marginBottom: 14,
@@ -597,17 +624,14 @@ const styles = StyleSheet.create({
   warningTitle: {
     fontSize: 14,
     fontFamily: "Roboto-Bold",
-    color: "#E65100",
     marginBottom: 4,
   },
   warningText: {
     fontSize: 13,
     fontFamily: "Roboto-Regular",
-    color: "#BF360C",
     lineHeight: 18,
   },
   card: {
-    backgroundColor: "#fff",
     borderRadius: 16,
     paddingHorizontal: 16,
     overflow: "hidden",
@@ -628,7 +652,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontFamily: "Roboto-Medium",
-    color: "#1f2933",
     paddingVertical: 0,
     paddingHorizontal: 0,
     minWidth: 80,
@@ -643,14 +666,12 @@ const styles = StyleSheet.create({
   prefixo: {
     fontSize: 14,
     fontFamily: "Roboto-Regular",
-    color: "#9aa0a6",
   },
   inputDisabled: {
     opacity: 0.55,
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: "#ececec",
   },
   createBtn: {
     marginTop: 16,
@@ -669,7 +690,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    color: "#9aa0a6",
     lineHeight: 18,
   },
   dangerZone: {
@@ -681,12 +701,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#fff",
     borderWidth: 1,
-    borderColor: "#ffcdd2",
   },
   deleteBtnText: {
-    color: "#C62828",
     fontSize: 15,
     fontFamily: "Roboto-Medium",
   },
@@ -695,7 +712,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#fff",
     borderWidth: 1.5,
   },
   cancelDeleteBtnText: {
@@ -707,7 +723,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    color: "#9aa0a6",
     lineHeight: 18,
   },
 });

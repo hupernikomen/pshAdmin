@@ -23,10 +23,10 @@ export default function Saldo({
 
   return (
     <View>
-      <View style={styles.balanceCard}>
+      <View style={[styles.balanceCard, {backgroundColor: colors.card}]}>
         <View style={styles.balanceTop}>
           <View style={styles.labelRow}>
-            <Text style={styles.balanceLabel}>Saldo atual</Text>
+            <Text style={[styles.balanceLabel, {color: colors.text}]}>Saldo atual</Text>
             <TouchableOpacity
               onPress={toggleOcultarValores}
               style={styles.eyeBtn}
@@ -36,7 +36,7 @@ export default function Saldo({
               <Ionicons
                 name={ocultarValores ? "eye-off-outline" : "eye-outline"}
                 size={18}
-                color="#333"
+                color={colors.text}
               />
             </TouchableOpacity>
           </View>
@@ -46,16 +46,16 @@ export default function Saldo({
             style={[styles.addBtn, { backgroundColor: colors.principal }]}
             activeOpacity={0.8}
           >
-            <Ionicons name="add" size={22} color="#fff" />
+            <Ionicons name="add" size={22} color={'#fff'} />
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.balanceValue}>{fmt(saldoAtual)}</Text>
+        <Text style={[styles.balanceValue, {color: colors.text}]}>{fmt(saldoAtual)}</Text>
 
         <View style={styles.balanceBottom}>
           <View>
-            <Text style={styles.miniLabel}>Caixa livre</Text>
-            <Text style={styles.miniValue}>{fmt(caixaGeral)}</Text>
+            <Text style={[styles.miniLabel, {color: colors.text}]}>Caixa livre</Text>
+            <Text style={[styles.miniValue, {color: colors.text}]}>{fmt(caixaGeral)}</Text>
           </View>
 
           <TouchableOpacity
@@ -64,22 +64,22 @@ export default function Saldo({
             style={styles.caixinhasBtn}
           >
             <View style={styles.caixinhasTitleRow}>
-              <Text style={styles.miniLabel}>Caixinhas</Text>
+              <Text style={[styles.miniLabel, {color: colors.text}]}>Caixinhas</Text>
               <Ionicons name="chevron-forward" size={14} color="#888" />
             </View>
-            <Text style={styles.miniValue}>{fmt(emCaixinhas)}</Text>
+            <Text style={[styles.miniValue, {color: colors.text}]}>{fmt(emCaixinhas)}</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <View style={styles.chipsRow}>
-        <View style={styles.chip}>
-          <Text style={styles.chipLabel}>Saldo anterior</Text>
-          <Text style={styles.chipValue}>{fmt(saldoAnterior)}</Text>
+        <View style={[styles.chip, {backgroundColor: colors.card}]}>
+          <Text style={[styles.chipLabel, {color: colors.text}]}>Saldo anterior</Text>
+          <Text style={[styles.chipValue, {color: colors.text}]}>{fmt(saldoAnterior)}</Text>
         </View>
-        <View style={styles.chip}>
-          <Text style={styles.chipLabel}>Projeção</Text>
-          <Text style={styles.chipValue}>{fmt(projecaoFutura)}</Text>
+        <View style={[styles.chip, {backgroundColor: colors.card}]}>
+          <Text style={[styles.chipLabel, {color: colors.text}]}>Projeção</Text>
+          <Text style={[styles.chipValue, {color: colors.text}]}>{fmt(projecaoFutura)}</Text>
         </View>
       </View>
     </View>
@@ -88,7 +88,6 @@ export default function Saldo({
 
 const styles = StyleSheet.create({
   balanceCard: {
-    backgroundColor: "#fff",
     borderRadius: 22,
     padding: 18,
     marginBottom: 12,
@@ -127,7 +126,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   miniLabel: {
-    color: "#000",
     fontSize: 12,
     fontFamily: "Roboto-Light",
     marginBottom: 3,
@@ -146,7 +144,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderRadius: 16,
     paddingVertical: 14,
-    paddingHorizontal: 10,
+    paddingHorizontal: 18,
   },
   chipLabel: {
     color: "#000",

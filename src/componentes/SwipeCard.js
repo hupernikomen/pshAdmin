@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../context/AppContext";
+import { useTheme } from "@react-navigation/native";
 
 const ACTION_WIDTH = 64;
 const OPEN_THRESHOLD = 40;
@@ -28,8 +29,12 @@ export default function SwipeCard({
   hasRecibo = false,
   canEdit = false,
 }) {
+  const { colors } = useTheme();
   const { ocultarValores } = useContext(AppContext);
   const valorExibido = ocultarValores ? "R$ ***" : value;
+
+  const muted = colors.muted || "#888";
+  const text = colors.text || "#1f2933";
 
   const qtd = Array.isArray(actions) ? actions.length : 0;
   const maxOpen = qtd * ACTION_WIDTH;
@@ -104,7 +109,6 @@ export default function SwipeCard({
 
   return (
     <View style={styles.wrap}>
-      {/* botões atrás */}
       {qtd > 0 && (
         <View style={[styles.actionsBehind, { width: maxOpen }]}>
           {actions.map((a) => (
@@ -120,7 +124,11 @@ export default function SwipeCard({
               }}
               activeOpacity={0.85}
             >
-              <Ionicons name={a.icon || "ellipsis-horizontal"} size={20} color="#fff" />
+              <Ionicons
+                name={a.icon || "ellipsis-horizontal"}
+                size={20}
+                color="#fff"
+              />
               {!!a.label && (
                 <Text style={styles.actionLabel} numberOfLines={1}>
                   {a.label}
@@ -132,7 +140,10 @@ export default function SwipeCard({
       )}
 
       <Animated.View
-        style={[styles.card, { transform: [{ translateX }] }]}
+        style={[
+          styles.card,
+          { transform: [{ translateX }], backgroundColor: colors.card },
+        ]}
         {...panResponder.panHandlers}
       >
         <Pressable onPress={toggle} style={styles.cardInner}>
@@ -142,16 +153,16 @@ export default function SwipeCard({
 
           <View style={styles.center}>
             <View style={styles.titleRow}>
-              <Text style={styles.title} numberOfLines={1}>
+              <Text style={[styles.title, { color: text }]} numberOfLines={1}>
                 {title}
               </Text>
-              <Text style={styles.value} numberOfLines={1}>
+              <Text style={[styles.value, { color: text }]} numberOfLines={1}>
                 {valorExibido}
               </Text>
             </View>
 
             <View style={styles.subRow}>
-              <Text style={styles.subtitle} numberOfLines={2}>
+              <Text style={[styles.subtitle, { color: muted }]} numberOfLines={2}>
                 {subtitle}
               </Text>
               <View style={styles.badges}>
@@ -159,7 +170,7 @@ export default function SwipeCard({
                   <Ionicons
                     name="attach-outline"
                     size={14}
-                    color="#888"
+                    color={muted}
                     style={styles.badgeIcon}
                   />
                 )}
@@ -167,7 +178,7 @@ export default function SwipeCard({
                   <Ionicons
                     name="create-outline"
                     size={14}
-                    color="#888"
+                    color={muted}
                     style={styles.badgeIcon}
                   />
                 )}
@@ -208,7 +219,6 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   card: {
-    backgroundColor: "#fff",
     borderRadius: 18,
     overflow: "hidden",
   },
@@ -240,31 +250,30 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontFamily: "Roboto-Regular",
-    color: "#1f2933",
   },
   value: {
     fontSize: 14,
     fontFamily: "Roboto-Medium",
-    color: "#1f2933",
   },
   subRow: {
     marginTop: 2,
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: 8,
+    gap: 21,
   },
   subtitle: {
     flex: 1,
     fontSize: 12,
     fontFamily: "Roboto-Light",
-    color: "#888",
   },
   badges: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "flex-end",
     gap: 4,
     minHeight: 16,
+    minWidth: 50,
   },
   badgeIcon: {
     marginTop: 1,

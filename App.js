@@ -1,35 +1,32 @@
-import { StatusBar, View, ActivityIndicator } from "react-native";
-import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
+import { useEffect, useContext } from "react";
+import {
+  StatusBar,
+  View,
+  ActivityIndicator,
+  Platform,
+} from "react-native";
+import { NavigationContainer } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { useContext } from "react";
+import changeNavigationBarColor from "react-native-navigation-bar-color";
 
 import AuthProvider, { AuthContext } from "./src/context/AuthContext";
 import AppProvider, { AppContext } from "./src/context/AppContext";
+import ThemeProvider, { useAppTheme } from "./src/context/ThemeContext";
 import Rotas from "./src/rotas";
 import Login from "./src/pages/Login";
+import { PRINCIPAL } from "./src/theme";
 
-const Tema = {
-  ...DefaultTheme,
-  colors: {
-    ...DefaultTheme.colors,
-    background: "#fff",
-    principal: "#65C556",
-    neutro: "#f6f6f6ff",
-    negativo: "#EB271C",
-  },
-};
-
-function TelaCarregamento() {
+function TelaCarregamento({ colors }) {
   return (
     <View
       style={{
         flex: 1,
         justifyContent: "center",
         alignItems: "center",
-        backgroundColor: "#f4f5f7",
+        backgroundColor: colors?.background || "#f4f5f7",
       }}
     >
-      <ActivityIndicator size="large" color="#65C556" />
+      <ActivityIndicator size="large" color={colors?.principal || PRINCIPAL} />
     </View>
   );
 }
@@ -37,25 +34,49 @@ function TelaCarregamento() {
 function AppNavigator() {
   const { user, authPronto } = useContext(AuthContext);
   const { igrejasProntas } = useContext(AppContext);
+  const { tema, ready } = useAppTheme();
+  const { colors } = tema;
 
-  if (!authPronto) {
-    return <TelaCarregamento />;
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+
+    const barColor = tema.dark ? "#121212" : "#f4f5f7";
+    const lightIcons = !tema.dark;
+
+    try {
+      const result = changeNavigationBarColor(barColor, lightIcons);
+      if (result != null && typeof result.then === "function") {
+        result.catch(() => {});
+      }
+    } catch (e) {}
+  }, [tema.dark]);
+
+  if (!ready || !authPronto) {
+    return <TelaCarregamento colors={colors} />;
   }
 
   if (!user) {
-    return <Login />;
+    return (
+      <NavigationContainer theme={tema}>
+        <StatusBar
+          barStyle={tema.dark ? "light-content" : "dark-content"}
+          backgroundColor={colors.background}
+        />
+        <Login />
+      </NavigationContainer>
+    );
   }
 
-  // Aguarda carregar a lista de igrejas do usuário
   if (!igrejasProntas) {
-    return <TelaCarregamento />;
+    return <TelaCarregamento colors={colors} />;
   }
 
-  // Sempre entra no app (Rotas). Se não houver igreja,
-  // a Home mostra o empty state e o botão para Configurações.
   return (
-    <NavigationContainer theme={Tema}>
-      <StatusBar barStyle="dark-content" />
+    <NavigationContainer theme={tema}>
+      <StatusBar
+        barStyle={tema.dark ? "light-content" : "dark-content"}
+        backgroundColor={colors.background}
+      />
       <Rotas />
     </NavigationContainer>
   );
@@ -64,11 +85,13 @@ function AppNavigator() {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <AuthProvider>
-        <AppProvider>
-          <AppNavigator />
-        </AppProvider>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AppProvider>
+            <AppNavigator />
+          </AppProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }

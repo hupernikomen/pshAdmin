@@ -13,14 +13,10 @@ import {
   ScrollView,
   Image,
 } from "react-native";
+import { useTheme } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
-
-const PRINCIPAL = "#65C556";
-const INK = "#1a1a1a";
-const MUTED = "#9aa0a6";
-const LINE = "#e5e7eb";
 
 export default function Login() {
   const {
@@ -30,6 +26,14 @@ export default function Login() {
     enviarRedefinicaoSenha,
   } = useAuth();
   const insets = useSafeAreaInsets();
+  const { colors, dark } = useTheme();
+
+  const principal = colors.principal || colors.primary || "#65C556";
+  const text = colors.text || "#1a1a1a";
+  const muted = colors.muted || "#9aa0a6";
+  const line = colors.border || "#e5e7eb";
+  const bg = colors.background || (dark ? "#121212" : "#fff");
+  const card = colors.card || (dark ? "#1e1e1e" : "#fff");
 
   const [modo, setModo] = useState("entrar");
   const [nome, setNome] = useState("");
@@ -101,8 +105,11 @@ export default function Login() {
   }
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+    <View style={[styles.root, { paddingTop: insets.top, backgroundColor: bg }]}>
+      <StatusBar
+        barStyle={dark ? "light-content" : "dark-content"}
+        backgroundColor={bg}
+      />
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -116,70 +123,70 @@ export default function Login() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Cabeçalho */}
           <View style={styles.header}>
-            <Text style={styles.title}>
+            <Text style={[styles.title, { color: text }]}>
               {modo === "entrar" ? "Bem-vindo de volta" : "Criar conta"}
             </Text>
-            <Text style={styles.subtitle}>
+            <Text style={[styles.subtitle, { color: muted }]}>
               {modo === "entrar"
                 ? "Entre para acompanhar a tesouraria da igreja"
                 : "Preencha os dados para começar a usar o app"}
             </Text>
           </View>
 
-          {/* Formulário */}
           <View style={styles.form}>
             {modo === "cadastrar" && (
-              <View style={styles.inputWrap}>
-                <Ionicons name="person-outline" size={18} color={MUTED} />
+              <View style={[styles.inputWrap, { borderBottomColor: line }]}>
+                <Ionicons name="person-outline" size={18} color={muted} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: text }]}
                   value={nome}
                   onChangeText={setNome}
                   placeholder="Nome"
-                  placeholderTextColor={MUTED}
+                  placeholderTextColor={muted}
                   autoCapitalize="words"
                 />
               </View>
             )}
 
-            <View style={styles.inputWrap}>
-              <Ionicons name="mail-outline" size={18} color={MUTED} />
+            <View style={[styles.inputWrap, { borderBottomColor: line }]}>
+              <Ionicons name="mail-outline" size={18} color={muted} />
               <TextInput
-                style={styles.input}
+                style={[styles.input, { color: text }]}
                 value={email}
                 onChangeText={setEmail}
                 placeholder="E-mail"
-                placeholderTextColor={MUTED}
+                placeholderTextColor={muted}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
               />
             </View>
 
-            <View style={styles.inputWrap}>
-              <Ionicons name="lock-closed-outline" size={18} color={MUTED} />
+            <View style={[styles.inputWrap, { borderBottomColor: line }]}>
+              <Ionicons name="lock-closed-outline" size={18} color={muted} />
               <TextInput
-                style={styles.input}
+                style={[styles.input, { color: text }]}
                 value={senha}
                 onChangeText={setSenha}
                 placeholder="Senha"
-                placeholderTextColor={MUTED}
+                placeholderTextColor={muted}
                 secureTextEntry={!mostrarSenha}
               />
               <Pressable onPress={() => setMostrarSenha((v) => !v)} hitSlop={12}>
                 <Ionicons
                   name={mostrarSenha ? "eye-off-outline" : "eye-outline"}
                   size={18}
-                  color={MUTED}
+                  color={muted}
                 />
               </Pressable>
             </View>
 
             {modo === "entrar" && (
               <Pressable onPress={handleEsqueciSenha} style={styles.forgotRow}>
-                <Text style={styles.forgot}>Esqueceu a senha?</Text>
+                <Text style={[styles.forgot, { color: muted }]}>
+                  Esqueceu a senha?
+                </Text>
               </Pressable>
             )}
 
@@ -188,6 +195,7 @@ export default function Login() {
               disabled={loading}
               style={[
                 styles.btnLogin,
+                { backgroundColor: principal },
                 modo === "cadastrar" && styles.btnLoginSpaced,
                 loading && { opacity: 0.75 },
               ]}
@@ -202,42 +210,55 @@ export default function Login() {
             </Pressable>
           </View>
 
-          {/* Alternativas de acesso */}
           <View style={styles.altBlock}>
             <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.orText}>ou entre com</Text>
-              <View style={styles.dividerLine} />
+              <View style={[styles.dividerLine, { backgroundColor: line }]} />
+              <Text style={[styles.orText, { color: muted }]}>ou entre com</Text>
+              <View style={[styles.dividerLine, { backgroundColor: line }]} />
             </View>
 
             <Pressable
               onPress={handleGoogle}
               disabled={loading}
-              style={[styles.socialBtn, loading && { opacity: 0.75 }]}
+              style={[
+                styles.socialBtn,
+                {
+                  backgroundColor: card,
+                  borderColor: line,
+                },
+                loading && { opacity: 0.75 },
+              ]}
             >
               <Image
                 source={require("../../assets/google-logo.png")}
                 style={styles.googleLogo}
                 resizeMode="contain"
               />
-              <Text style={styles.socialText}>Google</Text>
+              <Text style={[styles.socialText, { color: text }]}>Google</Text>
             </Pressable>
           </View>
 
-          {/* Rodapé */}
           <View style={styles.footer}>
             {modo === "entrar" ? (
               <>
-                <Text style={styles.switchMuted}>Não tem conta? </Text>
+                <Text style={[styles.switchMuted, { color: muted }]}>
+                  Não tem conta?{" "}
+                </Text>
                 <Pressable onPress={() => setModo("cadastrar")} hitSlop={8}>
-                  <Text style={styles.switchLink}>Cadastre-se</Text>
+                  <Text style={[styles.switchLink, { color: principal }]}>
+                    Cadastre-se
+                  </Text>
                 </Pressable>
               </>
             ) : (
               <>
-                <Text style={styles.switchMuted}>Já tem conta? </Text>
+                <Text style={[styles.switchMuted, { color: muted }]}>
+                  Já tem conta?{" "}
+                </Text>
                 <Pressable onPress={() => setModo("entrar")} hitSlop={8}>
-                  <Text style={styles.switchLink}>Entrar</Text>
+                  <Text style={[styles.switchLink, { color: principal }]}>
+                    Entrar
+                  </Text>
                 </Pressable>
               </>
             )}
@@ -251,29 +272,18 @@ export default function Login() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#fff",
   },
   content: {
     flexGrow: 1,
     paddingHorizontal: 28,
     justifyContent: "center",
   },
-
   header: {
     marginBottom: 28,
-  },
-  brand: {
-    fontFamily: "Roboto-Medium",
-    fontSize: 13,
-    color: PRINCIPAL,
-    letterSpacing: 0.6,
-    marginBottom: 12,
-    textTransform: "uppercase",
   },
   title: {
     fontFamily: "Roboto-Bold",
     fontSize: 26,
-    color: INK,
     letterSpacing: -0.4,
     marginBottom: 8,
   },
@@ -281,10 +291,8 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Regular",
     fontSize: 14,
     lineHeight: 20,
-    color: MUTED,
     maxWidth: 300,
   },
-
   form: {
     marginBottom: 8,
   },
@@ -292,7 +300,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: LINE,
     paddingVertical: 14,
     marginBottom: 4,
     gap: 12,
@@ -301,7 +308,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontFamily: "Roboto-Regular",
-    color: INK,
     padding: 0,
   },
   forgotRow: {
@@ -313,12 +319,10 @@ const styles = StyleSheet.create({
   forgot: {
     fontFamily: "Roboto-Medium",
     fontSize: 13,
-    color: MUTED,
   },
   btnLogin: {
     height: 50,
     borderRadius: 14,
-    backgroundColor: PRINCIPAL,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -330,7 +334,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "Roboto-Bold",
   },
-
   altBlock: {
     marginTop: 28,
     marginBottom: 8,
@@ -344,12 +347,10 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: LINE,
   },
   orText: {
     fontFamily: "Roboto-Regular",
     fontSize: 13,
-    color: MUTED,
   },
   socialBtn: {
     flexDirection: "row",
@@ -358,9 +359,7 @@ const styles = StyleSheet.create({
     gap: 10,
     height: 50,
     borderRadius: 14,
-    backgroundColor: "#fff",
     borderWidth: 1,
-    borderColor: LINE,
   },
   googleLogo: {
     width: 20,
@@ -369,9 +368,7 @@ const styles = StyleSheet.create({
   socialText: {
     fontFamily: "Roboto-Medium",
     fontSize: 15,
-    color: INK,
   },
-
   footer: {
     marginTop: 32,
     flexDirection: "row",
@@ -382,11 +379,9 @@ const styles = StyleSheet.create({
   switchMuted: {
     fontFamily: "Roboto-Regular",
     fontSize: 14,
-    color: MUTED,
   },
   switchLink: {
     fontFamily: "Roboto-Medium",
     fontSize: 14,
-    color: PRINCIPAL,
   },
 });

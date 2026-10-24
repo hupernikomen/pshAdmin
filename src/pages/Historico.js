@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useState, useCallback } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import {
   View,
   FlatList,
@@ -12,7 +12,7 @@ import {
   Alert,
   ScrollView,
 } from "react-native";
-import { useNavigation, useTheme, useFocusEffect } from "@react-navigation/native";
+import { useNavigation, useTheme } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import RNFS from "react-native-fs";
 import { AppContext } from "../context/AppContext";
@@ -21,10 +21,7 @@ import Load from "../componentes/Load";
 import SwipeCard from "../componentes/SwipeCard";
 import { podeEditarRegistro } from "../utils/registroEdit";
 
-
 const LIMITES = [30, 60, 90, 150];
-
-
 
 function normalizarUri(uri) {
   if (!uri) return null;
@@ -69,7 +66,7 @@ function textoOrigem(item) {
 
 function ehSaidaParcelada(item, parcelas) {
   if (item?.tipoMovimento !== "saida") return false;
-  if (Array.isArray(parcelas) && parcelas.length > 0) return true;
+  if (Array.isArray(parcelas) && parcelas.length > 1) return true;
   if ((Number(item.quantidadeParcelas) || 0) > 1) return true;
   return false;
 }
@@ -87,19 +84,21 @@ function montarLinhasHistorico(dadosFinancas) {
       ? item.valoresRecebidos
       : [];
     const parcelas = Array.isArray(item.parcelas) ? item.parcelas : [];
-    const totalParcelas =
-      item.quantidadeParcelas ||
-      (parcelas.length > 0 ? parcelas.length : null);
+
+    const totalParcelasRaw =
+      Number(item.quantidadeParcelas) ||
+      (parcelas.length > 0 ? parcelas.length : 0);
+    const isParcelada = totalParcelasRaw > 1;
+    const totalParcelas = isParcelada ? totalParcelasRaw : null;
 
     if (item.tipoMovimento === "saida" && pagos.length > 0) {
       pagos.forEach((p, idx) => {
         const tsPag = Number(p.data || sortBase) || sortBase;
-        const nParc =
-          p.parcelaNumero != null
+        const nParc = isParcelada
+          ? p.parcelaNumero != null
             ? p.parcelaNumero
-            : totalParcelas
-              ? idx + 1
-              : null;
+            : idx + 1
+          : null;
 
         linhas.push({
           kind: "pagamento",
@@ -150,8 +149,12 @@ function montarLinhasHistorico(dadosFinancas) {
             origemPagamento: p.origemPagamento || item.origemPagamento || null,
             caixinhaNome: p.caixinhaNome || item.caixinhaNome || null,
             caixinhaId: p.caixinhaId || item.caixinhaId || null,
-            parcelaNumero: p.numero != null ? p.numero : idx + 1,
-            parcelaTotal: totalParcelas || parcelas.length,
+            parcelaNumero: isParcelada
+              ? p.numero != null
+                ? p.numero
+                : idx + 1
+              : null,
+            parcelaTotal: totalParcelas,
             registroPaiId: item.id,
             reg: createdAtPai,
             sortKey: tsPag,
@@ -198,6 +201,8 @@ function montarLinhasHistorico(dadosFinancas) {
       sortKey: sortBase,
       createdAt: createdAtPai,
       reg: createdAtPai,
+      parcelaNumero: null,
+      parcelaTotal: null,
     });
   });
 
@@ -220,12 +225,18 @@ export default function Historico() {
   } = useContext(AppContext);
 
   const { uid, authPronto } = useAuth();
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
   const navigation = useNavigation();
   const [refreshing, setRefreshing] = useState(false);
   const [fotoSelecionada, setFotoSelecionada] = useState(null);
   const [limite, setLimite] = useState(30);
   const [abertoId, setAbertoId] = useState(null);
+
+  const principal = colors.principal || colors.primary;
+  const text = colors.text;
+  const muted = colors.muted || (dark ? "#9aa0a6" : "#888");
+  const card = colors.card;
+  const bg = colors.background;
 
   useEffect(() => {
     if (!authPronto) return;
@@ -280,7 +291,7 @@ export default function Historico() {
   if ((!authPronto || load) && !refreshing) return <Load />;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: bg }]}>
       <FlatList
         data={linhasLimitadas}
         keyExtractor={(item) => item.rowId}
@@ -288,11 +299,13 @@ export default function Historico() {
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <View style={styles.emptyIcon}>
-              <Ionicons name="receipt-outline" size={28} color="#9aa3ad" />
+            <View style={[styles.emptyIcon, { backgroundColor: card }]}>
+              <Ionicons name="receipt-outline" size={28} color={muted} />
             </View>
-            <Text style={styles.emptyTitle}>Nenhum registro</Text>
-            <Text style={styles.emptyText}>
+            <Text style={[styles.emptyTitle, { color: text }]}>
+              Nenhum registro
+            </Text>
+            <Text style={[styles.emptyText, { color: muted }]}>
               {!uid
                 ? "Faça login para ver seus registros."
                 : "Quando houver movimentações, elas aparecem aqui."}
@@ -300,7 +313,7 @@ export default function Historico() {
           </View>
         }
         ListHeaderComponent={
-          <View style={styles.filtroWrap}>
+          <View style={[styles.filtroWrap, { backgroundColor: bg }]}>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -313,7 +326,8 @@ export default function Historico() {
                     key={n}
                     style={[
                       styles.filtroChip,
-                      ativo && { backgroundColor: colors.principal },
+                      { backgroundColor: card },
+                      ativo && { backgroundColor: principal },
                     ]}
                     onPress={() => setLimite(n)}
                     activeOpacity={0.8}
@@ -321,6 +335,7 @@ export default function Historico() {
                     <Text
                       style={[
                         styles.filtroChipText,
+                        { color: text },
                         ativo && { color: "#fff" },
                       ]}
                     >
@@ -336,17 +351,18 @@ export default function Historico() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={[colors.principal]}
+            colors={[principal]}
+            tintColor={principal}
           />
         }
         renderItem={({ item }) => {
           const isEntrada = item.tipoMovimento === "entrada";
 
           const textoParcela =
-            item.parcelaNumero != null
-              ? item.parcelaTotal
-                ? `Parcela ${item.parcelaNumero}/${item.parcelaTotal}`
-                : `Parcela ${item.parcelaNumero}`
+            item.parcelaNumero != null &&
+            item.parcelaTotal != null &&
+            item.parcelaTotal > 1
+              ? `Parcela ${item.parcelaNumero}/${item.parcelaTotal}`
               : null;
 
           const valor =
@@ -393,13 +409,18 @@ export default function Historico() {
             });
           }
 
+          const tintEntrada = dark ? "#1B3D2F" : "#E8F5E9";
+          const tintSaida = dark ? "#3D1B1B" : "#FFEBEE";
+          const iconEntrada = dark ? "#81C784" : "#2E7D32";
+          const iconSaida = dark ? "#E57373" : "#C62828";
+
           return (
             <SwipeCard
               hasRecibo={temRecibo}
               canEdit={editavel}
               icon={isEntrada ? "arrow-down-outline" : "arrow-up-outline"}
-              iconColor={isEntrada ? "#2E7D32" : "#C62828"}
-              tint={isEntrada ? "#E8F5E9" : "#FFEBEE"}
+              iconColor={isEntrada ? iconEntrada : iconSaida}
+              tint={isEntrada ? tintEntrada : tintSaida}
               title={item.descricao || "Sem descrição"}
               subtitle={partesSub.join(" · ")}
               value={`${isEntrada ? "+" : "-"} ${formatoMoeda.format(valor)}`}
@@ -432,7 +453,7 @@ export default function Historico() {
               />
             )}
             <TouchableOpacity
-              style={[styles.closeBtn, { backgroundColor: colors.principal }]}
+              style={[styles.closeBtn, { backgroundColor: principal }]}
               onPress={() => setFotoSelecionada(null)}
             >
               <Text style={styles.closeBtnText}>Fechar</Text>
@@ -452,12 +473,6 @@ const styles = StyleSheet.create({
   filtroWrap: {
     paddingTop: 10,
     paddingBottom: 14,
-    backgroundColor: "#f4f5f7",
-  },
-  filtroLabel: {
-    fontSize: 12,
-    fontFamily: "Roboto-Regular",
-    marginBottom: 8,
   },
   filtroRow: {
     flexDirection: "row",
@@ -468,7 +483,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 12,
-    backgroundColor: "#fff",
   },
   filtroChipText: {
     fontSize: 13,
@@ -488,7 +502,6 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 18,
-    backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
   },

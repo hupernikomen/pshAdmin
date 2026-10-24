@@ -18,6 +18,9 @@ import { useAuth } from "../context/AuthContext";
 import Load from "../componentes/Load";
 import Saldo from "../componentes/Saldo";
 import SwipeCard from "../componentes/SwipeCard";
+
+import { useAppTheme } from "../context/ThemeContext";
+
 import {
   arred,
   fimDoDiaTs,
@@ -88,6 +91,27 @@ function saidasNoMes(item, mes, ano, limiteHoje) {
   return 0;
 }
 
+function inicioMediaDizimos(createdAt) {
+  const d = new Date(Number(createdAt) || 0);
+  if (!createdAt || isNaN(d.getTime())) return null;
+  return new Date(d.getFullYear(), d.getMonth() + 1, 1, 0, 0, 0, 0);
+}
+
+function tituloIgrejaHeader(nome) {
+  if (!nome) return "Início";
+
+  let s = String(nome);
+
+  // Ordem importa: frases maiores primeiro
+  s = s.replace(/assembleia\s+de\s+deus/gi, "A. D.");
+  s = s.replace(/presbiteriana/gi, "P.");
+  s = s.replace(/batista/gi, "B.");
+  s = s.replace(/igreja/gi, "I.");
+
+  // limpa espaços duplos
+  return s.replace(/\s+/g, " ").trim() || "Início";
+}
+
 export default function Home() {
   const {
     saldo,
@@ -105,8 +129,10 @@ export default function Home() {
     selecionarIgreja,
   } = useContext(AppContext);
 
+  const { isDark, toggleLightDark } = useAppTheme();
+
   const { user, logout } = useAuth();
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
   const navigation = useNavigation();
   const [refreshing, setRefreshing] = useState(false);
   const [menuAberto, setMenuAberto] = useState(false);
@@ -118,30 +144,58 @@ export default function Home() {
   const variasIgrejas = (igrejasDoUsuario || []).length > 1;
   const semIgreja = !igrejaAtiva?.id;
 
+  const principal = colors.principal || colors.primary;
+  const text = colors.text;
+  const muted = colors.muted || (dark ? "#9aa0a6" : "#888");
+  const card = colors.card;
+  const border = colors.border || (dark ? "#333" : "#eee");
+  const bg = colors.background;
+
   useEffect(() => {
     if (!semIgreja) carregar();
   }, [igrejaAtiva?.id]);
 
-  useEffect(() => {
-    navigation.setOptions({
-      title: igrejaAtiva?.nome || "Início",
-      headerRight: () => (
+useEffect(() => {
+  navigation.setOptions({
+    title: tituloIgrejaHeader(igrejaAtiva?.nome),
+    headerRight: () => (
+      <View style={{ flexDirection: "row", alignItems: "center", marginRight: 8, gap:14 }}>
+        <TouchableOpacity
+          onPress={toggleLightDark}
+          style={{ padding: 6, marginRight: 4 }}
+          activeOpacity={0.7}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons
+            name={isDark ? "sunny-outline" : "moon-outline"}
+            size={22}
+            color={text}
+          />
+        </TouchableOpacity>
+
         <TouchableOpacity
           onPress={() => setMenuAberto(true)}
-          style={{ marginRight: 12 }}
+          style={{ padding: 2 }}
           activeOpacity={0.8}
         >
           {foto ? (
             <Image source={{ uri: foto }} style={styles.avatar} />
           ) : (
-            <View style={[styles.avatar, styles.avatarFallback]}>
+            <View
+              style={[
+                styles.avatar,
+                styles.avatarFallback,
+                { backgroundColor: principal },
+              ]}
+            >
               <Ionicons name="person" size={16} color="#fff" />
             </View>
           )}
         </TouchableOpacity>
-      ),
-    });
-  }, [navigation, foto, igrejaAtiva?.nome]);
+      </View>
+    ),
+  });
+}, [navigation, foto, igrejaAtiva?.nome, principal, isDark, text, toggleLightDark]);
 
   async function carregar() {
     setLoad(true);
@@ -229,47 +283,53 @@ export default function Home() {
       0
     );
 
-  const criadoEm = igrejaAtiva?.createdAt
-    ? new Date(igrejaAtiva.createdAt)
-    : null;
-
   let mediaDizimosAnual = 0;
-  if (criadoEm && !isNaN(criadoEm.getTime())) {
-    const siAno = criadoEm.getFullYear();
-    const siMes = criadoEm.getMonth();
-    let meses = (anoAtual - siAno) * 12 + (mesAtual - siMes) + 1;
-    if (meses < 1) meses = 1;
+  const inicioMedia = inicioMediaDizimos(igrejaAtiva?.createdAt);
 
-    const totalDizimosPeriodo = lista
-      .filter((i) => i.tipoMovimento === "entrada" && i.tipo === "Dízimo")
-      .reduce((acc, i) => {
-        const recebidos = Array.isArray(i.valoresRecebidos)
-          ? i.valoresRecebidos
-          : [];
-        if (recebidos.length > 0) {
-          return (
-            acc +
-            recebidos.reduce((s, r) => {
-              const ts = Number(r.data || 0);
-              if (!ts || ts > limiteHoje) return s;
-              const d = new Date(ts);
-              const idx = d.getFullYear() * 12 + d.getMonth();
-              const idxSi = siAno * 12 + siMes;
-              if (idx >= idxSi) return s + (Number(r.valor) || 0);
-              return s;
-            }, 0)
-          );
-        }
-        const ts = dataDoItem(i);
-        if (!ts || ts > limiteHoje) return acc;
-        const d = new Date(ts);
-        const idx = d.getFullYear() * 12 + d.getMonth();
-        const idxSi = siAno * 12 + siMes;
-        if (idx >= idxSi) return acc + (Number(i.valorRecebidoTotal) || 0);
-        return acc;
-      }, 0);
+  if (inicioMedia) {
+    const siAno = inicioMedia.getFullYear();
+    const siMes = inicioMedia.getMonth();
+    const idxInicio = siAno * 12 + siMes;
+    const idxAtual = anoAtual * 12 + mesAtual;
+    let meses = idxAtual - idxInicio + 1;
 
-    mediaDizimosAnual = totalDizimosPeriodo / meses;
+    if (meses >= 1) {
+      const totalDizimosPeriodo = lista
+        .filter((i) => i.tipoMovimento === "entrada" && i.tipo === "Dízimo")
+        .reduce((acc, i) => {
+          const recebidos = Array.isArray(i.valoresRecebidos)
+            ? i.valoresRecebidos
+            : [];
+
+          if (recebidos.length > 0) {
+            return (
+              acc +
+              recebidos.reduce((s, r) => {
+                const ts = Number(r.data || 0);
+                if (!ts || ts > limiteHoje) return s;
+                if (ts < inicioMedia.getTime()) return s;
+                const d = new Date(ts);
+                const idx = d.getFullYear() * 12 + d.getMonth();
+                if (idx >= idxInicio && idx <= idxAtual) {
+                  return s + (Number(r.valor) || 0);
+                }
+                return s;
+              }, 0)
+            );
+          }
+
+          const ts = dataDoItem(i);
+          if (!ts || ts > limiteHoje || ts < inicioMedia.getTime()) return acc;
+          const d = new Date(ts);
+          const idx = d.getFullYear() * 12 + d.getMonth();
+          if (idx >= idxInicio && idx <= idxAtual) {
+            return acc + (Number(i.valorRecebidoTotal) || 0);
+          }
+          return acc;
+        }, 0);
+
+      mediaDizimosAnual = totalDizimosPeriodo / meses;
+    }
   } else {
     const totalDizimosAno = lista
       .filter((i) => i.tipoMovimento === "entrada" && i.tipo === "Dízimo")
@@ -292,8 +352,8 @@ export default function Home() {
         sub: "Valores em aberto",
         value: `R$ ${formatoMoeda.format(aReceberTotal)}`,
         icon: "arrow-down-outline",
-        tint: "#E8F5E9",
-        iconColor: "#2E7D32",
+        tint: dark ? "#1B3D2F" : "#E8F5E9",
+        iconColor: dark ? "#81C784" : "#2E7D32",
         route: "AReceber",
       },
       {
@@ -302,8 +362,8 @@ export default function Home() {
         sub: "Despesas pendentes",
         value: `R$ ${formatoMoeda.format(despesasFuturas)}`,
         icon: "arrow-up-outline",
-        tint: "#FFEBEE",
-        iconColor: "#C62828",
+        tint: dark ? "#3D1B1B" : "#FFEBEE",
+        iconColor: dark ? "#E57373" : "#C62828",
         route: "APagar",
       },
       {
@@ -312,18 +372,18 @@ export default function Home() {
         sub: "Arrecadado neste mês",
         value: `R$ ${formatoMoeda.format(totalDizimosMes)}`,
         icon: "hand-left-outline",
-        tint: "#E3F2FD",
-        iconColor: "#1565C0",
+        tint: dark ? "#1A2A3D" : "#E3F2FD",
+        iconColor: dark ? "#64B5F6" : "#1565C0",
         route: "Dizimos",
       },
       {
         id: "4",
         label: "Média de dízimos",
-        sub: "Desde a criação da igreja",
+        sub: "Recebidos / Meses",
         value: `R$ ${formatoMoeda.format(mediaDizimosAnual)}`,
         icon: "stats-chart-outline",
-        tint: "#FFF3E0",
-        iconColor: "#EF6C00",
+        tint: dark ? "#3D2E1A" : "#FFF3E0",
+        iconColor: dark ? "#FFB74D" : "#EF6C00",
       },
     ],
     [
@@ -332,24 +392,27 @@ export default function Home() {
       totalDizimosMes,
       mediaDizimosAnual,
       formatoMoeda,
+      dark,
     ]
   );
 
   if (load && !refreshing && !semIgreja) return <Load />;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: bg }]}>
       {semIgreja ? (
         <View style={styles.emptyContainer}>
-          <View style={styles.emptyIcon}>
-            <Ionicons name="business-outline" size={28} color="#9aa0a6" />
+          <View style={[styles.emptyIcon, { backgroundColor: card }]}>
+            <Ionicons name="business-outline" size={28} color={muted} />
           </View>
-          <Text style={styles.emptyTitle}>Nenhuma igreja criada</Text>
-          <Text style={styles.emptyText}>
+          <Text style={[styles.emptyTitle, { color: text }]}>
+            Nenhuma igreja criada
+          </Text>
+          <Text style={[styles.emptyText, { color: muted }]}>
             Para começar a usar o App, crie uma igreja.
           </Text>
           <TouchableOpacity
-            style={[styles.emptyBtn, { backgroundColor: colors.principal }]}
+            style={[styles.emptyBtn, { backgroundColor: principal }]}
             onPress={() => navigation.navigate("Configuracoes")}
             activeOpacity={0.85}
           >
@@ -366,7 +429,8 @@ export default function Home() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              colors={[colors.principal]}
+              colors={[principal]}
+              tintColor={principal}
             />
           }
           ListHeaderComponent={
@@ -393,7 +457,7 @@ export default function Home() {
                       {
                         key: "go",
                         icon: "arrow-forward",
-                        backgroundColor: colors.principal,
+                        backgroundColor: principal,
                         onPress: () => navigation.navigate(item.route),
                       },
                     ]
@@ -418,21 +482,30 @@ export default function Home() {
           style={styles.menuOverlay}
           onPress={() => setMenuAberto(false)}
         >
-          <Pressable style={styles.menuCard} onPress={() => {}}>
-            <View style={styles.menuUser}>
+          <Pressable
+            style={[styles.menuCard, { backgroundColor: card }]}
+            onPress={() => {}}
+          >
+            <View style={[styles.menuUser, { borderBottomColor: border }]}>
               {foto ? (
                 <Image source={{ uri: foto }} style={styles.menuAvatar} />
               ) : (
-                <View style={[styles.menuAvatar, styles.avatarFallback]}>
+                <View
+                  style={[
+                    styles.menuAvatar,
+                    styles.avatarFallback,
+                    { backgroundColor: principal },
+                  ]}
+                >
                   <Ionicons name="person" size={18} color="#fff" />
                 </View>
               )}
               <View style={{ flex: 1 }}>
-                <Text style={styles.menuNome} numberOfLines={1}>
+                <Text style={[styles.menuNome, { color: text }]} numberOfLines={1}>
                   {nome}
                 </Text>
                 {!!igrejaAtiva?.papel && (
-                  <Text style={styles.menuIgreja} numberOfLines={1}>
+                  <Text style={[styles.menuIgreja, { color: muted }]} numberOfLines={1}>
                     {igrejaAtiva.papel}
                   </Text>
                 )}
@@ -444,8 +517,10 @@ export default function Home() {
               onPress={abrirConfiguracoes}
               activeOpacity={0.8}
             >
-              <Ionicons name="settings-outline" size={18} color="#333" />
-              <Text style={styles.menuItemText}>Configurações</Text>
+              <Ionicons name="settings-outline" size={18} color={text} />
+              <Text style={[styles.menuItemText, { color: text }]}>
+                Configurações
+              </Text>
             </TouchableOpacity>
 
             {isAdmin && (
@@ -454,8 +529,8 @@ export default function Home() {
                 onPress={abrirMembros}
                 activeOpacity={0.8}
               >
-                <Ionicons name="people-outline" size={18} color="#333" />
-                <Text style={styles.menuItemText}>Membros</Text>
+                <Ionicons name="people-outline" size={18} color={text} />
+                <Text style={[styles.menuItemText, { color: text }]}>Membros</Text>
               </TouchableOpacity>
             )}
 
@@ -465,12 +540,10 @@ export default function Home() {
                 onPress={abrirTrocarIgreja}
                 activeOpacity={0.8}
               >
-                <Ionicons
-                  name="swap-horizontal-outline"
-                  size={18}
-                  color="#333"
-                />
-                <Text style={styles.menuItemText}>Trocar igreja</Text>
+                <Ionicons name="swap-horizontal-outline" size={18} color={text} />
+                <Text style={[styles.menuItemText, { color: text }]}>
+                  Trocar igreja
+                </Text>
               </TouchableOpacity>
             )}
 
@@ -479,8 +552,8 @@ export default function Home() {
               onPress={handleLogout}
               activeOpacity={0.8}
             >
-              <Ionicons name="log-out-outline" size={18} color="#333" />
-              <Text style={styles.menuItemText}>Sair</Text>
+              <Ionicons name="log-out-outline" size={18} color={text} />
+              <Text style={[styles.menuItemText, { color: text }]}>Sair</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
@@ -497,28 +570,39 @@ export default function Home() {
           onPress={() => setModalIgrejas(false)}
         >
           <Pressable
-            style={[styles.menuCard, { width: 280 }]}
+            style={[styles.menuCard, { width: 280, backgroundColor: card }]}
             onPress={() => {}}
           >
-            <Text style={styles.modalIgrejaTitulo}>Suas igrejas</Text>
+            <Text style={[styles.modalIgrejaTitulo, { color: text }]}>
+              Suas igrejas
+            </Text>
             {(igrejasDoUsuario || []).map((ig) => {
               const ativa = ig.igrejaId === igrejaAtiva?.id;
               return (
                 <TouchableOpacity
                   key={ig.igrejaId}
-                  style={[styles.igrejaItem, ativa && styles.igrejaItemAtiva]}
+                  style={[
+                    styles.igrejaItem,
+                    ativa && {
+                      backgroundColor: dark ? "#2a2a2a" : "#f4f5f7",
+                    },
+                  ]}
                   onPress={() => escolherIgreja(ig.igrejaId)}
                   activeOpacity={0.8}
                 >
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.igrejaItemNome}>{ig.nome}</Text>
-                    <Text style={styles.igrejaItemPapel}>{ig.papel}</Text>
+                    <Text style={[styles.igrejaItemNome, { color: text }]}>
+                      {ig.nome}
+                    </Text>
+                    <Text style={[styles.igrejaItemPapel, { color: muted }]}>
+                      {ig.papel}
+                    </Text>
                   </View>
                   {ativa && (
                     <Ionicons
                       name="checkmark-circle"
                       size={20}
-                      color={colors.principal}
+                      color={principal}
                     />
                   )}
                 </TouchableOpacity>
@@ -539,13 +623,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   avatar: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     borderRadius: 20,
-    backgroundColor: "#ddd",
   },
   avatarFallback: {
-    backgroundColor: "#66796b",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -560,22 +642,19 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 20,
-    backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
   },
   emptyTitle: {
     fontSize: 17,
     fontFamily: "Roboto-Medium",
-    color: "#1f2933",
     textAlign: "center",
     marginBottom: 8,
+    marginTop: 12,
   },
   emptyText: {
     fontSize: 14,
     fontFamily: "Roboto-Regular",
-    color: "#9aa0a6",
     textAlign: "center",
     lineHeight: 20,
     marginBottom: 24,
@@ -594,14 +673,13 @@ const styles = StyleSheet.create({
   },
   menuOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.25)",
+    backgroundColor: "rgba(0,0,0,0.45)",
     alignItems: "flex-end",
     paddingTop: 56,
     paddingRight: 12,
   },
   menuCard: {
     width: 260,
-    backgroundColor: "#fff",
     borderRadius: 16,
     padding: 12,
     elevation: 6,
@@ -612,19 +690,16 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#eee",
     marginBottom: 8,
   },
   menuAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#ddd",
   },
   menuNome: {
     fontSize: 14,
     fontFamily: "Roboto-Medium",
-    color: "#1f2933",
   },
   menuIgreja: {
     fontSize: 12,
@@ -642,12 +717,10 @@ const styles = StyleSheet.create({
   menuItemText: {
     fontSize: 14,
     fontFamily: "Roboto-Medium",
-    color: "#333",
   },
   modalIgrejaTitulo: {
     fontSize: 15,
     fontFamily: "Roboto-Bold",
-    color: "#1f2933",
     marginBottom: 10,
     paddingHorizontal: 4,
   },
@@ -659,16 +732,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 4,
   },
-  igrejaItemAtiva: { backgroundColor: "#f4f5f7" },
   igrejaItemNome: {
     fontSize: 14,
     fontFamily: "Roboto-Medium",
-    color: "#1f2933",
   },
   igrejaItemPapel: {
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    color: "#888",
     marginTop: 2,
     textTransform: "capitalize",
   },

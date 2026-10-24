@@ -118,7 +118,7 @@ function montarParcelas({
 }
 
 export default function Registro() {
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
   const navigation = useNavigation();
   const {
     setAviso,
@@ -137,6 +137,13 @@ export default function Registro() {
   } = useContext(AppContext);
 
   const { uid } = useAuth();
+
+  const principal = colors.principal || colors.primary;
+  const text = colors.text;
+  const muted = colors.muted || (dark ? "#9aa0a6" : "#8a8f98");
+  const card = colors.card;
+  const bg = colors.background;
+  const placeholder = muted;
 
   const [tipoMovimento, setTipoMovimento] = useState(null);
   const [tipo, setTipo] = useState(null);
@@ -472,7 +479,7 @@ export default function Registro() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: bg }]}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 24}
     >
@@ -483,7 +490,7 @@ export default function Registro() {
         showsVerticalScrollIndicator={false}
         automaticallyAdjustKeyboardInsets
       >
-        <View style={styles.segment}>
+        <View style={[styles.segment, { backgroundColor: card }]}>
           {["entrada", "saida"].map((item) => {
             const ativo = tipoMovimento === item;
             return (
@@ -491,7 +498,7 @@ export default function Registro() {
                 key={item}
                 style={[
                   styles.segmentBtn,
-                  ativo && { backgroundColor: colors.principal },
+                  ativo && { backgroundColor: principal },
                 ]}
                 onPress={() => {
                   setTipoMovimento(item);
@@ -501,7 +508,11 @@ export default function Registro() {
                 }}
               >
                 <Text
-                  style={[styles.segmentText, ativo && { color: "#fff" }]}
+                  style={[
+                    styles.segmentText,
+                    { color: muted },
+                    ativo && { color: "#fff" },
+                  ]}
                 >
                   {item === "entrada" ? "Entrada" : "Saída"}
                 </Text>
@@ -512,7 +523,7 @@ export default function Registro() {
 
         {tipoMovimento === "saida" && (
           <View style={styles.section}>
-            <View style={styles.segment}>
+            <View style={[styles.segment, { backgroundColor: card }]}>
               {[
                 { id: "geral", label: "Caixa livre" },
                 { id: "caixinha", label: "Caixinha" },
@@ -523,7 +534,7 @@ export default function Registro() {
                     key={opt.id}
                     style={[
                       styles.segmentBtn,
-                      ativo && { backgroundColor: colors.principal },
+                      ativo && { backgroundColor: principal },
                     ]}
                     onPress={() => {
                       setOrigemPagamento(opt.id);
@@ -533,6 +544,7 @@ export default function Registro() {
                     <Text
                       style={[
                         styles.segmentText,
+                        { color: muted },
                         ativo && { color: "#fff" },
                       ]}
                     >
@@ -544,11 +556,13 @@ export default function Registro() {
             </View>
 
             {origemPagamento === "geral" ? (
-              <Text style={styles.hint}>
+              <Text style={[styles.hint, { color: muted }]}>
                 Disponível: R$ {formatoMoeda.format(saldoDisponivel || 0)}
               </Text>
             ) : caixinhasComSaldo.length === 0 ? (
-              <Text style={styles.empty}>Nenhuma caixinha com saldo</Text>
+              <Text style={[styles.empty, { color: muted }]}>
+                Nenhuma caixinha com saldo
+              </Text>
             ) : (
               caixinhasComSaldo.map((cx) => {
                 const ativo = caixinhaId === cx.id;
@@ -557,23 +571,30 @@ export default function Registro() {
                     key={cx.id}
                     style={[
                       styles.selectCard,
-                      ativo && {
-                        borderColor: colors.principal,
-                        backgroundColor: "#fff",
+                      {
+                        backgroundColor: card,
+                        borderColor: ativo ? principal : "transparent",
                       },
                     ]}
                     onPress={() => setCaixinhaId(cx.id)}
                   >
-                    <View style={styles.selectIcon}>
+                    <View
+                      style={[
+                        styles.selectIcon,
+                        { backgroundColor: dark ? "#2a2a2a" : "#f4f5f7" },
+                      ]}
+                    >
                       <Ionicons
                         name="wallet-outline"
                         size={16}
-                        color={ativo ? colors.principal : "#9aa0a6"}
+                        color={ativo ? principal : muted}
                       />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.selectTitle}>{cx.nome}</Text>
-                      <Text style={styles.selectSub}>
+                      <Text style={[styles.selectTitle, { color: text }]}>
+                        {cx.nome}
+                      </Text>
+                      <Text style={[styles.selectSub, { color: muted }]}>
                         R$ {formatoMoeda.format(cx.valor || 0)}
                       </Text>
                     </View>
@@ -587,7 +608,7 @@ export default function Registro() {
         {tipoMovimento && (
           <>
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Tipo</Text>
+              <Text style={[styles.sectionTitle, { color: muted }]}>Tipo</Text>
               <View style={styles.chips}>
                 {(tipoMovimento === "entrada" ? tiposEntrada : tiposSaida).map(
                   (t) => {
@@ -597,7 +618,8 @@ export default function Registro() {
                         key={t}
                         style={[
                           styles.chip,
-                          ativo && { backgroundColor: colors.principal },
+                          { backgroundColor: card },
+                          ativo && { backgroundColor: principal },
                         ]}
                         onPress={() => {
                           setTipo(t);
@@ -609,6 +631,7 @@ export default function Registro() {
                         <Text
                           style={[
                             styles.chipText,
+                            { color: text },
                             ativo && { color: "#fff" },
                           ]}
                         >
@@ -622,14 +645,14 @@ export default function Registro() {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Dados</Text>
+              <Text style={[styles.sectionTitle, { color: muted }]}>Dados</Text>
 
               <TouchableOpacity
-                style={styles.field}
+                style={[styles.field, { backgroundColor: card }]}
                 onPress={() => setShowDatePicker(true)}
               >
-                <Text style={styles.fieldLabel}>Data</Text>
-                <Text style={styles.fieldValue}>
+                <Text style={[styles.fieldLabel, { color: muted }]}>Data</Text>
+                <Text style={[styles.fieldValue, { color: text }]}>
                   {data.toLocaleDateString("pt-BR")}
                 </Text>
               </TouchableOpacity>
@@ -647,68 +670,74 @@ export default function Registro() {
               )}
 
               {tipoMovimento === "saida" && (
-                <View style={styles.field}>
-                  <Text style={styles.fieldLabel}>Ministério (opcional)</Text>
+                <View style={[styles.field, { backgroundColor: card }]}>
+                  <Text style={[styles.fieldLabel, { color: muted }]}>
+                    Ministério (opcional)
+                  </Text>
                   <View style={styles.pickerWrap}>
                     <Picker
                       selectedValue={ministerio}
                       onValueChange={(v) => setMinisterio(v)}
-                      style={styles.picker}
-                      dropdownIconColor="#1f2933"
+                      style={[styles.picker, { color: text }]}
+                      dropdownIconColor={text}
                     >
                       <Picker.Item
                         label="Selecione o ministério"
                         value=""
-                        color="#9aa0a6"
+                        color={muted}
                       />
                       {MINISTERIOS.map((m) => (
-                        <Picker.Item key={m} label={m} value={m} />
+                        <Picker.Item key={m} label={m} value={m} color={text} />
                       ))}
                     </Picker>
                   </View>
                 </View>
               )}
 
-              <View style={styles.field}>
-                <Text style={styles.fieldLabel}>Descrição</Text>
+              <View style={[styles.field, { backgroundColor: card }]}>
+                <Text style={[styles.fieldLabel, { color: muted }]}>
+                  Descrição
+                </Text>
                 <TextInput
-                  style={styles.fieldInput}
+                  style={[styles.fieldInput, { color: text }]}
                   value={descricao}
                   onChangeText={setDescricao}
                   placeholder="Descreva o registro"
-                  placeholderTextColor="#b0b5ba"
+                  placeholderTextColor={placeholder}
                 />
               </View>
 
-              <View style={styles.field}>
-                <Text style={styles.fieldLabel}>Valor total</Text>
+              <View style={[styles.field, { backgroundColor: card }]}>
+                <Text style={[styles.fieldLabel, { color: muted }]}>
+                  Valor total
+                </Text>
                 <TextInput
-                  style={styles.fieldInput}
+                  style={[styles.fieldInput, { color: text }]}
                   value={valorTotal}
                   onChangeText={setValorTotal}
                   keyboardType="decimal-pad"
                   placeholder="0,00"
-                  placeholderTextColor="#b0b5ba"
+                  placeholderTextColor={placeholder}
                 />
               </View>
 
               {tipo === "Parcelada" && (
                 <>
-                  <View style={styles.field}>
-                    <Text style={styles.fieldLabel}>
+                  <View style={[styles.field, { backgroundColor: card }]}>
+                    <Text style={[styles.fieldLabel, { color: muted }]}>
                       Quantidade de parcelas
                     </Text>
                     <TextInput
-                      style={styles.fieldInput}
+                      style={[styles.fieldInput, { color: text }]}
                       value={qtdParcelas}
                       onChangeText={setQtdParcelas}
                       keyboardType="number-pad"
                       placeholder="2"
-                      placeholderTextColor="#b0b5ba"
+                      placeholderTextColor={placeholder}
                     />
                   </View>
                   {previewParcela > 0 && (
-                    <Text style={styles.hint}>
+                    <Text style={[styles.hint, { color: muted }]}>
                       {qtdNum}x de R$ {formatoMoeda.format(previewParcela)}
                     </Text>
                   )}
@@ -716,7 +745,7 @@ export default function Registro() {
               )}
 
               <TouchableOpacity
-                style={styles.checkRow}
+                style={[styles.checkRow, { backgroundColor: card }]}
                 onPress={() => {
                   setTemAdiantamento((v) => {
                     if (v) setValorParcial("");
@@ -728,21 +757,25 @@ export default function Registro() {
                 <Ionicons
                   name={temAdiantamento ? "checkbox" : "square-outline"}
                   size={22}
-                  color={temAdiantamento ? colors.principal : "#9aa0a6"}
+                  color={temAdiantamento ? principal : muted}
                 />
-                <Text style={styles.checkText}>{labelAdiantamento}</Text>
+                <Text style={[styles.checkText, { color: text }]}>
+                  {labelAdiantamento}
+                </Text>
               </TouchableOpacity>
 
               {temAdiantamento && (
-                <View style={styles.field}>
-                  <Text style={styles.fieldLabel}>Adiantamento</Text>
+                <View style={[styles.field, { backgroundColor: card }]}>
+                  <Text style={[styles.fieldLabel, { color: muted }]}>
+                    Adiantamento
+                  </Text>
                   <TextInput
-                    style={styles.fieldInput}
+                    style={[styles.fieldInput, { color: text }]}
                     value={valorParcial}
                     onChangeText={setValorParcial}
                     keyboardType="decimal-pad"
                     placeholder="0,00"
-                    placeholderTextColor="#b0b5ba"
+                    placeholderTextColor={placeholder}
                   />
                 </View>
               )}
@@ -750,27 +783,31 @@ export default function Registro() {
               {tipoMovimento === "saida" && (
                 <View style={styles.reciboRow}>
                   <TouchableOpacity
-                    style={styles.reciboBtn}
+                    style={[styles.reciboBtn, { backgroundColor: card }]}
                     onPress={tirarFoto}
                   >
                     <Ionicons
                       name={reciboUri ? "camera" : "camera-outline"}
                       size={22}
-                      color={reciboUri ? colors.principal : "#9aa0a6"}
+                      color={reciboUri ? principal : muted}
                     />
-                    <Text style={styles.reciboLabel}>Câmera</Text>
+                    <Text style={[styles.reciboLabel, { color: muted }]}>
+                      Câmera
+                    </Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={styles.reciboBtn}
+                    style={[styles.reciboBtn, { backgroundColor: card }]}
                     onPress={escolherDaGaleria}
                   >
                     <Ionicons
                       name="images-outline"
                       size={22}
-                      color={reciboUri ? colors.principal : "#9aa0a6"}
+                      color={reciboUri ? principal : muted}
                     />
-                    <Text style={styles.reciboLabel}>Galeria</Text>
+                    <Text style={[styles.reciboLabel, { color: muted }]}>
+                      Galeria
+                    </Text>
                   </TouchableOpacity>
 
                   {reciboUri && (
@@ -779,21 +816,28 @@ export default function Registro() {
                 </View>
               )}
 
-              <View style={[styles.field, { minHeight: 88 }]}>
-                <Text style={styles.fieldLabel}>Observação</Text>
+              <View
+                style={[
+                  styles.field,
+                  { minHeight: 88, backgroundColor: card },
+                ]}
+              >
+                <Text style={[styles.fieldLabel, { color: muted }]}>
+                  Observação
+                </Text>
                 <TextInput
-                  style={[styles.fieldInput, { minHeight: 48 }]}
+                  style={[styles.fieldInput, { color: text, minHeight: 48 }]}
                   value={observacao}
                   onChangeText={setObservacao}
                   multiline
                   placeholder="Opcional"
-                  placeholderTextColor="#b0b5ba"
+                  placeholderTextColor={placeholder}
                 />
               </View>
             </View>
 
             <TouchableOpacity
-              style={[styles.saveBtn, { backgroundColor: colors.principal }]}
+              style={[styles.saveBtn, { backgroundColor: principal }]}
               onPress={salvar}
               activeOpacity={0.85}
             >
@@ -814,7 +858,6 @@ const styles = StyleSheet.create({
   },
   segment: {
     flexDirection: "row",
-    backgroundColor: "#fff",
     borderRadius: 16,
     padding: 4,
     marginBottom: 14,
@@ -828,13 +871,11 @@ const styles = StyleSheet.create({
   segmentText: {
     fontSize: 13,
     fontFamily: "Roboto-Medium",
-    color: "#555",
   },
   section: { marginBottom: 18 },
   sectionTitle: {
     fontSize: 13,
     fontFamily: "Roboto-Medium",
-    color: "#8a8f98",
     marginBottom: 10,
     marginLeft: 2,
   },
@@ -843,28 +884,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 16,
-    backgroundColor: "#fff",
   },
   chipText: {
     fontSize: 13,
     fontFamily: "Roboto-Regular",
-    color: "#333",
   },
   selectCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
     borderRadius: 16,
     padding: 12,
     marginBottom: 8,
     borderWidth: 1.5,
-    borderColor: "transparent",
   },
   selectIcon: {
     width: 34,
     height: 34,
     borderRadius: 12,
-    backgroundColor: "#f4f5f7",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 10,
@@ -872,31 +908,26 @@ const styles = StyleSheet.create({
   selectTitle: {
     fontSize: 14,
     fontFamily: "Roboto-Medium",
-    color: "#1f2933",
   },
   selectSub: {
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    color: "#9aa0a6",
     marginTop: 2,
   },
   hint: {
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    color: "#8a8f98",
     marginTop: 4,
     marginBottom: 8,
   },
   empty: {
     fontSize: 13,
     fontFamily: "Roboto-Regular",
-    color: "#9aa0a6",
   },
   checkRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: "#fff",
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -906,10 +937,8 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontFamily: "Roboto-Regular",
-    color: "#1f2933",
   },
   field: {
-    backgroundColor: "#fff",
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -918,18 +947,15 @@ const styles = StyleSheet.create({
   fieldLabel: {
     fontSize: 11,
     fontFamily: "Roboto-Regular",
-    color: "#9aa0a6",
     marginBottom: 4,
   },
   fieldValue: {
     fontSize: 15,
     fontFamily: "Roboto-Medium",
-    color: "#1f2933",
   },
   fieldInput: {
     fontSize: 15,
     fontFamily: "Roboto-Regular",
-    color: "#1f2933",
     padding: 0,
   },
   pickerWrap: {
@@ -937,8 +963,7 @@ const styles = StyleSheet.create({
     marginBottom: Platform.OS === "ios" ? 0 : -8,
   },
   picker: {
-    marginTop:-12,
-    color: "#1f2933",
+    marginTop: -12,
     ...(Platform.OS === "android" ? { height: 55 } : { height: 140 }),
   },
   reciboRow: {
@@ -951,7 +976,6 @@ const styles = StyleSheet.create({
     width: 100,
     height: 110,
     borderRadius: 16,
-    backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
@@ -959,7 +983,6 @@ const styles = StyleSheet.create({
   reciboLabel: {
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    color: "#9aa0a6",
   },
   preview: { height: 110, aspectRatio: 9 / 16, borderRadius: 16 },
   saveBtn: {

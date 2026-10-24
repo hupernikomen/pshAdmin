@@ -103,11 +103,19 @@ export default function Dizimos() {
     formatoMoeda,
   } = useContext(AppContext);
 
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
   const agora = new Date();
   const [mes, setMes] = useState(agora.getMonth());
   const [ano, setAno] = useState(agora.getFullYear());
   const [refreshing, setRefreshing] = useState(false);
+
+  const principal = colors.principal || colors.primary;
+  const text = colors.text;
+  const muted = colors.muted || (dark ? "#9aa0a6" : "#888");
+  const card = colors.card;
+  const bg = colors.background;
+  const tint = dark ? "#1A2A3D" : "#E3F2FD";
+  const iconColor = dark ? "#64B5F6" : "#1565C0";
 
   useEffect(() => {
     carregar();
@@ -135,7 +143,7 @@ export default function Dizimos() {
   if (load && !refreshing) return <Load />;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: bg }]}>
       <FlatList
         data={linhas}
         keyExtractor={(item) => item.rowId}
@@ -145,7 +153,8 @@ export default function Dizimos() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={[colors.principal]}
+            colors={[principal]}
+            tintColor={principal}
           />
         }
         ListHeaderComponent={
@@ -153,18 +162,18 @@ export default function Dizimos() {
             <View style={styles.anoRow}>
               <TouchableOpacity
                 onPress={() => setAno((a) => a - 1)}
-                style={styles.anoBtn}
+                style={[styles.anoBtn, { backgroundColor: card }]}
                 activeOpacity={0.8}
               >
-                <Ionicons name="chevron-back" size={20} color="#333" />
+                <Ionicons name="chevron-back" size={20} color={text} />
               </TouchableOpacity>
-              <Text style={styles.anoText}>{ano}</Text>
+              <Text style={[styles.anoText, { color: text }]}>{ano}</Text>
               <TouchableOpacity
                 onPress={() => setAno((a) => a + 1)}
-                style={styles.anoBtn}
+                style={[styles.anoBtn, { backgroundColor: card }]}
                 activeOpacity={0.8}
               >
-                <Ionicons name="chevron-forward" size={20} color="#333" />
+                <Ionicons name="chevron-forward" size={20} color={text} />
               </TouchableOpacity>
             </View>
 
@@ -176,13 +185,18 @@ export default function Dizimos() {
                     key={label}
                     style={[
                       styles.mesChip,
-                      ativo && { backgroundColor: colors.principal },
+                      { backgroundColor: card },
+                      ativo && { backgroundColor: principal },
                     ]}
                     onPress={() => setMes(idx)}
                     activeOpacity={0.8}
                   >
                     <Text
-                      style={[styles.mesText, ativo && { color: "#fff" }]}
+                      style={[
+                        styles.mesText,
+                        { color: text },
+                        ativo && { color: "#fff" },
+                      ]}
                     >
                       {label}
                     </Text>
@@ -191,14 +205,14 @@ export default function Dizimos() {
               })}
             </View>
 
-            <View style={styles.totalCard}>
-              <Text style={styles.totalLabel}>
+            <View style={[styles.totalCard, { backgroundColor: card }]}>
+              <Text style={[styles.totalLabel, { color: muted }]}>
                 {MESES[mes]} {ano}
               </Text>
-              <Text style={styles.totalValue}>
+              <Text style={[styles.totalValue, { color: text }]}>
                 R$ {formatoMoeda.format(totalMes)}
               </Text>
-              <Text style={styles.totalQtd}>
+              <Text style={[styles.totalQtd, { color: muted }]}>
                 {linhas.length} {linhas.length === 1 ? "registro" : "registros"}
               </Text>
             </View>
@@ -207,8 +221,8 @@ export default function Dizimos() {
         renderItem={({ item }) => (
           <SwipeCard
             icon="hand-left-outline"
-            iconColor="#1565C0"
-            tint="#E3F2FD"
+            iconColor={iconColor}
+            tint={tint}
             title={item.descricao}
             subtitle={new Date(item.data).toLocaleDateString("pt-BR")}
             value={`R$ ${formatoMoeda.format(item.valor)}`}
@@ -217,11 +231,13 @@ export default function Dizimos() {
         )}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <View style={styles.emptyIcon}>
-              <Ionicons name="hand-left-outline" size={28} color="#9aa3ad" />
+            <View style={[styles.emptyIcon, { backgroundColor: card }]}>
+              <Ionicons name="hand-left-outline" size={28} color={muted} />
             </View>
-            <Text style={styles.emptyTitle}>Nenhum dízimo</Text>
-            <Text style={styles.emptyText}>
+            <Text style={[styles.emptyTitle, { color: text }]}>
+              Nenhum dízimo
+            </Text>
+            <Text style={[styles.emptyText, { color: muted }]}>
               Não há dízimos registrados em {MESES[mes]} de {ano}.
             </Text>
           </View>
@@ -252,14 +268,12 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 12,
-    backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
   },
   anoText: {
     fontSize: 17,
     fontFamily: "Roboto-Bold",
-    color: "#1f2933",
     minWidth: 64,
     textAlign: "center",
   },
@@ -274,15 +288,12 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 12,
     alignItems: "center",
-    backgroundColor: "#fff",
   },
   mesText: {
     fontSize: 12,
     fontFamily: "Roboto-Medium",
-    color: "#333",
   },
   totalCard: {
-    backgroundColor: "#fff",
     borderRadius: 18,
     padding: 16,
     marginBottom: 6,
@@ -290,20 +301,17 @@ const styles = StyleSheet.create({
   totalLabel: {
     fontSize: 13,
     fontFamily: "Roboto-Regular",
-    color: "#888",
     marginBottom: 4,
   },
   totalValue: {
     fontSize: 22,
     fontFamily: "Roboto-Bold",
-    color: "#1f2933",
     letterSpacing: -0.4,
   },
   totalQtd: {
     marginTop: 4,
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    color: "#9aa0a6",
   },
   emptyContainer: {
     marginTop: 40,
@@ -314,7 +322,6 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 18,
-    backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -322,13 +329,11 @@ const styles = StyleSheet.create({
     marginTop: 14,
     fontSize: 16,
     fontFamily: "Roboto-Medium",
-    color: "#666",
   },
   emptyText: {
     marginTop: 6,
     fontSize: 13,
     fontFamily: "Roboto-Regular",
-    color: "#999",
     textAlign: "center",
   },
 });

@@ -2,6 +2,7 @@ import { memo } from "react";
 import { View, Text, ScrollView, StyleSheet } from "react-native";
 
 function GrafBarras({ dados = [], cor, altura = 140 }) {
+  
   const nums = dados.map((d) => Number(d.value) || 0);
   const max = Math.max(...nums, 1);
   const barMaxH = altura - 22;

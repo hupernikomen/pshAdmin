@@ -25,10 +25,20 @@ const PAPEIS = [
   { id: "leitura", label: "Leitura" },
 ];
 
-function tintPapel(papel) {
-  if (papel === "admin") return { tint: "#E8F5E9", color: "#2E7D32" };
-  if (papel === "tesoureiro") return { tint: "#E3F2FD", color: "#1565C0" };
-  return { tint: "#F5F5F5", color: "#666" };
+function tintPapel(papel, dark) {
+  if (papel === "admin") {
+    return dark
+      ? { tint: "#1B3D2F", color: "#81C784" }
+      : { tint: "#E8F5E9", color: "#2E7D32" };
+  }
+  if (papel === "tesoureiro") {
+    return dark
+      ? { tint: "#1A2A3D", color: "#64B5F6" }
+      : { tint: "#E3F2FD", color: "#1565C0" };
+  }
+  return dark
+    ? { tint: "#2a2a2a", color: "#9aa0a6" }
+    : { tint: "#F5F5F5", color: "#666" };
 }
 
 export default function Membros() {
@@ -40,7 +50,7 @@ export default function Membros() {
     removerMembro,
   } = useContext(AppContext);
 
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
   const [membros, setMembros] = useState([]);
   const [load, setLoad] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -52,6 +62,13 @@ export default function Membros() {
   const [salvando, setSalvando] = useState(false);
 
   const isAdmin = igrejaAtiva?.papel === "admin";
+
+  const principal = colors.principal || colors.primary;
+  const text = colors.text;
+  const muted = colors.muted || (dark ? "#9aa0a6" : "#888");
+  const card = colors.card;
+  const bg = colors.background;
+  const inputBg = dark ? "#2a2a2a" : "#f4f5f7";
 
   const carregar = useCallback(async () => {
     try {
@@ -152,9 +169,9 @@ export default function Membros() {
   if (load && !refreshing) return <Load />;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: bg }]}>
       <View style={styles.headerInfo}>
-        <Text style={styles.igrejaSub}>
+        <Text style={[styles.igrejaSub, { color: muted }]}>
           {membros.length} membro{membros.length === 1 ? "" : "s"}
         </Text>
       </View>
@@ -168,14 +185,17 @@ export default function Membros() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={[colors.principal]}
+            colors={[principal]}
+            tintColor={principal}
           />
         }
         ListEmptyComponent={
-          <Text style={styles.empty}>Nenhum membro cadastrado.</Text>
+          <Text style={[styles.empty, { color: muted }]}>
+            Nenhum membro cadastrado.
+          </Text>
         }
         renderItem={({ item }) => {
-          const visual = tintPapel(item.papel);
+          const visual = tintPapel(item.papel, dark);
           const sub = [
             labelPapel(item.papel),
             !item.uid ? "Ainda não entrou no app" : null,
@@ -212,9 +232,7 @@ export default function Membros() {
               value={labelPapel(item.papel)}
               actions={actions}
               open={abertoId === item.id}
-              onOpenChange={(open) =>
-                setAbertoId(open ? item.id : null)
-              }
+              onOpenChange={(open) => setAbertoId(open ? item.id : null)}
             />
           );
         }}
@@ -222,7 +240,7 @@ export default function Membros() {
 
       {isAdmin && (
         <TouchableOpacity
-          style={[styles.fab, { backgroundColor: colors.principal }]}
+          style={[styles.fab, { backgroundColor: principal }]}
           onPress={abrirNovo}
           activeOpacity={0.85}
         >
@@ -232,7 +250,7 @@ export default function Membros() {
       )}
 
       {!isAdmin && (
-        <Text style={styles.somenteLeitura}>
+        <Text style={[styles.somenteLeitura, { color: muted }]}>
           Apenas administradores gerenciam membros.
         </Text>
       )}
@@ -251,25 +269,33 @@ export default function Membros() {
             behavior={Platform.OS === "ios" ? "padding" : undefined}
             style={{ width: "100%", alignItems: "center" }}
           >
-            <Pressable style={styles.modal} onPress={() => {}}>
-              <Text style={styles.modalTitle}>Novo membro</Text>
-              <Text style={styles.modalSub}>
+            <Pressable
+              style={[styles.modal, { backgroundColor: card }]}
+              onPress={() => {}}
+            >
+              <Text style={[styles.modalTitle, { color: text }]}>
+                Novo membro
+              </Text>
+              <Text style={[styles.modalSub, { color: muted }]}>
                 Use o mesmo e-mail da conta Google da pessoa.
               </Text>
 
-              <Text style={styles.label}>E-mail</Text>
+              <Text style={[styles.label, { color: muted }]}>E-mail</Text>
               <TextInput
-                style={styles.input}
+                style={[
+                  styles.input,
+                  { backgroundColor: inputBg, color: text },
+                ]}
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
                 keyboardType="email-address"
                 placeholder="email@gmail.com"
-                placeholderTextColor="#aaa"
+                placeholderTextColor={muted}
               />
 
-              <Text style={styles.label}>Papel</Text>
-              <View style={styles.segment}>
+              <Text style={[styles.label, { color: muted }]}>Papel</Text>
+              <View style={[styles.segment, { backgroundColor: inputBg }]}>
                 {PAPEIS.map((p) => {
                   const ativo = papel === p.id;
                   return (
@@ -277,13 +303,14 @@ export default function Membros() {
                       key={p.id}
                       style={[
                         styles.segmentBtn,
-                        ativo && { backgroundColor: colors.principal },
+                        ativo && { backgroundColor: principal },
                       ]}
                       onPress={() => setPapel(p.id)}
                     >
                       <Text
                         style={[
                           styles.segmentText,
+                          { color: muted },
                           ativo && { color: "#fff" },
                         ]}
                       >
@@ -296,15 +323,17 @@ export default function Membros() {
 
               <View style={styles.modalActions}>
                 <TouchableOpacity
-                  style={styles.btnCancel}
+                  style={[styles.btnCancel, { backgroundColor: inputBg }]}
                   onPress={() => setModalVisible(false)}
                 >
-                  <Text style={styles.btnCancelText}>Cancelar</Text>
+                  <Text style={[styles.btnCancelText, { color: text }]}>
+                    Cancelar
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
                     styles.btnOk,
-                    { backgroundColor: colors.principal },
+                    { backgroundColor: principal },
                     salvando && { opacity: 0.7 },
                   ]}
                   onPress={salvarMembro}
@@ -324,27 +353,20 @@ export default function Membros() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal:14 },
+  container: { flex: 1, paddingHorizontal: 14 },
   headerInfo: {
     paddingTop: 14,
     paddingBottom: 8,
-  },
-  igrejaNome: {
-    fontSize: 18,
-    fontFamily: "Roboto-Bold",
-    color: "#1f2933",
   },
   igrejaSub: {
     marginTop: 4,
     fontSize: 13,
     fontFamily: "Roboto-Regular",
-    color: "#888",
   },
   list: { paddingBottom: 100 },
   empty: {
     textAlign: "center",
     marginTop: 40,
-    color: "#999",
     fontFamily: "Roboto-Regular",
   },
   fab: {
@@ -367,13 +389,12 @@ const styles = StyleSheet.create({
   somenteLeitura: {
     textAlign: "center",
     padding: 16,
-    color: "#888",
     fontFamily: "Roboto-Regular",
     fontSize: 13,
   },
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(0,0,0,0.55)",
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
@@ -381,30 +402,25 @@ const styles = StyleSheet.create({
   modal: {
     width: "100%",
     maxWidth: 400,
-    backgroundColor: "#fff",
     borderRadius: 20,
     padding: 18,
   },
   modalTitle: {
     fontSize: 17,
     fontFamily: "Roboto-Bold",
-    color: "#1f2933",
   },
   modalSub: {
     marginTop: 4,
     marginBottom: 14,
     fontSize: 13,
     fontFamily: "Roboto-Regular",
-    color: "#888",
   },
   label: {
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    color: "#777",
     marginBottom: 4,
   },
   input: {
-    backgroundColor: "#f4f5f7",
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -414,7 +430,6 @@ const styles = StyleSheet.create({
   },
   segment: {
     flexDirection: "row",
-    backgroundColor: "#f4f5f7",
     borderRadius: 12,
     padding: 4,
     marginBottom: 16,
@@ -428,20 +443,17 @@ const styles = StyleSheet.create({
   segmentText: {
     fontSize: 12,
     fontFamily: "Roboto-Medium",
-    color: "#555",
   },
   modalActions: { flexDirection: "row", gap: 10 },
   btnCancel: {
     flex: 1,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: "#f4f5f7",
     alignItems: "center",
   },
   btnCancelText: {
     fontSize: 14,
     fontFamily: "Roboto-Medium",
-    color: "#555",
   },
   btnOk: {
     flex: 1,
