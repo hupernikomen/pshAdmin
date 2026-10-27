@@ -97,20 +97,20 @@ function inicioMediaDizimos(createdAt) {
   return new Date(d.getFullYear(), d.getMonth() + 1, 1, 0, 0, 0, 0);
 }
 
-function tituloIgrejaHeader(nome) {
-  if (!nome) return "Início";
+// function tituloIgrejaHeader(nome) {
+//   if (!nome) return "Início";
 
-  let s = String(nome);
+//   let s = String(nome);
 
-  // Ordem importa: frases maiores primeiro
-  s = s.replace(/assembleia\s+de\s+deus/gi, "A. D.");
-  s = s.replace(/presbiteriana/gi, "P.");
-  s = s.replace(/batista/gi, "B.");
-  s = s.replace(/igreja/gi, "I.");
+//   // Ordem importa: frases maiores primeiro
+//   s = s.replace(/assembleia\s+de\s+deus/gi, "A. D.");
+//   s = s.replace(/presbiteriana/gi, "P.");
+//   s = s.replace(/batista/gi, "B.");
+//   s = s.replace(/igreja/gi, "I.");
 
-  // limpa espaços duplos
-  return s.replace(/\s+/g, " ").trim() || "Início";
-}
+//   // limpa espaços duplos
+//   return s.replace(/\s+/g, " ").trim() || "Início";
+// }
 
 export default function Home() {
   const {
@@ -155,47 +155,89 @@ export default function Home() {
     if (!semIgreja) carregar();
   }, [igrejaAtiva?.id]);
 
-useEffect(() => {
-  navigation.setOptions({
-    title: tituloIgrejaHeader(igrejaAtiva?.nome),
-    headerRight: () => (
-      <View style={{ flexDirection: "row", alignItems: "center", marginRight: 8, gap:14 }}>
-        <TouchableOpacity
-          onPress={toggleLightDark}
-          style={{ padding: 6, marginRight: 4 }}
-          activeOpacity={0.7}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons
-            name={isDark ? "sunny-outline" : "moon-outline"}
-            size={22}
-            color={text}
-          />
-        </TouchableOpacity>
+  useEffect(() => {
+    const nomeIgreja = igrejaAtiva?.nome
 
-        <TouchableOpacity
-          onPress={() => setMenuAberto(true)}
-          style={{ padding: 2 }}
-          activeOpacity={0.8}
+    navigation.setOptions({
+      headerTitle: () => (
+        <View style={{ justifyContent: "center" }}>
+          <Text
+            style={{
+              fontSize: 18,
+              fontFamily: "Roboto-Bold",
+              color: text,
+            }}
+            numberOfLines={1}
+          >
+            Tig
+          </Text>
+          <Text
+            style={{
+              fontSize: 13,
+              fontFamily: "Roboto-Light",
+              color: text,
+            }}
+            numberOfLines={1}
+          >
+            {semIgreja ? "Sem igreja" : nomeIgreja}
+          </Text>
+        </View>
+      ),
+      headerRight: () => (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            marginRight: 8,
+            gap: 14,
+          }}
         >
-          {foto ? (
-            <Image source={{ uri: foto }} style={styles.avatar} />
-          ) : (
-            <View
-              style={[
-                styles.avatar,
-                styles.avatarFallback,
-                { backgroundColor: principal },
-              ]}
-            >
-              <Ionicons name="person" size={16} color="#fff" />
-            </View>
-          )}
-        </TouchableOpacity>
-      </View>
-    ),
-  });
-}, [navigation, foto, igrejaAtiva?.nome, principal, isDark, text, toggleLightDark]);
+          <TouchableOpacity
+            onPress={toggleLightDark}
+            style={{ padding: 6, marginRight: 4 }}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons
+              name={isDark ? "sunny-outline" : "moon-outline"}
+              size={22}
+              color={text}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setMenuAberto(true)}
+            style={{ padding: 2 }}
+            activeOpacity={0.8}
+          >
+            {foto ? (
+              <Image source={{ uri: foto }} style={styles.avatar} />
+            ) : (
+              <View
+                style={[
+                  styles.avatar,
+                  styles.avatarFallback,
+                  { backgroundColor: principal },
+                ]}
+              >
+                <Ionicons name="person" size={16} color="#fff" />
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+      ),
+    });
+  }, [
+    navigation,
+    foto,
+    igrejaAtiva?.nome,
+    principal,
+    isDark,
+    text,
+    muted,
+    semIgreja,
+    toggleLightDark,
+  ]);
 
   async function carregar() {
     setLoad(true);
@@ -230,6 +272,12 @@ useEffect(() => {
   function abrirConfiguracoes() {
     setMenuAberto(false);
     navigation.navigate("Configuracoes");
+  }
+
+
+  function abrirProjecao() {
+    setMenuAberto(false)
+    navigation.navigate('Projecao')
   }
 
   function abrirTrocarIgreja() {
@@ -434,14 +482,14 @@ useEffect(() => {
             />
           }
           ListHeaderComponent={
-            <Saldo
-              caixaGeral={caixaGeral}
-              saldoAtual={saldoAtual}
-              saldoAnterior={saldoAnterior}
-              projecaoFutura={projecaoFutura}
-              qtdCaixinhas={qtdCaixinhas}
-              emCaixinhas={emCaixinhas}
-            />
+              <Saldo
+                caixaGeral={caixaGeral}
+                saldoAtual={saldoAtual}
+                saldoAnterior={saldoAnterior}
+                projecaoFutura={projecaoFutura}
+                qtdCaixinhas={qtdCaixinhas}
+                emCaixinhas={emCaixinhas}
+              />
           }
           renderItem={({ item }) => (
             <SwipeCard
@@ -454,13 +502,13 @@ useEffect(() => {
               actions={
                 item.route
                   ? [
-                      {
-                        key: "go",
-                        icon: "arrow-forward",
-                        backgroundColor: principal,
-                        onPress: () => navigation.navigate(item.route),
-                      },
-                    ]
+                    {
+                      key: "go",
+                      icon: "arrow-forward",
+                      backgroundColor: principal,
+                      onPress: () => navigation.navigate(item.route),
+                    },
+                  ]
                   : []
               }
               onPress={
@@ -484,7 +532,7 @@ useEffect(() => {
         >
           <Pressable
             style={[styles.menuCard, { backgroundColor: card }]}
-            onPress={() => {}}
+            onPress={() => { }}
           >
             <View style={[styles.menuUser, { borderBottomColor: border }]}>
               {foto ? (
@@ -514,12 +562,12 @@ useEffect(() => {
 
             <TouchableOpacity
               style={styles.menuItem}
-              onPress={abrirConfiguracoes}
+              onPress={abrirProjecao}
               activeOpacity={0.8}
             >
-              <Ionicons name="settings-outline" size={18} color={text} />
+              <Ionicons name="analytics" size={18} color={text} />
               <Text style={[styles.menuItemText, { color: text }]}>
-                Configurações
+                Projeção de Gastos
               </Text>
             </TouchableOpacity>
 
@@ -534,6 +582,17 @@ useEffect(() => {
               </TouchableOpacity>
             )}
 
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={abrirConfiguracoes}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="settings-outline" size={18} color={text} />
+              <Text style={[styles.menuItemText, { color: text }]}>
+                Configurações
+              </Text>
+            </TouchableOpacity>
             {variasIgrejas && (
               <TouchableOpacity
                 style={styles.menuItem}
@@ -571,7 +630,7 @@ useEffect(() => {
         >
           <Pressable
             style={[styles.menuCard, { width: 280, backgroundColor: card }]}
-            onPress={() => {}}
+            onPress={() => { }}
           >
             <Text style={[styles.modalIgrejaTitulo, { color: text }]}>
               Suas igrejas

@@ -10,13 +10,15 @@ import EditarRegistro from "../pages/EditarRegistro";
 import Membros from "../pages/Membros";
 import Configuracoes from "../pages/Configuracoes";
 import Dizimos from "../pages/Dizimos";
+import Projecao from "../pages/ProjecaoGastos";
+
 import { useTheme } from "@react-navigation/native";
 
 const Stack = createNativeStackNavigator();
 
 export default function Rotas() {
 
-const {colors} = useTheme()
+  const { colors } = useTheme()
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["bottom"]}>
@@ -37,6 +39,12 @@ const {colors} = useTheme()
           name="Tabs"
           component={Tabs}
           options={{ headerShown: false }}
+        />
+
+        <Stack.Screen
+          name="Projecao"
+          component={Projecao}
+          options={{ title: "Projeção de Gastos" }}
         />
 
         <Stack.Screen

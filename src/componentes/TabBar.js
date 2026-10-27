@@ -68,7 +68,7 @@ export default function TabbarPersonalizada({
 
   return (
     <Animated.View style={styles.container}>
-      <View style={[styles.content, { backgroundColor: card }]}>
+      <View style={[styles.content, { backgroundColor: card, borderColor: colors.muted, borderWidth: .3 }]}>
         <Animated.View
           pointerEvents="none"
           style={[
