@@ -348,6 +348,7 @@ export default function Relatorio() {
     HistoricoMovimentos,
     formatoMoeda,
     igrejaAtiva,
+    ocultarNomesDoadores,
   } = useContext(AppContext);
   const { user, uid, authPronto } = useAuth();
   const { colors, dark } = useTheme();
@@ -595,8 +596,8 @@ export default function Relatorio() {
         historicoPeriodo,
         formatoMoeda,
         comentario,
-        nomeTesoureiro:
-          user?.displayName || user?.email || "Tesoureiro",
+        nomeTesoureiro: user?.displayName || user?.email || "Tesoureiro",
+        ocultarNomesDoadores: ocultarNomesDoadores !== false,
       });
     } catch (e) {
       console.log("ERRO PDF:", e);

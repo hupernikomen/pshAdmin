@@ -222,7 +222,7 @@ function calcularMediaContaFixa(lista, igrejaAtiva) {
   const inicioMedia = inicioMediaFromCreatedAt(igrejaAtiva?.createdAt);
 
   const fixas = (lista || []).filter(
-    (i) => i.tipoMovimento === "saida" && i.tipo === "Conta Fixa"
+    (i) => i.tipoMovimento === "saida" && i.tipo === "Fixa"
   );
   if (!fixas.length) return 0;
 

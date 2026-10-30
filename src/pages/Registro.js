@@ -118,6 +118,44 @@ function montarParcelas({
   };
 }
 
+const TIPOS_ENTRADA = [
+  {
+    id: "Dízimo",
+    exemplo: "",
+  },
+  {
+    id: "Oferta",
+    exemplo: "Oferta de culto, oferta alçada, etc.",
+  },
+  {
+    id: "Campanhas",
+    exemplo: "Campanha de construção, arrecadações, etc.",
+  },
+  {
+    id: "Outros",
+    exemplo: "Doações, vendas, etc.",
+  },
+];
+
+const TIPOS_SAIDA = [
+  {
+    id: "Fixa",
+    exemplo: "Energia, internet, aluguel, prebenda, etc.",
+  },
+  {
+    id: "Avulsa",
+    exemplo: "Manutenção, material de limpeza, serviços, etc.",
+  },
+  {
+    id: "Parcelada",
+    exemplo: "Compras no cartão ou acordadas.",
+  },
+  {
+    id: "Sem Prazo",
+    exemplo: "Conta a pagar sem data definida, provisão futura.",
+  },
+];
+
 export default function Registro() {
   const { colors, dark } = useTheme();
   const navigation = useNavigation();
@@ -163,14 +201,12 @@ export default function Registro() {
   const [modalMinisterio, setModalMinisterio] = useState(false);
   const [modalTipo, setModalTipo] = useState(false);
 
-  const tiposEntrada = ["Dízimo", "Oferta", "Campanhas", "Outros"];
-  const tiposSaida = ["Fixa", "Única", "Parcelada", "Futura"];
   const listaTipos =
-    tipoMovimento === "entrada" ? tiposEntrada : tiposSaida;
+    tipoMovimento === "entrada" ? TIPOS_ENTRADA : TIPOS_SAIDA;
 
   const igrejaId = getIgrejaId?.() || igrejaAtiva?.id || null;
   const mostrarOrigemSaida =
-    tipoMovimento === "saida" && tipo !== "Futura";
+    tipoMovimento === "saida" && tipo !== "Sem Prazo";
 
   useEffect(() => {
     if (tipoMovimento !== "saida") {
@@ -183,7 +219,7 @@ export default function Registro() {
   function escolherTipo(t) {
     setTipo(t);
     if (t === "Parcelada" && !qtdParcelas) setQtdParcelas("2");
-    if (t === "Futura") {
+    if (t === "Sem Prazo") {
       setOrigemPagamento("geral");
       setCaixinhaId(null);
     }
@@ -249,7 +285,7 @@ export default function Registro() {
   }
 
   function valorPagoNaCriacao(total) {
-    if (tipo === "Parcelada" || tipo === "Futura") return 0;
+    if (tipo === "Parcelada" || tipo === "Sem Prazo") return 0;
     return total;
   }
 
@@ -393,7 +429,7 @@ export default function Registro() {
       return;
     }
 
-    if (tipoMovimento === "saida" && tipo === "Futura") {
+    if (tipoMovimento === "saida" && tipo === "Sem Prazo") {
       if (!validarOrigemSaida(0)) return;
 
       setLoad(true);
@@ -402,7 +438,7 @@ export default function Registro() {
           igrejaId,
           idUsuario: uid,
           tipoMovimento: "saida",
-          tipo: "Futura",
+          tipo: "Sem Prazo",
           data: data.getTime(),
           descricao: descricao.trim(),
           valorTotal: valor,
@@ -428,7 +464,7 @@ export default function Registro() {
         ]);
         setAviso({
           titulo: "Sucesso",
-          mensagem: "Conta futura registrada.",
+          mensagem: "Conta sem prazo registrada.",
         });
         navigation.goBack();
       } catch (e) {
@@ -667,6 +703,7 @@ export default function Registro() {
                   value={data}
                   mode="date"
                   display="default"
+                  maximumDate={new Date()}
                   onChange={(e, selected) => {
                     setShowDatePicker(false);
                     if (selected) setData(selected);
@@ -941,12 +978,12 @@ export default function Registro() {
               keyboardShouldPersistTaps="handled"
               nestedScrollEnabled
             >
-              {listaTipos.map((t, index) => {
-                const ativo = tipo === t;
+              {listaTipos.map((item, index) => {
+                const ativo = tipo === item.id;
                 const ultimo = index === listaTipos.length - 1;
                 return (
                   <TouchableOpacity
-                    key={t}
+                    key={item.id}
                     style={[
                       styles.modalItem,
                       !ultimo && {
@@ -954,11 +991,16 @@ export default function Registro() {
                         borderBottomColor: separator,
                       },
                     ]}
-                    onPress={() => escolherTipo(t)}
+                    onPress={() => escolherTipo(item.id)}
                   >
-                    <Text style={[styles.modalItemText, { color: text }]}>
-                      {t}
-                    </Text>
+                    <View style={styles.modalItemLeft}>
+                      <Text style={[styles.modalItemText, { color: text }]}>
+                        {item.id}
+                      </Text>
+                      <Text style={[styles.modalItemExemplo, { color: muted }]}>
+                        {item.exemplo}
+                      </Text>
+                    </View>
                     {ativo && (
                       <Ionicons name="checkmark" size={18} color={principal} />
                     )}
@@ -1229,9 +1271,20 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 14,
     paddingHorizontal: 4,
+    gap: 12,
+  },
+  modalItemLeft: {
+    flex: 1,
+    paddingRight: 8,
   },
   modalItemText: {
     fontSize: 15,
     fontFamily: "Roboto-Medium",
+  },
+  modalItemExemplo: {
+    marginTop: 3,
+    fontSize: 12,
+    fontFamily: "Roboto-Regular",
+    lineHeight: 16,
   },
 });

@@ -47,9 +47,9 @@ function diaDoRegistro(ts) {
   return String(d.getDate()).padStart(2, "0");
 }
 
-function labelMovimento(item) {
-  if (isDizimo(item)) return "Dízimo ***";
-  if (isOferta(item)) return "Oferta ***";
+function labelMovimento(item, ocultarNomes = true) {
+  if (ocultarNomes && isDizimo(item)) return "Dízimo ***";
+  if (ocultarNomes && isOferta(item)) return "Oferta ***";
   const desc = String(item.descricao || "").trim();
   if (desc) return desc;
   return String(item.tipo || "Movimento");
@@ -155,6 +155,7 @@ export async function exportarRelatorioPDF({
   historicoPeriodo,
   formatoMoeda,
   nomeTesoureiro,
+  ocultarNomesDoadores = true,
 }) {
   const pdfDoc = await PDFDocument.create();
   const { font, fontMedium, fontBold } = await carregarFontes(pdfDoc);
@@ -175,7 +176,6 @@ export async function exportarRelatorioPDF({
 
   const pagesRef = () => pdfDoc.getPages();
 
-  // ——— CABEÇALHO FULL WIDTH ———
   const headerTop = pageHeight - 20;
   const headerH = 50;
   const headerBottom = headerTop - headerH;
@@ -188,7 +188,6 @@ export async function exportarRelatorioPDF({
     color: C.headerBg,
   });
 
-  // faixa inferior do header
   page.drawLine({
     start: { x: 0, y: headerBottom },
     end: { x: pageWidth, y: headerBottom },
@@ -201,7 +200,6 @@ export async function exportarRelatorioPDF({
   const rightBlockX = headerPadX + leftBlockW + 12;
   const rightBlockW = contentWidth - leftBlockW - 12;
 
-  // ESQUERDA: app + igreja
   let yH = headerTop - 6;
   page.drawText(safe("Tig · Tesouraria Igrejas"), {
     x: headerPadX,
@@ -221,7 +219,6 @@ export async function exportarRelatorioPDF({
     maxWidth: leftBlockW,
   });
 
-  // DIREITA: período + tesoureiro (alinhado à direita)
   const periodoTxt = safe(labelPeriodo || "Período não informado");
   const tesoureiroTxt = safe(
     nomeTesoureiro ? `Emitido por ${nomeTesoureiro}` : "Emitido pelo app"
@@ -243,7 +240,6 @@ export async function exportarRelatorioPDF({
   yR -= 14;
   drawRightLine(tesoureiroTxt, 8, fontMedium, C.muted, yR);
 
-  // conteúdo começa abaixo do header
   const contentTop = headerBottom - 16;
   yLeft = contentTop;
   yRight = contentTop;
@@ -261,7 +257,6 @@ export async function exportarRelatorioPDF({
 
   const novaPagina = () => {
     page = pdfDoc.addPage([pageWidth, pageHeight]);
-    // páginas seguintes: só linha vertical, sem repetir header grande
     yLeft = pageHeight - margin;
     yRight = pageHeight - margin;
     drawVLine(page, pageHeight - margin);
@@ -396,7 +391,6 @@ export async function exportarRelatorioPDF({
     yLeft -= 8;
   };
 
-  // ——— RESULTADO DO PERÍODO ———
   sectionLeft("Resultado do período");
   {
     const gap = 3;
@@ -417,7 +411,6 @@ export async function exportarRelatorioPDF({
     yLeft -= cardH + 10;
   }
 
-  // ——— PROJEÇÃO ———
   sectionLeft("Projeção");
   {
     const gap = 3;
@@ -440,7 +433,6 @@ export async function exportarRelatorioPDF({
     "Projeção indica o que a igreja teria em caixa após quitar todas as dívidas futuras.",
   ]);
 
-  // ——— DÍZIMOS E OFERTAS ———
   const diz = resumoDizimos(historicoPeriodo);
 
   let totalOfertas = 0;
@@ -498,7 +490,6 @@ export async function exportarRelatorioPDF({
     yLeft -= cardH * 2 + gap + 10;
   }
 
-  // ——— DESPESAS FIXAS ———
   const porFixa = {};
   (historicoPeriodo || []).forEach((item) => {
     if (item.tipoMovimento !== "saida") return;
@@ -514,7 +505,6 @@ export async function exportarRelatorioPDF({
     C.red
   );
 
-  // ——— DESPESAS POR MINISTÉRIOS ———
   const porMinisterio =
     resumo.porMinisterioSaida &&
     typeof resumo.porMinisterioSaida === "object"
@@ -527,7 +517,6 @@ export async function exportarRelatorioPDF({
     C.red
   );
 
-  // ——— COLUNA DIREITA ———
   const drawRightHeader = () => {
     yRight -= 2;
     page.drawText(safe("Movimentações"), {
@@ -564,7 +553,7 @@ export async function exportarRelatorioPDF({
     for (let i = 0; i < hist.length; i++) {
       const item = hist[i];
       const dia = diaDoRegistro(item.data);
-      const lab = labelMovimento(item);
+      const lab = labelMovimento(item, ocultarNomesDoadores);
       const valor = valorMovimento(item);
       const isEnt = item.tipoMovimento === "entrada";
       const valorTxt = `${isEnt ? "+" : "-"} ${money(formatoMoeda, valor)}`;
@@ -608,7 +597,6 @@ export async function exportarRelatorioPDF({
     }
   }
 
-  // ——— RODAPÉ ———
   const all = pagesRef();
   all.forEach((p, idx) => {
     p.drawText(

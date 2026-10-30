@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   ScrollView,
   TouchableOpacity,
+  Switch,
 } from "react-native";
 import { useTheme, useFocusEffect } from "@react-navigation/native";
 import {
@@ -70,6 +71,8 @@ export default function Configuracoes() {
     HistoricoMovimentos,
     ResumoFinanceiro,
     carregarIgrejasDoUsuario,
+    ocultarNomesDoadores,
+    setOcultarNomesDoadores,
   } = useContext(AppContext);
 
   const [nome, setNome] = useState("");
@@ -98,6 +101,7 @@ export default function Configuracoes() {
 
   const principal = colors.principal || colors.primary || "#65C556";
   const placeholder = colors.muted || (dark ? "#666" : "#bbb");
+  const muted = colors.muted || placeholder;
 
   useEffect(() => {
     nomeAtualRef.current = nome;
@@ -494,18 +498,14 @@ export default function Configuracoes() {
           />
         </View>
 
-        <View
-          style={[styles.separator, { backgroundColor: colors.border }]}
-        />
+        <View style={[styles.separator, { backgroundColor: colors.border }]} />
 
         <View style={styles.row}>
           <Text style={[styles.rowLabel, { color: colors.text }]}>
             Saldo inicial
           </Text>
           <View style={styles.valorWrap}>
-            <Text style={[styles.prefixo, { color: colors.muted || placeholder }]}>
-              R$
-            </Text>
+            <Text style={[styles.prefixo, { color: muted }]}>R$</Text>
             <TextInput
               style={[
                 styles.rowInput,
@@ -525,9 +525,31 @@ export default function Configuracoes() {
             />
           </View>
         </View>
+
+        <View style={[styles.separator, { backgroundColor: colors.border }]} />
+
+        <View style={styles.rowSwitch}>
+          <View style={styles.switchTextWrap}>
+            <Text style={[styles.rowLabel, { color: colors.text }]}>
+              Ocultar nomes no relatório
+            </Text>
+            <Text style={[styles.switchHint, { color: muted }]}>
+              Dízimos e ofertas como Diz. *** / Oferta ***
+            </Text>
+          </View>
+          <Switch
+            value={!!ocultarNomesDoadores}
+            onValueChange={(v) => setOcultarNomesDoadores?.(v)}
+            trackColor={{
+              false: dark ? "#555" : "#ccc",
+              true: principal + "99",
+            }}
+            thumbColor={ocultarNomesDoadores ? principal : "#f4f3f4"}
+          />
+        </View>
       </View>
 
-      <Text style={[styles.hint, { color: colors.muted || placeholder }]}>
+      <Text style={[styles.hint, { color: muted }]}>
         As alterações são salvas ao sair do campo ou da página.
       </Text>
 
@@ -556,7 +578,7 @@ export default function Configuracoes() {
                   </Text>
                 )}
               </TouchableOpacity>
-              <Text style={[styles.deleteHint, { color: colors.muted || placeholder }]}>
+              <Text style={[styles.deleteHint, { color: muted }]}>
                 A exclusão definitiva está marcada para{" "}
                 {formatarData(exclusaoPrevistaEm)}.
               </Text>
@@ -589,7 +611,7 @@ export default function Configuracoes() {
                   </Text>
                 )}
               </TouchableOpacity>
-              <Text style={[styles.deleteHint, { color: colors.muted || placeholder }]}>
+              <Text style={[styles.deleteHint, { color: muted }]}>
                 Os dados não são apagados agora. Após 30 dias da confirmação,
                 igreja, registros, caixinhas e membros serão removidos
                 automaticamente.
@@ -642,6 +664,23 @@ const styles = StyleSheet.create({
     minHeight: 52,
     paddingVertical: 10,
     gap: 12,
+  },
+  rowSwitch: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 56,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  switchTextWrap: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  switchHint: {
+    marginTop: 3,
+    fontSize: 12,
+    fontFamily: "Roboto-Regular",
+    lineHeight: 16,
   },
   rowLabel: {
     fontSize: 14,

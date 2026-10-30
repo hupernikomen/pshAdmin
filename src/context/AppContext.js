@@ -22,6 +22,7 @@ export const AppContext = createContext({});
 
 const KEY_IGREJA_ATIVA = "@igreja_ativa_id";
 const KEY_OCULTAR_VALORES = "@ocultar_valores";
+const KEY_OCULTAR_NOMES_DOADORES = "@ocultar_nomes_doadores";
 
 function arredondarMoney(v) {
   return Math.round((Number(v) || 0) * 100) / 100;
@@ -147,6 +148,10 @@ export function AppProvider({ children }) {
   const [igrejasProntas, setIgrejasProntas] = useState(false);
 
   const [ocultarValores, setOcultarValoresState] = useState(false);
+  // padrão true = mantém o comportamento atual do PDF (Diz. *** / Oferta ***)
+  const [ocultarNomesDoadores, setOcultarNomesDoadoresState] = useState(true);
+
+  const [semConexao, setSemConexao] = useState(false);
 
   function getUserId() {
     return uid || user?.uid || null;
@@ -166,6 +171,15 @@ export function AppProvider({ children }) {
         const v = await AsyncStorage.getItem(KEY_OCULTAR_VALORES);
         setOcultarValoresState(v === "1");
       } catch (_) {}
+
+      try {
+        const n = await AsyncStorage.getItem(KEY_OCULTAR_NOMES_DOADORES);
+        if (n === null) {
+          setOcultarNomesDoadoresState(true);
+        } else {
+          setOcultarNomesDoadoresState(n === "1");
+        }
+      } catch (_) {}
     })();
   }, []);
 
@@ -179,6 +193,18 @@ export function AppProvider({ children }) {
 
   function toggleOcultarValores() {
     setOcultarValores(!ocultarValores);
+  }
+
+  async function setOcultarNomesDoadores(oculto) {
+    const next = !!oculto;
+    setOcultarNomesDoadoresState(next);
+    try {
+      await AsyncStorage.setItem(KEY_OCULTAR_NOMES_DOADORES, next ? "1" : "0");
+    } catch (_) {}
+  }
+
+  function toggleOcultarNomesDoadores() {
+    setOcultarNomesDoadores(!ocultarNomesDoadores);
   }
 
   useEffect(() => {
@@ -209,16 +235,33 @@ export function AppProvider({ children }) {
     Promise.all([HistoricoMovimentos(), CarregarCaixinhas()]);
   }, [igrejaAtiva?.id]);
 
+  function isErroRede(e) {
+    const code = String(e?.code || "").toLowerCase();
+    const msg = String(e?.message || e || "").toLowerCase();
+    return (
+      code.includes("unavailable") ||
+      code.includes("network") ||
+      msg.includes("offline") ||
+      msg.includes("network") ||
+      msg.includes("failed to get") ||
+      msg.includes("could not reach") ||
+      msg.includes("firestore/unavailable")
+    );
+  }
+
   async function carregarIgrejasDoUsuario() {
     const email = getEmail();
     const userId = getUserId();
     if (!email && !userId) {
       setIgrejasProntas(true);
+      setSemConexao(false);
       return;
     }
 
     try {
       setIgrejasProntas(false);
+      setSemConexao(false);
+
       const mapa = new Map();
 
       if (email) {
@@ -287,7 +330,6 @@ export function AppProvider({ children }) {
           const exclusaoPrevistaEm = Number(data.exclusaoPrevistaEm) || 0;
           const exclusaoAgendadaEm = Number(data.exclusaoAgendadaEm) || 0;
 
-          // 30 dias passaram → exclusão definitiva
           if (exclusaoPrevistaEm > 0 && exclusaoPrevistaEm <= agora) {
             try {
               await excluirIgrejaDefinitivo(m.igrejaId);
@@ -308,10 +350,14 @@ export function AppProvider({ children }) {
           });
         } catch (e) {
           console.log("Erro ao ler igreja:", m.igrejaId, e);
+          if (isErroRede(e)) {
+            throw e;
+          }
         }
       }
 
       setIgrejasDoUsuario(lista);
+      setSemConexao(false);
 
       const salva = await AsyncStorage.getItem(KEY_IGREJA_ATIVA);
       let escolhida =
@@ -327,8 +373,15 @@ export function AppProvider({ children }) {
       }
     } catch (e) {
       console.log("Erro carregarIgrejasDoUsuario:", e);
-      setIgrejasDoUsuario([]);
-      setIgrejaAtiva(null);
+      const offline = isErroRede(e);
+      setSemConexao(offline);
+
+      if (offline) {
+        // mantém o que já estava em memória
+      } else {
+        setIgrejasDoUsuario([]);
+        setIgrejaAtiva(null);
+      }
     } finally {
       setIgrejasProntas(true);
     }
@@ -524,7 +577,6 @@ export function AppProvider({ children }) {
     return HistoricoMovimentos();
   }
 
-  /** Retorna o saldo fresco calculado (não o state desatualizado) */
   async function BuscarSaldo() {
     const lista = await HistoricoMovimentos();
     return calcularSaldoRealizado(lista);
@@ -662,8 +714,18 @@ export function AppProvider({ children }) {
 
   function obterNomeMes(mes) {
     const nomes = [
-      "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-      "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+      "Janeiro",
+      "Fevereiro",
+      "Março",
+      "Abril",
+      "Maio",
+      "Junho",
+      "Julho",
+      "Agosto",
+      "Setembro",
+      "Outubro",
+      "Novembro",
+      "Dezembro",
     ];
     return nomes[mes] || "";
   }
@@ -726,6 +788,10 @@ export function AppProvider({ children }) {
         ocultarValores,
         setOcultarValores,
         toggleOcultarValores,
+        ocultarNomesDoadores,
+        setOcultarNomesDoadores,
+        toggleOcultarNomesDoadores,
+        semConexao,
       }}
     >
       {children}

@@ -147,7 +147,7 @@ function mesesHorizonteProjecao(lista) {
     if (pegouParcela) continue;
 
     // Futura sem prazo: não empurra o horizonte
-    if (item.tipo === "Futura" && !item.vencimento) continue;
+    if (item.tipo === "Sem Prazo" && !item.vencimento) continue;
 
     const ts = Number(item.vencimento || item.data || dataDoItem(item) || 0);
     if (ts && ts > agoraTs) {
@@ -253,7 +253,7 @@ export default function Home() {
             flexDirection: "row",
             alignItems: "center",
             marginRight: 8,
-            gap: 12,
+            gap: 14,
           }}
         >
           <TouchableOpacity
@@ -264,7 +264,7 @@ export default function Home() {
           >
             <Ionicons
               name={ocultarValores ? "eye-off-outline" : "eye-outline"}
-              size={20}
+              size={22}
               color={text}
             />
           </TouchableOpacity>
@@ -277,7 +277,7 @@ export default function Home() {
           >
             <Ionicons
               name={isDark ? "sunny-outline" : "moon-outline"}
-              size={20}
+              size={22}
               color={text}
             />
           </TouchableOpacity>
