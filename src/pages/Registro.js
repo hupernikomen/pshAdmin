@@ -11,10 +11,11 @@ import {
   Platform,
   PermissionsAndroid,
   KeyboardAvoidingView,
+  Modal,
+  Pressable,
 } from "react-native";
 import { useTheme, useNavigation } from "@react-navigation/native";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { Picker } from "@react-native-picker/picker";
 import { launchCamera, launchImageLibrary } from "react-native-image-picker";
 import RNFS from "react-native-fs";
 import { AppContext } from "../context/AppContext";
@@ -143,7 +144,9 @@ export default function Registro() {
   const muted = colors.muted || (dark ? "#9aa0a6" : "#8a8f98");
   const card = colors.card;
   const bg = colors.background;
+  const surface = dark ? "#2a2a2a" : "#f4f5f7";
   const placeholder = muted;
+  const separator = dark ? "#3a3a3a" : "#ececec";
 
   const [tipoMovimento, setTipoMovimento] = useState(null);
   const [tipo, setTipo] = useState(null);
@@ -151,19 +154,23 @@ export default function Registro() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [descricao, setDescricao] = useState("");
   const [valorTotal, setValorTotal] = useState("");
-  const [temAdiantamento, setTemAdiantamento] = useState(false);
-  const [valorParcial, setValorParcial] = useState("");
   const [observacao, setObservacao] = useState("");
   const [qtdParcelas, setQtdParcelas] = useState("1");
   const [reciboUri, setReciboUri] = useState(null);
   const [origemPagamento, setOrigemPagamento] = useState("geral");
   const [caixinhaId, setCaixinhaId] = useState(null);
   const [ministerio, setMinisterio] = useState("");
+  const [modalMinisterio, setModalMinisterio] = useState(false);
+  const [modalTipo, setModalTipo] = useState(false);
 
   const tiposEntrada = ["Dízimo", "Oferta", "Campanhas", "Outros"];
-  const tiposSaida = ["Conta Única", "Parcelada"];
+  const tiposSaida = ["Fixa", "Única", "Parcelada", "Futura"];
+  const listaTipos =
+    tipoMovimento === "entrada" ? tiposEntrada : tiposSaida;
 
   const igrejaId = getIgrejaId?.() || igrejaAtiva?.id || null;
+  const mostrarOrigemSaida =
+    tipoMovimento === "saida" && tipo !== "Futura";
 
   useEffect(() => {
     if (tipoMovimento !== "saida") {
@@ -172,6 +179,20 @@ export default function Registro() {
       setMinisterio("");
     }
   }, [tipoMovimento]);
+
+  function escolherTipo(t) {
+    setTipo(t);
+    if (t === "Parcelada" && !qtdParcelas) setQtdParcelas("2");
+    if (t === "Futura") {
+      setOrigemPagamento("geral");
+      setCaixinhaId(null);
+    }
+    setModalTipo(false);
+  }
+
+  function removerRecibo() {
+    setReciboUri(null);
+  }
 
   async function salvarImagemLocal(uri) {
     const nomeArquivo = `recibo_${Date.now()}.jpg`;
@@ -227,15 +248,15 @@ export default function Registro() {
     }
   }
 
-  function valorDoAdiantamento(total) {
-    if (!temAdiantamento) {
-      return tipo === "Parcelada" ? 0 : total;
-    }
-    return parseNumero(valorParcial);
+  function valorPagoNaCriacao(total) {
+    if (tipo === "Parcelada" || tipo === "Futura") return 0;
+    return total;
   }
 
   function validarOrigemSaida(valorPagoAgora) {
     if (tipoMovimento !== "saida") return true;
+    if (!(valorPagoAgora > 0)) return true;
+
     if (origemPagamento === "geral") {
       if (valorPagoAgora > (Number(saldoDisponivel) || 0) + 0.001) {
         Alert.alert(
@@ -307,22 +328,7 @@ export default function Registro() {
       return;
     }
 
-    if (temAdiantamento) {
-      const adiant = parseNumero(valorParcial);
-      if (!(adiant > 0)) {
-        Alert.alert("Atenção", "Informe o valor do adiantamento.");
-        return;
-      }
-      if (adiant > valor + 0.001) {
-        Alert.alert(
-          "Atenção",
-          "O adiantamento não pode ser maior que o valor total."
-        );
-        return;
-      }
-    }
-
-    const parcial = valorDoAdiantamento(valor);
+    const parcial = valorPagoNaCriacao(valor);
 
     if (tipo === "Parcelada") {
       const qtd = parseInt(qtdParcelas, 10) || 1;
@@ -377,6 +383,52 @@ export default function Registro() {
         setAviso({
           titulo: "Sucesso",
           mensagem: "Compra parcelada registrada!",
+        });
+        navigation.goBack();
+      } catch (e) {
+        Alert.alert("Erro", e.message || "Não foi possível salvar");
+      } finally {
+        setLoad(false);
+      }
+      return;
+    }
+
+    if (tipoMovimento === "saida" && tipo === "Futura") {
+      if (!validarOrigemSaida(0)) return;
+
+      setLoad(true);
+      try {
+        await addDoc(collection(db, "registros"), {
+          igrejaId,
+          idUsuario: uid,
+          tipoMovimento: "saida",
+          tipo: "Futura",
+          data: data.getTime(),
+          descricao: descricao.trim(),
+          valorTotal: valor,
+          observacao: observacao.trim(),
+          valoresPagos: [],
+          valorPagoTotal: 0,
+          quantidadeParcelas: 1,
+          status: "aberta",
+          origemPagamento: origemPagamento || "geral",
+          caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
+          caixinhaNome:
+            origemPagamento === "caixinha" ? caixinhaSel?.nome || null : null,
+          ministerio: ministerio || null,
+          reciboUrl: reciboUri ? await salvarImagemLocal(reciboUri) : null,
+          reg: Date.now(),
+          createdAt: Date.now(),
+        });
+
+        await Promise.all([
+          HistoricoMovimentos(),
+          ResumoFinanceiro(),
+          CarregarCaixinhas?.(),
+        ]);
+        setAviso({
+          titulo: "Sucesso",
+          mensagem: "Conta futura registrada.",
         });
         navigation.goBack();
       } catch (e) {
@@ -472,11 +524,6 @@ export default function Registro() {
       ? arred(totalNum / qtdNum)
       : 0;
 
-  const labelAdiantamento =
-    tipoMovimento === "entrada"
-      ? "Houve adiantamento recebido"
-      : "Houve adiantamento pago";
-
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: bg }]}
@@ -503,8 +550,6 @@ export default function Registro() {
                 onPress={() => {
                   setTipoMovimento(item);
                   setTipo(null);
-                  setTemAdiantamento(false);
-                  setValorParcial("");
                 }}
               >
                 <Text
@@ -521,7 +566,7 @@ export default function Registro() {
           })}
         </View>
 
-        {tipoMovimento === "saida" && (
+        {mostrarOrigemSaida && (
           <View style={styles.section}>
             <View style={[styles.segment, { backgroundColor: card }]}>
               {[
@@ -579,10 +624,7 @@ export default function Registro() {
                     onPress={() => setCaixinhaId(cx.id)}
                   >
                     <View
-                      style={[
-                        styles.selectIcon,
-                        { backgroundColor: dark ? "#2a2a2a" : "#f4f5f7" },
-                      ]}
+                      style={[styles.selectIcon, { backgroundColor: surface }]}
                     >
                       <Ionicons
                         name="wallet-outline"
@@ -608,43 +650,6 @@ export default function Registro() {
         {tipoMovimento && (
           <>
             <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: muted }]}>Tipo</Text>
-              <View style={styles.chips}>
-                {(tipoMovimento === "entrada" ? tiposEntrada : tiposSaida).map(
-                  (t) => {
-                    const ativo = tipo === t;
-                    return (
-                      <TouchableOpacity
-                        key={t}
-                        style={[
-                          styles.chip,
-                          { backgroundColor: card },
-                          ativo && { backgroundColor: principal },
-                        ]}
-                        onPress={() => {
-                          setTipo(t);
-                          if (t === "Parcelada" && !qtdParcelas) {
-                            setQtdParcelas("2");
-                          }
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.chipText,
-                            { color: text },
-                            ativo && { color: "#fff" },
-                          ]}
-                        >
-                          {t}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  }
-                )}
-              </View>
-            </View>
-
-            <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: muted }]}>Dados</Text>
 
               <TouchableOpacity
@@ -669,29 +674,46 @@ export default function Registro() {
                 />
               )}
 
+              <TouchableOpacity
+                style={[styles.field, { backgroundColor: card }]}
+                onPress={() => setModalTipo(true)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.fieldLabel, { color: muted }]}>Tipo</Text>
+                <View style={styles.fieldRow}>
+                  <Text
+                    style={[
+                      styles.fieldValue,
+                      { color: tipo ? text : muted },
+                    ]}
+                  >
+                    {tipo || "Selecione o tipo"}
+                  </Text>
+                  <Ionicons name="chevron-down" size={18} color={muted} />
+                </View>
+              </TouchableOpacity>
+
               {tipoMovimento === "saida" && (
-                <View style={[styles.field, { backgroundColor: card }]}>
+                <TouchableOpacity
+                  style={[styles.field, { backgroundColor: card }]}
+                  onPress={() => setModalMinisterio(true)}
+                  activeOpacity={0.8}
+                >
                   <Text style={[styles.fieldLabel, { color: muted }]}>
                     Ministério (opcional)
                   </Text>
-                  <View style={styles.pickerWrap}>
-                    <Picker
-                      selectedValue={ministerio}
-                      onValueChange={(v) => setMinisterio(v)}
-                      style={[styles.picker, { color: text }]}
-                      dropdownIconColor={text}
+                  <View style={styles.fieldRow}>
+                    <Text
+                      style={[
+                        styles.fieldValue,
+                        { color: ministerio ? text : muted },
+                      ]}
                     >
-                      <Picker.Item
-                        label="Selecione o ministério"
-                        value=""
-                        color={muted}
-                      />
-                      {MINISTERIOS.map((m) => (
-                        <Picker.Item key={m} label={m} value={m} color={text} />
-                      ))}
-                    </Picker>
+                      {ministerio || "Selecione o ministério"}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color={muted} />
                   </View>
-                </View>
+                </TouchableOpacity>
               )}
 
               <View style={[styles.field, { backgroundColor: card }]}>
@@ -744,74 +766,122 @@ export default function Registro() {
                 </>
               )}
 
-              <TouchableOpacity
-                style={[styles.checkRow, { backgroundColor: card }]}
-                onPress={() => {
-                  setTemAdiantamento((v) => {
-                    if (v) setValorParcial("");
-                    return !v;
-                  });
-                }}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name={temAdiantamento ? "checkbox" : "square-outline"}
-                  size={22}
-                  color={temAdiantamento ? principal : muted}
-                />
-                <Text style={[styles.checkText, { color: text }]}>
-                  {labelAdiantamento}
-                </Text>
-              </TouchableOpacity>
-
-              {temAdiantamento && (
+              {tipoMovimento === "saida" && (
                 <View style={[styles.field, { backgroundColor: card }]}>
                   <Text style={[styles.fieldLabel, { color: muted }]}>
-                    Adiantamento
+                    Recibo (opcional)
                   </Text>
-                  <TextInput
-                    style={[styles.fieldInput, { color: text }]}
-                    value={valorParcial}
-                    onChangeText={setValorParcial}
-                    keyboardType="decimal-pad"
-                    placeholder="0,00"
-                    placeholderTextColor={placeholder}
-                  />
-                </View>
-              )}
 
-              {tipoMovimento === "saida" && (
-                <View style={styles.reciboRow}>
-                  <TouchableOpacity
-                    style={[styles.reciboBtn, { backgroundColor: card }]}
-                    onPress={tirarFoto}
-                  >
-                    <Ionicons
-                      name={reciboUri ? "camera" : "camera-outline"}
-                      size={22}
-                      color={reciboUri ? principal : muted}
-                    />
-                    <Text style={[styles.reciboLabel, { color: muted }]}>
-                      Câmera
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.reciboBtn, { backgroundColor: card }]}
-                    onPress={escolherDaGaleria}
-                  >
-                    <Ionicons
-                      name="images-outline"
-                      size={22}
-                      color={reciboUri ? principal : muted}
-                    />
-                    <Text style={[styles.reciboLabel, { color: muted }]}>
-                      Galeria
-                    </Text>
-                  </TouchableOpacity>
-
-                  {reciboUri && (
-                    <Image source={{ uri: reciboUri }} style={styles.preview} />
+                  {reciboUri ? (
+                    <View style={styles.reciboSelecionado}>
+                      <Image
+                        source={{ uri: reciboUri }}
+                        style={styles.preview}
+                      />
+                      <View style={styles.reciboAcoes}>
+                        <TouchableOpacity
+                          style={[
+                            styles.reciboAcaoBtn,
+                            { backgroundColor: surface },
+                          ]}
+                          onPress={tirarFoto}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons
+                            name="camera-outline"
+                            size={18}
+                            color={text}
+                          />
+                          <Text
+                            style={[styles.reciboAcaoText, { color: text }]}
+                          >
+                            Câmera
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.reciboAcaoBtn,
+                            { backgroundColor: surface },
+                          ]}
+                          onPress={escolherDaGaleria}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons
+                            name="images-outline"
+                            size={18}
+                            color={text}
+                          />
+                          <Text
+                            style={[styles.reciboAcaoText, { color: text }]}
+                          >
+                            Galeria
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.reciboAcaoBtn,
+                            { backgroundColor: surface },
+                          ]}
+                          onPress={removerRecibo}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons
+                            name="trash-outline"
+                            size={18}
+                            color="#C62828"
+                          />
+                          <Text
+                            style={[
+                              styles.reciboAcaoText,
+                              { color: "#C62828" },
+                            ]}
+                          >
+                            Remover
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.reciboVazio}>
+                      <TouchableOpacity
+                        style={[
+                          styles.reciboOpcao,
+                          { backgroundColor: surface },
+                        ]}
+                        onPress={tirarFoto}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons
+                          name="camera-outline"
+                          size={22}
+                          color={muted}
+                        />
+                        <Text
+                          style={[styles.reciboOpcaoText, { color: muted }]}
+                        >
+                          Câmera
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.reciboOpcao,
+                          { backgroundColor: surface },
+                        ]}
+                        onPress={escolherDaGaleria}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons
+                          name="images-outline"
+                          size={22}
+                          color={muted}
+                        />
+                        <Text
+                          style={[styles.reciboOpcaoText, { color: muted }]}
+                        >
+                          Galeria
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   )}
                 </View>
               )}
@@ -846,6 +916,136 @@ export default function Registro() {
           </>
         )}
       </ScrollView>
+
+      {/* Modal Tipo */}
+      <Modal
+        visible={modalTipo}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalTipo(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setModalTipo(false)}
+        >
+          <Pressable
+            style={[styles.modalCard, { backgroundColor: card }]}
+            onPress={() => {}}
+          >
+            <Text style={[styles.modalTitle, { color: text }]}>Tipo</Text>
+
+            <ScrollView
+              style={styles.modalList}
+              contentContainerStyle={styles.modalListContent}
+              showsVerticalScrollIndicator
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+            >
+              {listaTipos.map((t, index) => {
+                const ativo = tipo === t;
+                const ultimo = index === listaTipos.length - 1;
+                return (
+                  <TouchableOpacity
+                    key={t}
+                    style={[
+                      styles.modalItem,
+                      !ultimo && {
+                        borderBottomWidth: StyleSheet.hairlineWidth,
+                        borderBottomColor: separator,
+                      },
+                    ]}
+                    onPress={() => escolherTipo(t)}
+                  >
+                    <Text style={[styles.modalItemText, { color: text }]}>
+                      {t}
+                    </Text>
+                    {ativo && (
+                      <Ionicons name="checkmark" size={18} color={principal} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Modal Ministério */}
+      <Modal
+        visible={modalMinisterio}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalMinisterio(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setModalMinisterio(false)}
+        >
+          <Pressable
+            style={[styles.modalCard, { backgroundColor: card }]}
+            onPress={() => {}}
+          >
+            <Text style={[styles.modalTitle, { color: text }]}>Ministério</Text>
+
+            <ScrollView
+              style={styles.modalList}
+              contentContainerStyle={styles.modalListContent}
+              showsVerticalScrollIndicator
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+            >
+              <TouchableOpacity
+                style={[
+                  styles.modalItem,
+                  {
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    borderBottomColor: separator,
+                  },
+                ]}
+                onPress={() => {
+                  setMinisterio("");
+                  setModalMinisterio(false);
+                }}
+              >
+                <Text style={[styles.modalItemText, { color: muted }]}>
+                  Nenhum
+                </Text>
+                {!ministerio && (
+                  <Ionicons name="checkmark" size={18} color={principal} />
+                )}
+              </TouchableOpacity>
+
+              {MINISTERIOS.map((m, index) => {
+                const ativo = ministerio === m;
+                const ultimo = index === MINISTERIOS.length - 1;
+                return (
+                  <TouchableOpacity
+                    key={m}
+                    style={[
+                      styles.modalItem,
+                      !ultimo && {
+                        borderBottomWidth: StyleSheet.hairlineWidth,
+                        borderBottomColor: separator,
+                      },
+                    ]}
+                    onPress={() => {
+                      setMinisterio(m);
+                      setModalMinisterio(false);
+                    }}
+                  >
+                    <Text style={[styles.modalItemText, { color: text }]}>
+                      {m}
+                    </Text>
+                    {ativo && (
+                      <Ionicons name="checkmark" size={18} color={principal} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -879,16 +1079,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     marginLeft: 2,
   },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 16,
-  },
-  chipText: {
-    fontSize: 13,
-    fontFamily: "Roboto-Regular",
-  },
   selectCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -915,27 +1105,13 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   hint: {
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: "Roboto-Regular",
     marginTop: 4,
     marginBottom: 8,
   },
   empty: {
     fontSize: 13,
-    fontFamily: "Roboto-Regular",
-  },
-  checkRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 10,
-  },
-  checkText: {
-    flex: 1,
-    fontSize: 14,
     fontFamily: "Roboto-Regular",
   },
   field: {
@@ -949,42 +1125,67 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Regular",
     marginBottom: 4,
   },
+  fieldRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
   fieldValue: {
     fontSize: 15,
     fontFamily: "Roboto-Medium",
+    flex: 1,
   },
   fieldInput: {
     fontSize: 15,
     fontFamily: "Roboto-Regular",
     padding: 0,
   },
-  pickerWrap: {
-    marginHorizontal: -8,
-    marginBottom: Platform.OS === "ios" ? 0 : -8,
-  },
-  picker: {
-    marginTop: -12,
-    ...(Platform.OS === "android" ? { height: 55 } : { height: 140 }),
-  },
-  reciboRow: {
+  reciboVazio: {
     flexDirection: "row",
-    gap: 12,
-    marginBottom: 10,
-    alignItems: "center",
+    gap: 10,
+    marginTop: 4,
   },
-  reciboBtn: {
-    width: 100,
-    height: 110,
-    borderRadius: 16,
+  reciboOpcao: {
+    flex: 1,
+    height: 64,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 4,
   },
-  reciboLabel: {
+  reciboOpcaoText: {
     fontSize: 12,
     fontFamily: "Roboto-Regular",
   },
-  preview: { height: 110, aspectRatio: 9 / 16, borderRadius: 16 },
+  reciboSelecionado: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 4,
+  },
+  preview: {
+    width: 56,
+    height: 72,
+    borderRadius: 8,
+    backgroundColor: "#eee",
+  },
+  reciboAcoes: {
+    flex: 1,
+    gap: 6,
+  },
+  reciboAcaoBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+  },
+  reciboAcaoText: {
+    fontSize: 13,
+    fontFamily: "Roboto-Medium",
+  },
   saveBtn: {
     height: 52,
     borderRadius: 16,
@@ -996,5 +1197,41 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontFamily: "Roboto-Bold",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 400,
+    borderRadius: 20,
+    padding: 16,
+    maxHeight: "80%",
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontFamily: "Roboto-Bold",
+    marginBottom: 8,
+  },
+  modalList: {
+    maxHeight: 360,
+  },
+  modalListContent: {
+    paddingBottom: 4,
+  },
+  modalItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+  },
+  modalItemText: {
+    fontSize: 15,
+    fontFamily: "Roboto-Medium",
   },
 });

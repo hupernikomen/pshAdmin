@@ -45,7 +45,6 @@ function arred(v) {
   return Math.round((Number(v) || 0) * 100) / 100;
 }
 
-/** Timestamp do dia selecionado (meio-dia local, estável para mês/ano) */
 function tsDoDia(d) {
   const x = new Date(d);
   x.setHours(12, 0, 0, 0);
@@ -68,7 +67,7 @@ export default function APagar() {
     igrejaAtiva,
   } = useContext(AppContext);
 
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
   const { uid, authPronto } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [abertoId, setAbertoId] = useState(null);
@@ -83,6 +82,16 @@ export default function APagar() {
   const [salvando, setSalvando] = useState(false);
 
   const podeEditar = podeEditarFinanceiro?.() !== false;
+
+  const principal = colors.principal || colors.primary;
+  const text = colors.text;
+  const muted = colors.muted || (dark ? "#9aa0a6" : "#888");
+  const card = colors.card;
+  const bg = colors.background;
+  const surface = dark ? "#2a2a2a" : "#f4f5f7";
+  const border = colors.border || (dark ? "#333" : "#ececec");
+  const danger = dark ? "#E57373" : "#C62828";
+  const tintDanger = dark ? "#3D1F1F" : "#FFEBEE";
 
   useEffect(() => {
     if (!authPronto || !uid) return;
@@ -324,7 +333,7 @@ export default function APagar() {
   if ((!authPronto || load) && !refreshing) return <Load />;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: bg }]}>
       <FlatList
         data={pendentes}
         keyExtractor={(item) => item.rowId}
@@ -334,20 +343,23 @@ export default function APagar() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={[colors.principal]}
+            colors={[principal]}
+            tintColor={principal}
           />
         }
         ListEmptyComponent={
           <View style={styles.emptyBox}>
-            <View style={styles.emptyIcon}>
+            <View style={[styles.emptyIcon, { backgroundColor: card }]}>
               <Ionicons
                 name="checkmark-circle-outline"
                 size={28}
-                color="#9aa3ad"
+                color={muted}
               />
             </View>
-            <Text style={styles.emptyTitle}>Nada a pagar</Text>
-            <Text style={styles.emptyText}>
+            <Text style={[styles.emptyTitle, { color: muted }]}>
+              Nada a pagar
+            </Text>
+            <Text style={[styles.emptyText, { color: muted }]}>
               {!uid
                 ? "Faça login para ver os valores."
                 : "Quando houver despesas em aberto, elas aparecem aqui."}
@@ -374,7 +386,7 @@ export default function APagar() {
                   key: "pagar",
                   icon: "card-outline",
                   label: "Pagar",
-                  backgroundColor: colors.principal,
+                  backgroundColor: principal,
                   onPress: () => abrirPagar(item),
                 },
               ]
@@ -383,8 +395,8 @@ export default function APagar() {
           return (
             <SwipeCard
               icon="arrow-up-outline"
-              iconColor="#C62828"
-              tint="#FFEBEE"
+              iconColor={danger}
+              tint={tintDanger}
               title={item.descricao || "Sem descrição"}
               subtitle={meta}
               value={`R$ ${formatoMoeda.format(item.falta)}`}
@@ -410,11 +422,14 @@ export default function APagar() {
             behavior={Platform.OS === "ios" ? "padding" : undefined}
             style={{ width: "100%", alignItems: "center" }}
           >
-            <Pressable style={styles.modalCard} onPress={() => {}}>
-              <Text style={styles.modalTitle}>
+            <Pressable
+              style={[styles.modalCard, { backgroundColor: card }]}
+              onPress={() => {}}
+            >
+              <Text style={[styles.modalTitle, { color: text }]}>
                 {itemSel?.isParcela ? "Pagar parcela" : "Registrar pagamento"}
               </Text>
-              <Text style={styles.modalSub}>
+              <Text style={[styles.modalSub, { color: muted }]}>
                 {itemSel?.descricao || ""}
                 {itemSel?.isParcela
                   ? ` · Parcela ${itemSel.parcelaNumero}/${itemSel.parcelaTotal}`
@@ -422,14 +437,16 @@ export default function APagar() {
                 · R$ {formatoMoeda.format(itemSel?.falta || 0)}
               </Text>
 
-              <Text style={styles.inputLabel}>Data do pagamento</Text>
+              <Text style={[styles.inputLabel, { color: muted }]}>
+                Data do pagamento
+              </Text>
               <TouchableOpacity
-                style={styles.dateBox}
+                style={[styles.dateBox, { backgroundColor: surface }]}
                 onPress={() => setShowDatePicker(true)}
                 activeOpacity={0.8}
               >
-                <Ionicons name="calendar-outline" size={18} color="#666" />
-                <Text style={styles.dateText}>
+                <Ionicons name="calendar-outline" size={18} color={muted} />
+                <Text style={[styles.dateText, { color: text }]}>
                   {dataPagamento.toLocaleDateString("pt-BR")}
                 </Text>
               </TouchableOpacity>
@@ -449,7 +466,7 @@ export default function APagar() {
                   style={styles.dateOk}
                   onPress={() => setShowDatePicker(false)}
                 >
-                  <Text style={[styles.dateOkText, { color: colors.principal }]}>
+                  <Text style={[styles.dateOkText, { color: principal }]}>
                     OK
                   </Text>
                 </TouchableOpacity>
@@ -457,20 +474,31 @@ export default function APagar() {
 
               {!itemSel?.isParcela && (
                 <>
-                  <Text style={styles.inputLabel}>Valor</Text>
+                  <Text style={[styles.inputLabel, { color: muted }]}>
+                    Valor
+                  </Text>
                   <TextInput
-                    style={styles.input}
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: surface,
+                        color: text,
+                        borderColor: border,
+                      },
+                    ]}
                     value={valorPago}
                     onChangeText={setValorPago}
                     keyboardType="decimal-pad"
                     placeholder="0,00"
-                    placeholderTextColor="#aaa"
+                    placeholderTextColor={muted}
                   />
                 </>
               )}
 
-              <Text style={styles.inputLabel}>Pagar com</Text>
-              <View style={styles.segment}>
+              <Text style={[styles.inputLabel, { color: muted }]}>
+                Pagar com
+              </Text>
+              <View style={[styles.segment, { backgroundColor: surface }]}>
                 {[
                   { id: "geral", label: "Caixa livre" },
                   { id: "caixinha", label: "Caixinha" },
@@ -481,7 +509,7 @@ export default function APagar() {
                       key={opt.id}
                       style={[
                         styles.segmentBtn,
-                        ativo && { backgroundColor: colors.principal },
+                        ativo && { backgroundColor: principal },
                       ]}
                       onPress={() => {
                         setOrigemPagamento(opt.id);
@@ -491,6 +519,7 @@ export default function APagar() {
                       <Text
                         style={[
                           styles.segmentText,
+                          { color: muted },
                           ativo && { color: "#fff" },
                         ]}
                       >
@@ -502,13 +531,15 @@ export default function APagar() {
               </View>
 
               {origemPagamento === "geral" ? (
-                <Text style={styles.hint}>
+                <Text style={[styles.hint, { color: muted }]}>
                   Disponível: R$ {formatoMoeda.format(saldoDisponivel || 0)}
                 </Text>
               ) : (
                 <>
                   {caixinhasComSaldo.length === 0 ? (
-                    <Text style={styles.hint}>Nenhuma caixinha com saldo</Text>
+                    <Text style={[styles.hint, { color: muted }]}>
+                      Nenhuma caixinha com saldo
+                    </Text>
                   ) : (
                     caixinhasComSaldo.map((cx) => {
                       const ativo = caixinhaId === cx.id;
@@ -517,12 +548,17 @@ export default function APagar() {
                           key={cx.id}
                           style={[
                             styles.cxItem,
-                            ativo && { borderColor: colors.principal },
+                            {
+                              backgroundColor: surface,
+                              borderColor: ativo ? principal : "transparent",
+                            },
                           ]}
                           onPress={() => setCaixinhaId(cx.id)}
                         >
-                          <Text style={styles.cxNome}>{cx.nome}</Text>
-                          <Text style={styles.cxValor}>
+                          <Text style={[styles.cxNome, { color: text }]}>
+                            {cx.nome}
+                          </Text>
+                          <Text style={[styles.cxValor, { color: muted }]}>
                             R$ {formatoMoeda.format(cx.valor || 0)}
                           </Text>
                         </TouchableOpacity>
@@ -533,13 +569,18 @@ export default function APagar() {
               )}
 
               <View style={styles.modalActions}>
-                <TouchableOpacity style={styles.btnCancel} onPress={fecharModal}>
-                  <Text style={styles.btnCancelText}>Cancelar</Text>
+                <TouchableOpacity
+                  style={[styles.btnCancel, { backgroundColor: surface }]}
+                  onPress={fecharModal}
+                >
+                  <Text style={[styles.btnCancelText, { color: muted }]}>
+                    Cancelar
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
                     styles.btnOk,
-                    { backgroundColor: colors.principal },
+                    { backgroundColor: principal },
                     salvando && { opacity: 0.7 },
                   ]}
                   onPress={confirmarPagamento}
@@ -570,7 +611,6 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 18,
-    backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -578,18 +618,16 @@ const styles = StyleSheet.create({
     marginTop: 14,
     fontSize: 16,
     fontFamily: "Roboto-Medium",
-    color: "#666",
   },
   emptyText: {
     marginTop: 6,
     fontSize: 13,
     fontFamily: "Roboto-Regular",
-    color: "#999",
     textAlign: "center",
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(0,0,0,0.55)",
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
@@ -597,42 +635,37 @@ const styles = StyleSheet.create({
   modalCard: {
     width: "100%",
     maxWidth: 400,
-    backgroundColor: "#fff",
     borderRadius: 22,
     padding: 18,
   },
   modalTitle: {
     fontSize: 17,
     fontFamily: "Roboto-Bold",
-    color: "#1f2933",
   },
   modalSub: {
     marginTop: 4,
     marginBottom: 14,
     fontSize: 13,
     fontFamily: "Roboto-Regular",
-    color: "#888",
   },
   inputLabel: {
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    color: "#777",
     marginBottom: 4,
   },
   input: {
-    backgroundColor: "#f4f5f7",
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
     fontFamily: "Roboto-Regular",
     marginBottom: 12,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   dateBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: "#f4f5f7",
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -641,7 +674,6 @@ const styles = StyleSheet.create({
   dateText: {
     fontSize: 15,
     fontFamily: "Roboto-Medium",
-    color: "#1f2933",
   },
   dateOk: {
     alignSelf: "flex-end",
@@ -655,7 +687,6 @@ const styles = StyleSheet.create({
   },
   segment: {
     flexDirection: "row",
-    backgroundColor: "#f4f5f7",
     borderRadius: 14,
     padding: 4,
     marginBottom: 10,
@@ -669,46 +700,38 @@ const styles = StyleSheet.create({
   segmentText: {
     fontSize: 13,
     fontFamily: "Roboto-Medium",
-    color: "#555",
   },
   hint: {
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    color: "#888",
     marginBottom: 10,
   },
   cxItem: {
     flexDirection: "row",
     justifyContent: "space-between",
-    backgroundColor: "#f4f5f7",
     borderRadius: 12,
     padding: 12,
     marginBottom: 8,
     borderWidth: 1.5,
-    borderColor: "transparent",
   },
   cxNome: {
     fontSize: 14,
     fontFamily: "Roboto-Medium",
-    color: "#1f2933",
   },
   cxValor: {
     fontSize: 13,
     fontFamily: "Roboto-Regular",
-    color: "#666",
   },
   modalActions: { flexDirection: "row", gap: 10, marginTop: 8 },
   btnCancel: {
     flex: 1,
     paddingVertical: 12,
     borderRadius: 14,
-    backgroundColor: "#f4f5f7",
     alignItems: "center",
   },
   btnCancelText: {
     fontSize: 14,
     fontFamily: "Roboto-Medium",
-    color: "#555",
   },
   btnOk: {
     flex: 1,

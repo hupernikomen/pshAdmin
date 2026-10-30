@@ -80,10 +80,52 @@ function mesesEntre(anoIni, mesIni, anoFim, mesFim) {
   return list;
 }
 
-function inicioMediaDizimos(createdAt) {
+function inicioMediaFromCreatedAt(createdAt) {
   const d = new Date(Number(createdAt) || 0);
   if (!createdAt || isNaN(d.getTime())) return null;
   return new Date(d.getFullYear(), d.getMonth() + 1, 1, 0, 0, 0, 0);
+}
+
+function saidaNoMesItem(item, mes, ano, limiteHoje) {
+  if (item?.tipoMovimento !== "saida") return 0;
+
+  const pagos = Array.isArray(item.valoresPagos) ? item.valoresPagos : [];
+  if (pagos.length > 0) {
+    return pagos.reduce((acc, p) => {
+      const ts = Number(p.data || 0);
+      if (!ts || ts > limiteHoje) return acc;
+      const d = new Date(ts);
+      if (d.getMonth() === mes && d.getFullYear() === ano) {
+        return acc + (Number(p.valor) || 0);
+      }
+      return acc;
+    }, 0);
+  }
+
+  const parcelas = Array.isArray(item.parcelas) ? item.parcelas : [];
+  const pagas = parcelas.filter(
+    (p) => p.status === "paga" || p.status === "quitada" || !!p.pago
+  );
+  if (pagas.length > 0) {
+    return pagas.reduce((acc, p) => {
+      const ts = Number(p.dataPagamento || p.pagoEm || p.data || 0);
+      if (!ts || ts > limiteHoje) return acc;
+      const d = new Date(ts);
+      if (d.getMonth() === mes && d.getFullYear() === ano) {
+        return acc + (Number(p.valor) || 0);
+      }
+      return acc;
+    }, 0);
+  }
+
+  const ts = dataDoItem(item);
+  if (ts && ts <= limiteHoje) {
+    const d = new Date(ts);
+    if (d.getMonth() === mes && d.getFullYear() === ano) {
+      return Number(item.valorPagoTotal) || 0;
+    }
+  }
+  return 0;
 }
 
 function calcularMediaDizimos(lista, igrejaAtiva) {
@@ -91,8 +133,7 @@ function calcularMediaDizimos(lista, igrejaAtiva) {
   const mesAtual = agora.getMonth();
   const anoAtual = agora.getFullYear();
   const limiteHoje = fimDoDiaTs(agora);
-
-  const inicioMedia = inicioMediaDizimos(igrejaAtiva?.createdAt);
+  const inicioMedia = inicioMediaFromCreatedAt(igrejaAtiva?.createdAt);
 
   if (inicioMedia) {
     const siAno = inicioMedia.getFullYear();
@@ -100,7 +141,6 @@ function calcularMediaDizimos(lista, igrejaAtiva) {
     const idxInicio = siAno * 12 + siMes;
     const idxAtual = anoAtual * 12 + mesAtual;
     let meses = idxAtual - idxInicio + 1;
-
     if (meses < 1) return 0;
 
     const totalDizimosPeriodo = (lista || [])
@@ -174,9 +214,50 @@ function calcularMediaDizimos(lista, igrejaAtiva) {
   return arred(mesAtual + 1 > 0 ? totalDizimosAno / (mesAtual + 1) : 0);
 }
 
+function calcularMediaContaFixa(lista, igrejaAtiva) {
+  const agora = new Date();
+  const mesAtual = agora.getMonth();
+  const anoAtual = agora.getFullYear();
+  const limiteHoje = fimDoDiaTs(agora);
+  const inicioMedia = inicioMediaFromCreatedAt(igrejaAtiva?.createdAt);
+
+  const fixas = (lista || []).filter(
+    (i) => i.tipoMovimento === "saida" && i.tipo === "Conta Fixa"
+  );
+  if (!fixas.length) return 0;
+
+  if (inicioMedia) {
+    const siAno = inicioMedia.getFullYear();
+    const siMes = inicioMedia.getMonth();
+    const idxInicio = siAno * 12 + siMes;
+    const idxAtual = anoAtual * 12 + mesAtual;
+    let meses = idxAtual - idxInicio + 1;
+    if (meses < 1) return 0;
+
+    let total = 0;
+    for (let idx = idxInicio; idx <= idxAtual; idx++) {
+      const ano = Math.floor(idx / 12);
+      const mes = idx % 12;
+      fixas.forEach((item) => {
+        total += saidaNoMesItem(item, mes, ano, limiteHoje);
+      });
+    }
+    return arred(total / meses);
+  }
+
+  let totalAno = 0;
+  for (let m = 0; m <= mesAtual; m++) {
+    fixas.forEach((item) => {
+      totalAno += saidaNoMesItem(item, m, anoAtual, limiteHoje);
+    });
+  }
+  return arred(mesAtual + 1 > 0 ? totalAno / (mesAtual + 1) : 0);
+}
+
 function simularViabilidade({
   saldoProjetadoInicial,
   mediaDizimos,
+  mediaContaFixa,
   gastosExistentes,
   novoGasto,
 }) {
@@ -229,7 +310,11 @@ function simularViabilidade({
   let motivo = "";
 
   for (const m of meses) {
-    saldo = arred(saldo + mediaDizimos);
+    saldo = arred(
+      saldo +
+        (Number(mediaDizimos) || 0) -
+        (Number(mediaContaFixa) || 0)
+    );
 
     const listaMes = porMes[m.key] || [];
     listaMes.sort((a, b) => (a.data || 0) - (b.data || 0));
@@ -285,6 +370,56 @@ function simularViabilidade({
   };
 }
 
+/** Saldo estimado no mês da data escolhida (antes de incluir o novo gasto) */
+function saldoEstimadoNoMes({
+  saldoProjetadoInicial,
+  mediaDizimos,
+  mediaContaFixa,
+  gastosExistentes,
+  dataAlvo,
+}) {
+  const agora = new Date();
+  const mesIni = agora.getMonth();
+  const anoIni = agora.getFullYear();
+  const alvo = new Date(dataAlvo);
+  const mesFim = alvo.getMonth();
+  const anoFim = alvo.getFullYear();
+
+  // data no passado em relação ao mês atual: usa o saldo projetado base
+  if (anoFim < anoIni || (anoFim === anoIni && mesFim < mesIni)) {
+    return arred(saldoProjetadoInicial);
+  }
+
+  const meses = mesesEntre(anoIni, mesIni, anoFim, mesFim);
+  const porMes = {};
+  (gastosExistentes || []).forEach((g) => {
+    const k = chaveMes(g.data);
+    if (!porMes[k]) porMes[k] = [];
+    porMes[k].push(g);
+  });
+
+  let saldo = arred(saldoProjetadoInicial);
+
+  for (const m of meses) {
+    saldo = arred(
+      saldo +
+        (Number(mediaDizimos) || 0) -
+        (Number(mediaContaFixa) || 0)
+    );
+
+    const listaMes = porMes[m.key] || [];
+    listaMes.sort((a, b) => (a.data || 0) - (b.data || 0));
+    for (const g of listaMes) {
+      const valor = arred(Number(g.valor) || 0);
+      if (saldo + 0.001 >= valor) {
+        saldo = arred(saldo - valor);
+      }
+    }
+  }
+
+  return saldo;
+}
+
 export default function ProjecaoGastos() {
   const {
     dadosFinancas,
@@ -338,6 +473,7 @@ export default function ProjecaoGastos() {
     const saldoAtual = Number(saldo) || 0;
     const saldoProjetado = arred(saldoAtual + aReceber - aPagar);
     const mediaDizimos = calcularMediaDizimos(listaFin, igrejaAtiva);
+    const mediaContaFixa = calcularMediaContaFixa(listaFin, igrejaAtiva);
 
     return {
       saldoAtual,
@@ -345,6 +481,7 @@ export default function ProjecaoGastos() {
       aPagar: arred(aPagar),
       saldoProjetado,
       mediaDizimos,
+      mediaContaFixa,
     };
   }, [dadosFinancas, saldo, igrejaAtiva]);
 
@@ -352,10 +489,32 @@ export default function ProjecaoGastos() {
     return simularViabilidade({
       saldoProjetadoInicial: indicadores.saldoProjetado,
       mediaDizimos: indicadores.mediaDizimos,
+      mediaContaFixa: indicadores.mediaContaFixa,
       gastosExistentes: lista,
       novoGasto: null,
     });
-  }, [indicadores.saldoProjetado, indicadores.mediaDizimos, lista]);
+  }, [
+    indicadores.saldoProjetado,
+    indicadores.mediaDizimos,
+    indicadores.mediaContaFixa,
+    lista,
+  ]);
+
+  const saldoMesSelecionado = useMemo(() => {
+    return saldoEstimadoNoMes({
+      saldoProjetadoInicial: indicadores.saldoProjetado,
+      mediaDizimos: indicadores.mediaDizimos,
+      mediaContaFixa: indicadores.mediaContaFixa,
+      gastosExistentes: lista,
+      dataAlvo: dataPag,
+    });
+  }, [
+    indicadores.saldoProjetado,
+    indicadores.mediaDizimos,
+    indicadores.mediaContaFixa,
+    lista,
+    dataPag,
+  ]);
 
   const carregarGastos = useCallback(async () => {
     const igrejaId = getIgrejaId?.();
@@ -406,6 +565,7 @@ export default function ProjecaoGastos() {
     setDescricao("");
     setValorTxt("");
     setDataPag(new Date());
+    setShowDate(false);
     setModal(true);
   }
 
@@ -427,12 +587,10 @@ export default function ProjecaoGastos() {
 
     const dataTs = new Date(dataPag).setHours(12, 0, 0, 0);
 
-    const mediaAgora = indicadores.mediaDizimos;
-    const projetadoAgora = indicadores.saldoProjetado;
-
     const teste = simularViabilidade({
-      saldoProjetadoInicial: projetadoAgora,
-      mediaDizimos: mediaAgora,
+      saldoProjetadoInicial: indicadores.saldoProjetado,
+      mediaDizimos: indicadores.mediaDizimos,
+      mediaContaFixa: indicadores.mediaContaFixa,
       gastosExistentes: lista,
       novoGasto: { data: dataTs, valor, descricao: nome },
     });
@@ -455,8 +613,9 @@ export default function ProjecaoGastos() {
         descricao: nome,
         valor: arred(valor),
         data: dataTs,
-        mediaDizimosUsada: mediaAgora,
-        saldoProjetadoBase: projetadoAgora,
+        mediaDizimosUsada: indicadores.mediaDizimos,
+        mediaContaFixaUsada: indicadores.mediaContaFixa,
+        saldoProjetadoBase: indicadores.saldoProjetado,
         createdAt: Date.now(),
         ficticio: true,
       });
@@ -510,7 +669,7 @@ export default function ProjecaoGastos() {
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           <View style={styles.headerBlock}>
-            <View style={styles.kpiRow}>
+            {/* <View style={styles.kpiRow}>
               <View style={[styles.kpi, { backgroundColor: card }]}>
                 <Text style={[styles.kpiLabel, { color: muted }]}>
                   Saldo projetado
@@ -521,13 +680,22 @@ export default function ProjecaoGastos() {
               </View>
               <View style={[styles.kpi, { backgroundColor: card }]}>
                 <Text style={[styles.kpiLabel, { color: muted }]}>
-                  Média de dízimos
+                  Média dízimos
                 </Text>
                 <Text style={[styles.kpiValue, { color: text }]}>
                   R$ {formatoMoeda.format(indicadores.mediaDizimos)}
                 </Text>
               </View>
             </View>
+
+            <View style={[styles.kpiSingle, { backgroundColor: card }]}>
+              <Text style={[styles.kpiLabel, { color: muted }]}>
+                Média conta fixa (mensal)
+              </Text>
+              <Text style={[styles.kpiValue, { color: text }]}>
+                R$ {formatoMoeda.format(indicadores.mediaContaFixa)}
+              </Text>
+            </View> */}
 
             {podeEditar && (
               <TouchableOpacity
@@ -540,9 +708,9 @@ export default function ProjecaoGastos() {
               </TouchableOpacity>
             )}
 
-            <Text style={[styles.sectionTitle, { color: text }]}>
+            {/* <Text style={[styles.sectionTitle, { color: text }]}>
               Gastos projetados
-            </Text>
+            </Text> */}
           </View>
         }
         ListEmptyComponent={
@@ -552,8 +720,8 @@ export default function ProjecaoGastos() {
               Nenhum gasto projetado
             </Text>
             <Text style={[styles.emptyText, { color: muted }]}>
-              Registre despesas futuras fictícias para testar a viabilidade com
-              o saldo projetado e a média de dízimos.
+              Registre despesas futuras fictícias para testar a viabilidade considerando
+              o saldo projetado, a média de dízimos e a média de conta fixa.
             </Text>
           </View>
         }
@@ -602,15 +770,7 @@ export default function ProjecaoGastos() {
             />
           );
         }}
-        ListFooterComponent={
-          <View style={styles.footerBox}>
-            <Text style={[styles.calcText, { color: muted }]}>
-              A projeção de gastos analisa o saldo projetado somado à média de
-              dízimos (dados reais), para verificação da viabilidade dos gastos
-              (fictícios).
-            </Text>
-          </View>
-        }
+        
       />
 
       <Modal visible={modal} transparent animationType="fade">
@@ -626,38 +786,11 @@ export default function ProjecaoGastos() {
             <Text style={[styles.modalTitle, { color: text }]}>
               Novo gasto projetado
             </Text>
-            <Text style={[styles.modalSub, { color: muted }]}>
-              Não entra no caixa real · viabilidade com saldo projetado + média
-              de dízimos
-            </Text>
+            
 
-            <Text style={[styles.inputLabel, { color: muted }]}>Nome</Text>
-            <TextInput
-              style={[
-                styles.input,
-                { backgroundColor: inputBg, color: text, borderColor: border },
-              ]}
-              value={descricao}
-              onChangeText={setDescricao}
-              placeholder="Ex: Reforma do salão"
-              placeholderTextColor={muted}
-            />
-
-            <Text style={[styles.inputLabel, { color: muted }]}>Valor</Text>
-            <TextInput
-              style={[
-                styles.input,
-                { backgroundColor: inputBg, color: text, borderColor: border },
-              ]}
-              value={valorTxt}
-              onChangeText={setValorTxt}
-              keyboardType="decimal-pad"
-              placeholder="0,00"
-              placeholderTextColor={muted}
-            />
-
+            {/* 1) DATA */}
             <Text style={[styles.inputLabel, { color: muted }]}>
-              Data do pagamento
+              Data
             </Text>
             <TouchableOpacity
               style={[styles.input, { backgroundColor: inputBg }]}
@@ -684,6 +817,44 @@ export default function ProjecaoGastos() {
                 }}
               />
             )}
+
+            {/* Saldo do mês da data */}
+            <View style={[styles.saldoMesBox, { backgroundColor: inputBg }]}>
+              <Text style={[styles.saldoMesLabel, { color: muted }]}>
+                Saldo estimado neste mês
+              </Text>
+              <Text style={[styles.saldoMesValue, { color: text }]}>
+                R$ {formatoMoeda.format(saldoMesSelecionado)}
+              </Text>
+             
+            </View>
+
+            {/* 2) NOME */}
+            <Text style={[styles.inputLabel, { color: muted }]}>Nome</Text>
+            <TextInput
+              style={[
+                styles.input,
+                { backgroundColor: inputBg, color: text, borderColor: border },
+              ]}
+              value={descricao}
+              onChangeText={setDescricao}
+              placeholder="Ex: Reforma do salão"
+              placeholderTextColor={muted}
+            />
+
+            {/* 3) VALOR */}
+            <Text style={[styles.inputLabel, { color: muted }]}>Valor</Text>
+            <TextInput
+              style={[
+                styles.input,
+                { backgroundColor: inputBg, color: text, borderColor: border },
+              ]}
+              value={valorTxt}
+              onChangeText={setValorTxt}
+              keyboardType="decimal-pad"
+              placeholder="0,00"
+              placeholderTextColor={muted}
+            />
 
             <View style={styles.modalActions}>
               <TouchableOpacity
@@ -718,17 +889,22 @@ export default function ProjecaoGastos() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   listContent: {
-    paddingTop:14,
+    paddingTop: 14,
     paddingHorizontal: 14,
     paddingBottom: 100,
     gap: 8,
   },
   headerBlock: { marginBottom: 8 },
-  kpiRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  kpiRow: { flexDirection: "row", gap: 8, marginBottom: 8 },
   kpi: {
     flex: 1,
     borderRadius: 16,
     padding: 14,
+  },
+  kpiSingle: {
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
   },
   kpiLabel: {
     fontSize: 12,
@@ -769,7 +945,7 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Medium",
   },
   emptyText: {
-    marginTop: 6,
+    marginTop: 14,
     fontSize: 13,
     fontFamily: "Roboto-Regular",
     textAlign: "center",
@@ -796,6 +972,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 17,
     fontFamily: "Roboto-Bold",
+    marginBottom:14
   },
   modalSub: {
     marginTop: 4,
@@ -815,6 +992,26 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Roboto-Regular",
     marginBottom: 12,
+  },
+  saldoMesBox: {
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  saldoMesLabel: {
+    fontSize: 12,
+    fontFamily: "Roboto-Regular",
+    marginBottom: 4,
+  },
+  saldoMesValue: {
+    fontSize: 18,
+    fontFamily: "Roboto-Bold",
+    marginBottom: 4,
+  },
+  saldoMesHint: {
+    fontSize: 11,
+    fontFamily: "Roboto-Light",
+    lineHeight: 15,
   },
   modalActions: { flexDirection: "row", gap: 10, marginTop: 6 },
   btnCancel: {

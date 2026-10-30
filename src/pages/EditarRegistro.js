@@ -57,11 +57,6 @@ function formatarData(d) {
   return d.toLocaleDateString("pt-BR");
 }
 
-/**
- * A data do card vem do pagamento, não só do campo data do documento.
- * 1 pagamento: sempre segue a nova data.
- * Vários: só os que tinham a data antiga (ou sem data).
- */
 function alinharDatasLista(lista, dataAntiga, dataNova) {
   if (!Array.isArray(lista) || lista.length === 0) return lista;
 
@@ -148,7 +143,7 @@ function montarDevolucoesCaixinha(item) {
 export default function EditarRegistro() {
   const { id } = useRoute().params || {};
   const navigation = useNavigation();
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
   const {
     HistoricoMovimentos,
     ResumoFinanceiro,
@@ -172,6 +167,16 @@ export default function EditarRegistro() {
 
   const igrejaId = getIgrejaId?.() || igrejaAtiva?.id || null;
   const podeEditar = podeEditarFinanceiro?.() !== false;
+
+  const principal = colors.principal || colors.primary;
+  const text = colors.text;
+  const muted = colors.muted || (dark ? "#9aa0a6" : "#9aa0a6");
+  const card = colors.card;
+  const bg = colors.background;
+  const placeholder = muted;
+  const deleteBorder = dark ? "#5c2b2b" : "#ffcdd2";
+  const deleteTextColor = dark ? "#E57373" : "#C62828";
+  const deleteBg = dark ? "#2a1a1a" : card;
 
   useEffect(() => {
     carregar();
@@ -447,18 +452,18 @@ export default function EditarRegistro() {
 
   return (
     <ScrollView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: bg }]}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
       <TouchableOpacity
-        style={styles.field}
+        style={[styles.field, { backgroundColor: card }]}
         onPress={() => !ocupado && setShowDate(true)}
         activeOpacity={0.8}
         disabled={ocupado}
       >
-        <Text style={styles.label}>Data</Text>
-        <Text style={styles.input}>{formatarData(data)}</Text>
+        <Text style={[styles.label, { color: muted }]}>Data</Text>
+        <Text style={[styles.input, { color: text }]}>{formatarData(data)}</Text>
       </TouchableOpacity>
 
       {showDate && (
@@ -467,6 +472,7 @@ export default function EditarRegistro() {
           mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
           onChange={onChangeData}
+          // Android dark: tema do sistema; iOS spinner acompanha o SO
         />
       )}
 
@@ -475,46 +481,49 @@ export default function EditarRegistro() {
           style={styles.dateOk}
           onPress={() => setShowDate(false)}
         >
-          <Text style={[styles.dateOkText, { color: colors.principal }]}>
+          <Text style={[styles.dateOkText, { color: principal }]}>
             Confirmar data
           </Text>
         </TouchableOpacity>
       ) : null}
 
-      <View style={styles.field}>
-        <Text style={styles.label}>Descrição</Text>
+      <View style={[styles.field, { backgroundColor: card }]}>
+        <Text style={[styles.label, { color: muted }]}>Descrição</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { color: text }]}
           value={descricao}
           onChangeText={setDescricao}
           placeholder="Descrição"
-          placeholderTextColor="#aaa"
+          placeholderTextColor={placeholder}
           editable={!ocupado}
         />
       </View>
 
-      <View style={styles.field}>
-        <Text style={styles.label}>Valor total</Text>
+      <View style={[styles.field, { backgroundColor: card }]}>
+        <Text style={[styles.label, { color: muted }]}>Valor total</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { color: text }]}
           value={valorTotal}
           onChangeText={setValorTotal}
           keyboardType="decimal-pad"
           placeholder="0,00"
-          placeholderTextColor="#aaa"
+          placeholderTextColor={placeholder}
           editable={!ocupado}
         />
       </View>
 
-      <View style={styles.field}>
-        <Text style={styles.label}>Observação</Text>
+      <View style={[styles.field, { backgroundColor: card }]}>
+        <Text style={[styles.label, { color: muted }]}>Observação</Text>
         <TextInput
-          style={[styles.input, { minHeight: 80, textAlignVertical: "top" }]}
+          style={[
+            styles.input,
+            { color: text, minHeight: 80, textAlignVertical: "top" },
+          ]}
           value={observacao}
           onChangeText={setObservacao}
           multiline
           placeholder="Opcional"
-          placeholderTextColor="#aaa"
+          placeholderTextColor={placeholder}
           editable={!ocupado}
         />
       </View>
@@ -522,7 +531,7 @@ export default function EditarRegistro() {
       <TouchableOpacity
         style={[
           styles.saveBtn,
-          { backgroundColor: colors.principal },
+          { backgroundColor: principal },
           ocupado && { opacity: 0.7 },
         ]}
         onPress={salvar}
@@ -534,11 +543,18 @@ export default function EditarRegistro() {
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={[styles.deleteBtn, ocupado && { opacity: 0.7 }]}
+        style={[
+          styles.deleteBtn,
+          {
+            backgroundColor: deleteBg,
+            borderColor: deleteBorder,
+          },
+          ocupado && { opacity: 0.7 },
+        ]}
         onPress={confirmarExcluir}
         disabled={ocupado}
       >
-        <Text style={styles.deleteText}>
+        <Text style={[styles.deleteText, { color: deleteTextColor }]}>
           {excluindo ? "Excluindo..." : "Excluir registro"}
         </Text>
       </TouchableOpacity>
@@ -555,7 +571,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   field: {
-    backgroundColor: "#fff",
     borderRadius: 16,
     padding: 14,
     marginBottom: 10,
@@ -563,13 +578,11 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 11,
     fontFamily: "Roboto-Regular",
-    color: "#9aa0a6",
     marginBottom: 6,
   },
   input: {
     fontSize: 15,
     fontFamily: "Roboto-Regular",
-    color: "#1f2933",
     padding: 0,
   },
   dateOk: {
@@ -600,12 +613,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginTop: 10,
-    backgroundColor: "#fff",
     borderWidth: 1,
-    borderColor: "#ffcdd2",
   },
   deleteText: {
-    color: "#C62828",
     fontSize: 15,
     fontFamily: "Roboto-Medium",
   },

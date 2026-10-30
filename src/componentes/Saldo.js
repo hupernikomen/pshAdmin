@@ -10,35 +10,28 @@ export default function Saldo({
   emCaixinhas,
   saldoAnterior,
   projecaoFutura,
+  projecaoMeses = 1,
   qtdCaixinhas,
 }) {
   const { colors } = useTheme();
-  const { formatoMoeda, ocultarValores, toggleOcultarValores } =
-    useContext(AppContext);
+  const { formatoMoeda, ocultarValores } = useContext(AppContext);
   const navigation = useNavigation();
 
   const mask = "R$ ***";
   const fmt = (v) =>
     ocultarValores ? mask : `R$ ${formatoMoeda.format(Number(v) || 0)}`;
 
+  const meses = Math.max(1, Number(projecaoMeses) || 1);
+  const labelProjecao = `Projeção (${meses} ${meses === 1 ? "mês" : "meses"})`;
+
   return (
     <View>
-      <View style={[styles.balanceCard, {backgroundColor: colors.card}]}>
+      <View style={[styles.balanceCard, { backgroundColor: colors.card }]}>
         <View style={styles.balanceTop}>
           <View style={styles.labelRow}>
-            <Text style={[styles.balanceLabel, {color: colors.text}]}>Saldo atual</Text>
-            <TouchableOpacity
-              onPress={toggleOcultarValores}
-              style={styles.eyeBtn}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name={ocultarValores ? "eye-off-outline" : "eye-outline"}
-                size={18}
-                color={colors.text}
-              />
-            </TouchableOpacity>
+            <Text style={[styles.balanceLabel, { color: colors.text }]}>
+              Saldo atual
+            </Text>
           </View>
 
           <TouchableOpacity
@@ -46,16 +39,22 @@ export default function Saldo({
             style={[styles.addBtn, { backgroundColor: colors.principal }]}
             activeOpacity={0.8}
           >
-            <Ionicons name="add" size={22} color={'#fff'} />
+            <Ionicons name="add" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
 
-        <Text style={[styles.balanceValue, {color: colors.text}]}>{fmt(saldoAtual)}</Text>
+        <Text style={[styles.balanceValue, { color: colors.text }]}>
+          {fmt(saldoAtual)}
+        </Text>
 
         <View style={styles.balanceBottom}>
           <View>
-            <Text style={[styles.miniLabel, {color: colors.text}]}>Caixa livre</Text>
-            <Text style={[styles.miniValue, {color: colors.text}]}>{fmt(caixaGeral)}</Text>
+            <Text style={[styles.miniLabel, { color: colors.text }]}>
+              Caixa livre
+            </Text>
+            <Text style={[styles.miniValue, { color: colors.text }]}>
+              {fmt(caixaGeral)}
+            </Text>
           </View>
 
           <TouchableOpacity
@@ -64,22 +63,35 @@ export default function Saldo({
             style={styles.caixinhasBtn}
           >
             <View style={styles.caixinhasTitleRow}>
-              <Text style={[styles.miniLabel, {color: colors.text}]}>Caixinhas</Text>
+              <Text style={[styles.miniLabel, { color: colors.text }]}>
+                Caixinhas
+              </Text>
               <Ionicons name="chevron-forward" size={14} color="#888" />
             </View>
-            <Text style={[styles.miniValue, {color: colors.text}]}>{fmt(emCaixinhas)}</Text>
+            <Text style={[styles.miniValue, { color: colors.text }]}>
+              {fmt(emCaixinhas)}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <View style={styles.chipsRow}>
-        <View style={[styles.chip, {backgroundColor: colors.card}]}>
-          <Text style={[styles.chipLabel, {color: colors.text}]}>Saldo anterior</Text>
-          <Text style={[styles.chipValue, {color: colors.text}]}>{fmt(saldoAnterior)}</Text>
+        <View style={[styles.chip, { backgroundColor: colors.card }]}>
+          <Text style={[styles.chipLabel, { color: colors.text }]}>
+            Saldo anterior
+          </Text>
+          <Text style={[styles.chipValue, { color: colors.text }]}>
+            {fmt(saldoAnterior)}
+          </Text>
         </View>
-        <View style={[styles.chip, {backgroundColor: colors.card}]}>
-          <Text style={[styles.chipLabel, {color: colors.text}]}>Projeção</Text>
-          <Text style={[styles.chipValue, {color: colors.text}]}>{fmt(projecaoFutura)}</Text>
+
+        <View style={[styles.chip, { backgroundColor: colors.card }]}>
+          <Text style={[styles.chipLabel, { color: colors.text }]}>
+            {labelProjecao}
+          </Text>
+          <Text style={[styles.chipValue, { color: colors.text }]}>
+            {fmt(projecaoFutura)}
+          </Text>
         </View>
       </View>
     </View>
@@ -116,7 +128,7 @@ const styles = StyleSheet.create({
     color: "#000",
   },
   balanceValue: {
-    fontSize: 30,
+    fontSize: 24,
     fontFamily: "Roboto-Bold",
     letterSpacing: -1,
     marginBottom: 16,
@@ -153,7 +165,7 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   chipValue: {
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: "Roboto-Medium",
     color: "#222",
   },

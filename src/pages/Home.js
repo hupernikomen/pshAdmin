@@ -18,9 +18,7 @@ import { useAuth } from "../context/AuthContext";
 import Load from "../componentes/Load";
 import Saldo from "../componentes/Saldo";
 import SwipeCard from "../componentes/SwipeCard";
-
 import { useAppTheme } from "../context/ThemeContext";
-
 import {
   arred,
   fimDoDiaTs,
@@ -97,20 +95,75 @@ function inicioMediaDizimos(createdAt) {
   return new Date(d.getFullYear(), d.getMonth() + 1, 1, 0, 0, 0, 0);
 }
 
-// function tituloIgrejaHeader(nome) {
-//   if (!nome) return "Início";
+/**
+ * Horizonte da projeção em meses.
+ * - Sem compromissos futuros datados → 1 mês
+ * - Com parcelas / a receber / a pagar futuros → até o mês mais distante
+ * - Futura sem vencimento não estende o horizonte sozinha
+ */
+function mesesHorizonteProjecao(lista) {
+  const agora = new Date();
+  const agoraTs = agora.getTime();
+  let maxTs = 0;
 
-//   let s = String(nome);
+  for (const item of lista || []) {
+    if (item?.tipoMovimento === "entrada") {
+      const falta = valorAReceberItem(item);
+      if (!(falta > 0.001)) continue;
 
-//   // Ordem importa: frases maiores primeiro
-//   s = s.replace(/assembleia\s+de\s+deus/gi, "A. D.");
-//   s = s.replace(/presbiteriana/gi, "P.");
-//   s = s.replace(/batista/gi, "B.");
-//   s = s.replace(/igreja/gi, "I.");
+      const ts = dataDoItem(item);
+      if (ts && ts > agoraTs) {
+        maxTs = Math.max(maxTs, ts);
+      }
+      continue;
+    }
 
-//   // limpa espaços duplos
-//   return s.replace(/\s+/g, " ").trim() || "Início";
-// }
+    if (item?.tipoMovimento !== "saida") continue;
+
+    const falta = valorAPagarItem(item);
+    if (!(falta > 0.001)) continue;
+
+    const parcelas = Array.isArray(item.parcelas) ? item.parcelas : [];
+    let pegouParcela = false;
+
+    for (const p of parcelas) {
+      const aberta =
+        p.status === "aberta" ||
+        (p.status !== "paga" &&
+          p.status !== "quitada" &&
+          !p.pago &&
+          !p.dataPagamento &&
+          !p.pagoEm);
+
+      if (!aberta) continue;
+
+      const ts = Number(p.vencimento || p.data || 0);
+      if (ts) {
+        maxTs = Math.max(maxTs, ts);
+        pegouParcela = true;
+      }
+    }
+
+    if (pegouParcela) continue;
+
+    // Futura sem prazo: não empurra o horizonte
+    if (item.tipo === "Futura" && !item.vencimento) continue;
+
+    const ts = Number(item.vencimento || item.data || dataDoItem(item) || 0);
+    if (ts && ts > agoraTs) {
+      maxTs = Math.max(maxTs, ts);
+    }
+  }
+
+  if (!maxTs) return 1;
+
+  const fim = new Date(maxTs);
+  const meses =
+    (fim.getFullYear() - agora.getFullYear()) * 12 +
+    (fim.getMonth() - agora.getMonth());
+
+  return Math.max(1, meses);
+}
 
 export default function Home() {
   const {
@@ -127,6 +180,8 @@ export default function Home() {
     igrejaAtiva,
     igrejasDoUsuario,
     selecionarIgreja,
+    ocultarValores,
+    toggleOcultarValores,
   } = useContext(AppContext);
 
   const { isDark, toggleLightDark } = useAppTheme();
@@ -156,9 +211,28 @@ export default function Home() {
   }, [igrejaAtiva?.id]);
 
   useEffect(() => {
-    const nomeIgreja = igrejaAtiva?.nome
-
     navigation.setOptions({
+      headerLeft: () => (
+        <TouchableOpacity
+          onPress={() => setMenuAberto(true)}
+          style={{ padding: 2 }}
+          activeOpacity={0.8}
+        >
+          {foto ? (
+            <Image source={{ uri: foto }} style={styles.avatar} />
+          ) : (
+            <View
+              style={[
+                styles.avatar,
+                styles.avatarFallback,
+                { backgroundColor: principal },
+              ]}
+            >
+              <Ionicons name="person" size={16} color="#fff" />
+            </View>
+          )}
+        </TouchableOpacity>
+      ),
       headerTitle: () => (
         <View style={{ justifyContent: "center" }}>
           <Text
@@ -169,17 +243,7 @@ export default function Home() {
             }}
             numberOfLines={1}
           >
-            Tig
-          </Text>
-          <Text
-            style={{
-              fontSize: 13,
-              fontFamily: "Roboto-Light",
-              color: text,
-            }}
-            numberOfLines={1}
-          >
-            {semIgreja ? "Sem igreja" : nomeIgreja}
+            Olá, {nome.trim().split(" ")[0]}
           </Text>
         </View>
       ),
@@ -189,40 +253,33 @@ export default function Home() {
             flexDirection: "row",
             alignItems: "center",
             marginRight: 8,
-            gap: 14,
+            gap: 12,
           }}
         >
           <TouchableOpacity
-            onPress={toggleLightDark}
-            style={{ padding: 6, marginRight: 4 }}
+            onPress={() => toggleOcultarValores?.()}
+            style={{ padding: 6 }}
             activeOpacity={0.7}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Ionicons
-              name={isDark ? "sunny-outline" : "moon-outline"}
-              size={22}
+              name={ocultarValores ? "eye-off-outline" : "eye-outline"}
+              size={20}
               color={text}
             />
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setMenuAberto(true)}
-            style={{ padding: 2 }}
-            activeOpacity={0.8}
+            onPress={toggleLightDark}
+            style={{ padding: 6 }}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            {foto ? (
-              <Image source={{ uri: foto }} style={styles.avatar} />
-            ) : (
-              <View
-                style={[
-                  styles.avatar,
-                  styles.avatarFallback,
-                  { backgroundColor: principal },
-                ]}
-              >
-                <Ionicons name="person" size={16} color="#fff" />
-              </View>
-            )}
+            <Ionicons
+              name={isDark ? "sunny-outline" : "moon-outline"}
+              size={20}
+              color={text}
+            />
           </TouchableOpacity>
         </View>
       ),
@@ -230,6 +287,7 @@ export default function Home() {
   }, [
     navigation,
     foto,
+    nome,
     igrejaAtiva?.nome,
     principal,
     isDark,
@@ -237,6 +295,8 @@ export default function Home() {
     muted,
     semIgreja,
     toggleLightDark,
+    ocultarValores,
+    toggleOcultarValores,
   ]);
 
   async function carregar() {
@@ -274,10 +334,9 @@ export default function Home() {
     navigation.navigate("Configuracoes");
   }
 
-
   function abrirProjecao() {
-    setMenuAberto(false)
-    navigation.navigate('Projecao')
+    setMenuAberto(false);
+    navigation.navigate("Projecao");
   }
 
   function abrirTrocarIgreja() {
@@ -323,15 +382,20 @@ export default function Home() {
   );
 
   const projecaoFutura = arred(saldoAtual + aReceberTotal - despesasFuturas);
+  const projecaoMeses = mesesHorizonteProjecao(lista);
 
   const totalDizimosMes = lista
-    .filter((i) => i.tipoMovimento === "entrada" && i.tipo === "Dízimo")
+    .filter((i) => {
+      if (i.tipoMovimento !== "entrada") return false;
+      const t = String(i.tipo || "").toLowerCase();
+      return t.includes("dizimo") || t.includes("dízimo");
+    })
     .reduce(
       (acc, i) => acc + entradasNoMes(i, mesAtual, anoAtual, limiteHoje),
       0
     );
 
-  let mediaDizimosAnual = 0;
+  let mediaDizimosFechados = 0;
   const inicioMedia = inicioMediaDizimos(igrejaAtiva?.createdAt);
 
   if (inicioMedia) {
@@ -339,11 +403,26 @@ export default function Home() {
     const siMes = inicioMedia.getMonth();
     const idxInicio = siAno * 12 + siMes;
     const idxAtual = anoAtual * 12 + mesAtual;
-    let meses = idxAtual - idxInicio + 1;
+    const idxUltimoFechado = idxAtual - 1;
+    const mesesFechados = idxUltimoFechado - idxInicio + 1;
 
-    if (meses >= 1) {
-      const totalDizimosPeriodo = lista
-        .filter((i) => i.tipoMovimento === "entrada" && i.tipo === "Dízimo")
+    if (mesesFechados >= 1) {
+      const fimUltimoFechado = new Date(
+        Math.floor(idxUltimoFechado / 12),
+        (idxUltimoFechado % 12) + 1,
+        0,
+        23,
+        59,
+        59,
+        999
+      ).getTime();
+
+      const totalDizimosFechados = lista
+        .filter((i) => {
+          if (i.tipoMovimento !== "entrada") return false;
+          const t = String(i.tipo || "").toLowerCase();
+          return t.includes("dizimo") || t.includes("dízimo");
+        })
         .reduce((acc, i) => {
           const recebidos = Array.isArray(i.valoresRecebidos)
             ? i.valoresRecebidos
@@ -356,9 +435,10 @@ export default function Home() {
                 const ts = Number(r.data || 0);
                 if (!ts || ts > limiteHoje) return s;
                 if (ts < inicioMedia.getTime()) return s;
+                if (ts > fimUltimoFechado) return s;
                 const d = new Date(ts);
                 const idx = d.getFullYear() * 12 + d.getMonth();
-                if (idx >= idxInicio && idx <= idxAtual) {
+                if (idx >= idxInicio && idx <= idxUltimoFechado) {
                   return s + (Number(r.valor) || 0);
                 }
                 return s;
@@ -368,28 +448,33 @@ export default function Home() {
 
           const ts = dataDoItem(i);
           if (!ts || ts > limiteHoje || ts < inicioMedia.getTime()) return acc;
+          if (ts > fimUltimoFechado) return acc;
           const d = new Date(ts);
           const idx = d.getFullYear() * 12 + d.getMonth();
-          if (idx >= idxInicio && idx <= idxAtual) {
+          if (idx >= idxInicio && idx <= idxUltimoFechado) {
             return acc + (Number(i.valorRecebidoTotal) || 0);
           }
           return acc;
         }, 0);
 
-      mediaDizimosAnual = totalDizimosPeriodo / meses;
+      mediaDizimosFechados = totalDizimosFechados / mesesFechados;
     }
   } else {
-    const totalDizimosAno = lista
-      .filter((i) => i.tipoMovimento === "entrada" && i.tipo === "Dízimo")
-      .reduce((acc, i) => {
-        let s = 0;
-        for (let m = 0; m <= mesAtual; m++) {
-          s += entradasNoMes(i, m, anoAtual, limiteHoje);
-        }
-        return acc + s;
-      }, 0);
-    mediaDizimosAnual =
-      mesAtual + 1 > 0 ? totalDizimosAno / (mesAtual + 1) : 0;
+    if (mesAtual >= 1) {
+      let total = 0;
+      lista
+        .filter((i) => {
+          if (i.tipoMovimento !== "entrada") return false;
+          const t = String(i.tipo || "").toLowerCase();
+          return t.includes("dizimo") || t.includes("dízimo");
+        })
+        .forEach((i) => {
+          for (let m = 0; m < mesAtual; m++) {
+            total += entradasNoMes(i, m, anoAtual, limiteHoje);
+          }
+        });
+      mediaDizimosFechados = total / mesAtual;
+    }
   }
 
   const resumoItens = useMemo(
@@ -427,8 +512,8 @@ export default function Home() {
       {
         id: "4",
         label: "Média de dízimos",
-        sub: "Recebidos / Meses",
-        value: `R$ ${formatoMoeda.format(mediaDizimosAnual)}`,
+        sub: `Parcial do mês: R$ ${formatoMoeda.format(totalDizimosMes)}`,
+        value: `R$ ${formatoMoeda.format(mediaDizimosFechados)}`,
         icon: "stats-chart-outline",
         tint: dark ? "#3D2E1A" : "#FFF3E0",
         iconColor: dark ? "#FFB74D" : "#EF6C00",
@@ -438,7 +523,7 @@ export default function Home() {
       aReceberTotal,
       despesasFuturas,
       totalDizimosMes,
-      mediaDizimosAnual,
+      mediaDizimosFechados,
       formatoMoeda,
       dark,
     ]
@@ -482,14 +567,15 @@ export default function Home() {
             />
           }
           ListHeaderComponent={
-              <Saldo
-                caixaGeral={caixaGeral}
-                saldoAtual={saldoAtual}
-                saldoAnterior={saldoAnterior}
-                projecaoFutura={projecaoFutura}
-                qtdCaixinhas={qtdCaixinhas}
-                emCaixinhas={emCaixinhas}
-              />
+            <Saldo
+              caixaGeral={caixaGeral}
+              saldoAtual={saldoAtual}
+              saldoAnterior={saldoAnterior}
+              projecaoFutura={projecaoFutura}
+              projecaoMeses={projecaoMeses}
+              qtdCaixinhas={qtdCaixinhas}
+              emCaixinhas={emCaixinhas}
+            />
           }
           renderItem={({ item }) => (
             <SwipeCard
@@ -502,13 +588,13 @@ export default function Home() {
               actions={
                 item.route
                   ? [
-                    {
-                      key: "go",
-                      icon: "arrow-forward",
-                      backgroundColor: principal,
-                      onPress: () => navigation.navigate(item.route),
-                    },
-                  ]
+                      {
+                        key: "go",
+                        icon: "arrow-forward",
+                        backgroundColor: principal,
+                        onPress: () => navigation.navigate(item.route),
+                      },
+                    ]
                   : []
               }
               onPress={
@@ -527,12 +613,15 @@ export default function Home() {
         onRequestClose={() => setMenuAberto(false)}
       >
         <Pressable
-          style={styles.menuOverlay}
+          style={[
+            styles.menuOverlay,
+            { backgroundColor: dark ? "#00000099" : "#21212199" },
+          ]}
           onPress={() => setMenuAberto(false)}
         >
           <Pressable
             style={[styles.menuCard, { backgroundColor: card }]}
-            onPress={() => { }}
+            onPress={() => {}}
           >
             <View style={[styles.menuUser, { borderBottomColor: border }]}>
               {foto ? (
@@ -553,7 +642,10 @@ export default function Home() {
                   {nome}
                 </Text>
                 {!!igrejaAtiva?.papel && (
-                  <Text style={[styles.menuIgreja, { color: muted }]} numberOfLines={1}>
+                  <Text
+                    style={[styles.menuIgreja, { color: muted }]}
+                    numberOfLines={1}
+                  >
                     {igrejaAtiva.papel}
                   </Text>
                 )}
@@ -578,10 +670,11 @@ export default function Home() {
                 activeOpacity={0.8}
               >
                 <Ionicons name="people-outline" size={18} color={text} />
-                <Text style={[styles.menuItemText, { color: text }]}>Membros</Text>
+                <Text style={[styles.menuItemText, { color: text }]}>
+                  Membros
+                </Text>
               </TouchableOpacity>
             )}
-
 
             <TouchableOpacity
               style={styles.menuItem}
@@ -593,13 +686,18 @@ export default function Home() {
                 Configurações
               </Text>
             </TouchableOpacity>
+
             {variasIgrejas && (
               <TouchableOpacity
                 style={styles.menuItem}
                 onPress={abrirTrocarIgreja}
                 activeOpacity={0.8}
               >
-                <Ionicons name="swap-horizontal-outline" size={18} color={text} />
+                <Ionicons
+                  name="swap-horizontal-outline"
+                  size={18}
+                  color={text}
+                />
                 <Text style={[styles.menuItemText, { color: text }]}>
                   Trocar igreja
                 </Text>
@@ -630,7 +728,7 @@ export default function Home() {
         >
           <Pressable
             style={[styles.menuCard, { width: 280, backgroundColor: card }]}
-            onPress={() => { }}
+            onPress={() => {}}
           >
             <Text style={[styles.modalIgrejaTitulo, { color: text }]}>
               Suas igrejas
@@ -682,9 +780,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 25,
+    marginHorizontal: 14,
   },
   avatarFallback: {
     alignItems: "center",
@@ -732,10 +831,9 @@ const styles = StyleSheet.create({
   },
   menuOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    alignItems: "flex-end",
-    paddingTop: 56,
-    paddingRight: 12,
+    alignItems: "flex-start",
+    paddingTop: 28,
+    paddingLeft: 4,
   },
   menuCard: {
     width: 260,
@@ -752,9 +850,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   menuAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 25,
   },
   menuNome: {
     fontSize: 14,

@@ -61,7 +61,7 @@ export default function AReceber() {
     igrejaAtiva,
   } = useContext(AppContext);
 
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
   const { uid, authPronto } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [abertoId, setAbertoId] = useState(null);
@@ -75,6 +75,18 @@ export default function AReceber() {
 
   const podeEditar = podeEditarFinanceiro?.() !== false;
   const limiteHoje = fimDoDiaTs();
+
+  const principal = colors.principal || colors.primary;
+  const text = colors.text;
+  const muted = colors.muted || (dark ? "#9aa0a6" : "#888");
+  const card = colors.card;
+  const bg = colors.background;
+  const surface = dark ? "#2a2a2a" : "#f4f5f7";
+  const border = colors.border || (dark ? "#333" : "#ececec");
+  const okGreen = dark ? "#81C784" : "#2E7D32";
+  const warnOrange = dark ? "#FFB74D" : "#EF6C00";
+  const tintOk = dark ? "#1B3D2F" : "#E8F5E9";
+  const tintWarn = dark ? "#3D2A14" : "#FFF3E0";
 
   useEffect(() => {
     if (!authPronto || !uid) return;
@@ -101,7 +113,6 @@ export default function AReceber() {
       const valor = valorAReceberItem(i);
       if (valor <= 0.001) return;
 
-      const ts = dataDoItem(i);
       lista.push({
         ...i,
         rowId: i.id,
@@ -194,7 +205,6 @@ export default function AReceber() {
         updatedAt: Date.now(),
       };
 
-      // Entrada futura: ao baixar, a data do documento passa a ser a do recebimento
       if (itemSel.isFuturo) {
         payload.data = dataRecTs;
         if (!(totalDoc > 0)) {
@@ -217,7 +227,7 @@ export default function AReceber() {
   if ((!authPronto || load) && !refreshing) return <Load />;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: bg }]}>
       <FlatList
         data={pendentes}
         keyExtractor={(item) => item.rowId}
@@ -227,20 +237,23 @@ export default function AReceber() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={[colors.principal]}
+            colors={[principal]}
+            tintColor={principal}
           />
         }
         ListEmptyComponent={
           <View style={styles.emptyBox}>
-            <View style={styles.emptyIcon}>
+            <View style={[styles.emptyIcon, { backgroundColor: card }]}>
               <Ionicons
                 name="checkmark-circle-outline"
                 size={28}
-                color="#9aa3ad"
+                color={muted}
               />
             </View>
-            <Text style={styles.emptyTitle}>Nada a receber</Text>
-            <Text style={styles.emptyText}>
+            <Text style={[styles.emptyTitle, { color: muted }]}>
+              Nada a receber
+            </Text>
+            <Text style={[styles.emptyText, { color: muted }]}>
               {!uid
                 ? "Faça login para ver os valores."
                 : "Quando houver entradas em aberto ou com data futura, elas aparecem aqui."}
@@ -266,7 +279,7 @@ export default function AReceber() {
                   key: "receber",
                   icon: item.isFuturo ? "calendar-outline" : "download-outline",
                   label: item.isFuturo ? "Baixar" : "Receber",
-                  backgroundColor: colors.principal,
+                  backgroundColor: principal,
                   onPress: () => abrirReceber(item),
                 },
               ]
@@ -275,8 +288,8 @@ export default function AReceber() {
           return (
             <SwipeCard
               icon={item.isFuturo ? "time-outline" : "arrow-down-outline"}
-              iconColor={item.isFuturo ? "#EF6C00" : "#2E7D32"}
-              tint={item.isFuturo ? "#FFF3E0" : "#E8F5E9"}
+              iconColor={item.isFuturo ? warnOrange : okGreen}
+              tint={item.isFuturo ? tintWarn : tintOk}
               title={item.descricao || "Sem descrição"}
               subtitle={meta}
               value={`R$ ${formatoMoeda.format(item.falta)}`}
@@ -303,33 +316,38 @@ export default function AReceber() {
             behavior={Platform.OS === "ios" ? "padding" : undefined}
             style={{ width: "100%", alignItems: "center" }}
           >
-            <Pressable style={styles.modalCard} onPress={() => {}}>
-              <Text style={styles.modalTitle}>
+            <Pressable
+              style={[styles.modalCard, { backgroundColor: card }]}
+              onPress={() => {}}
+            >
+              <Text style={[styles.modalTitle, { color: text }]}>
                 {itemSel?.isFuturo
                   ? "Baixar entrada futura"
                   : "Registrar recebimento"}
               </Text>
-              <Text style={styles.modalSub}>
+              <Text style={[styles.modalSub, { color: muted }]}>
                 {itemSel?.descricao || ""} · R${" "}
                 {formatoMoeda.format(itemSel?.falta || 0)}
               </Text>
 
               {!!itemSel?.isFuturo && (
-                <Text style={styles.hintFuturo}>
+                <Text style={[styles.hintFuturo, { color: warnOrange }]}>
                   Esta entrada tem data futura. Ao confirmar, a data do registro
                   passa a ser a data do recebimento e o valor entra no caixa
                   nessa data.
                 </Text>
               )}
 
-              <Text style={styles.inputLabel}>Data do recebimento</Text>
+              <Text style={[styles.inputLabel, { color: muted }]}>
+                Data do recebimento
+              </Text>
               <TouchableOpacity
-                style={styles.dateBox}
+                style={[styles.dateBox, { backgroundColor: surface }]}
                 onPress={() => setShowDatePicker(true)}
                 activeOpacity={0.8}
               >
-                <Ionicons name="calendar-outline" size={18} color="#666" />
-                <Text style={styles.dateText}>
+                <Ionicons name="calendar-outline" size={18} color={muted} />
+                <Text style={[styles.dateText, { color: text }]}>
                   {dataRecebimento.toLocaleDateString("pt-BR")}
                 </Text>
               </TouchableOpacity>
@@ -349,30 +367,44 @@ export default function AReceber() {
                   style={styles.dateOk}
                   onPress={() => setShowDatePicker(false)}
                 >
-                  <Text style={[styles.dateOkText, { color: colors.principal }]}>
+                  <Text style={[styles.dateOkText, { color: principal }]}>
                     OK
                   </Text>
                 </TouchableOpacity>
               )}
 
-              <Text style={styles.inputLabel}>Valor recebido</Text>
+              <Text style={[styles.inputLabel, { color: muted }]}>
+                Valor recebido
+              </Text>
               <TextInput
-                style={styles.input}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: surface,
+                    color: text,
+                    borderColor: border,
+                  },
+                ]}
                 value={valorRecebido}
                 onChangeText={setValorRecebido}
                 keyboardType="decimal-pad"
                 placeholder="0,00"
-                placeholderTextColor="#aaa"
+                placeholderTextColor={muted}
               />
 
               <View style={styles.modalActions}>
-                <TouchableOpacity style={styles.btnCancel} onPress={fecharModal}>
-                  <Text style={styles.btnCancelText}>Cancelar</Text>
+                <TouchableOpacity
+                  style={[styles.btnCancel, { backgroundColor: surface }]}
+                  onPress={fecharModal}
+                >
+                  <Text style={[styles.btnCancelText, { color: muted }]}>
+                    Cancelar
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
                     styles.btnOk,
-                    { backgroundColor: colors.principal },
+                    { backgroundColor: principal },
                     salvando && { opacity: 0.7 },
                   ]}
                   onPress={confirmarRecebimento}
@@ -403,7 +435,6 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 18,
-    backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -411,18 +442,16 @@ const styles = StyleSheet.create({
     marginTop: 14,
     fontSize: 16,
     fontFamily: "Roboto-Medium",
-    color: "#666",
   },
   emptyText: {
     marginTop: 6,
     fontSize: 13,
     fontFamily: "Roboto-Regular",
-    color: "#999",
     textAlign: "center",
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(0,0,0,0.55)",
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
@@ -430,49 +459,43 @@ const styles = StyleSheet.create({
   modalCard: {
     width: "100%",
     maxWidth: 400,
-    backgroundColor: "#fff",
     borderRadius: 22,
     padding: 18,
   },
   modalTitle: {
     fontSize: 17,
     fontFamily: "Roboto-Bold",
-    color: "#1f2933",
   },
   modalSub: {
     marginTop: 4,
     marginBottom: 10,
     fontSize: 13,
     fontFamily: "Roboto-Regular",
-    color: "#888",
   },
   hintFuturo: {
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    color: "#EF6C00",
     marginBottom: 12,
     lineHeight: 18,
   },
   inputLabel: {
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    color: "#777",
     marginBottom: 4,
   },
   input: {
-    backgroundColor: "#f4f5f7",
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
     fontFamily: "Roboto-Regular",
     marginBottom: 12,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   dateBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: "#f4f5f7",
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -481,7 +504,6 @@ const styles = StyleSheet.create({
   dateText: {
     fontSize: 15,
     fontFamily: "Roboto-Medium",
-    color: "#1f2933",
   },
   dateOk: {
     alignSelf: "flex-end",
@@ -498,13 +520,11 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     borderRadius: 14,
-    backgroundColor: "#f4f5f7",
     alignItems: "center",
   },
   btnCancelText: {
     fontSize: 14,
     fontFamily: "Roboto-Medium",
-    color: "#555",
   },
   btnOk: {
     flex: 1,

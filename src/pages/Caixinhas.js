@@ -53,7 +53,7 @@ export default function Caixinhas() {
     igrejaAtiva,
   } = useContext(AppContext);
 
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
   const navigation = useNavigation();
   const [refreshing, setRefreshing] = useState(false);
   const [abertoId, setAbertoId] = useState(null);
@@ -66,6 +66,19 @@ export default function Caixinhas() {
   const [salvando, setSalvando] = useState(false);
 
   const podeEditar = podeEditarFinanceiro?.() !== false;
+
+  const principal = colors.principal || colors.primary;
+  const text = colors.text;
+  const muted = colors.muted || (dark ? "#9aa0a6" : "#888");
+  const card = colors.card;
+  const bg = colors.background;
+  const surface = dark ? "#2a2a2a" : "#f4f5f7";
+  const border = colors.border || (dark ? "#333" : "#ececec");
+  const danger = dark ? "#E57373" : "#C62828";
+  const okGreen = dark ? "#81C784" : "#2E7D32";
+  const warnOrange = dark ? "#FFB74D" : "#E65100";
+  const iconMuted = dark ? "#9aa0a6" : "#555";
+  const tintCard = dark ? "#2c2c2c" : "#f0f0f0";
 
   useEffect(() => {
     navigation.setOptions({
@@ -220,7 +233,7 @@ export default function Caixinhas() {
   if (load && !refreshing) return <Load />;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: bg }]}>
       <FlatList
         data={caixinhas || []}
         keyExtractor={(item) => item.id}
@@ -229,21 +242,24 @@ export default function Caixinhas() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={[colors.principal]}
+            colors={[principal]}
+            tintColor={principal}
           />
         }
         ListEmptyComponent={
           <View style={styles.emptyBox}>
-            <View style={styles.emptyIcon}>
-              <Ionicons name="wallet-outline" size={26} color="#9aa3ad" />
+            <View style={[styles.emptyIcon, { backgroundColor: card }]}>
+              <Ionicons name="wallet-outline" size={26} color={muted} />
             </View>
-            <Text style={styles.emptyTitle}>Nenhuma caixinha</Text>
-            <Text style={styles.emptyText}>
+            <Text style={[styles.emptyTitle, { color: muted }]}>
+              Nenhuma caixinha
+            </Text>
+            <Text style={[styles.emptyText, { color: muted }]}>
               Reserve valores do caixa livre para ministérios ou projetos.
             </Text>
             {podeEditar && (
               <TouchableOpacity
-                style={[styles.emptyBtn, { backgroundColor: colors.principal }]}
+                style={[styles.emptyBtn, { backgroundColor: principal }]}
                 onPress={abrirCriar}
               >
                 <Text style={styles.emptyBtnText}>Criar caixinha</Text>
@@ -258,21 +274,21 @@ export default function Caixinhas() {
                   key: "reservar",
                   icon: "arrow-down-outline",
                   label: "Reservar",
-                  backgroundColor: "#2E7D32",
+                  backgroundColor: okGreen,
                   onPress: () => abrirDepositar(item),
                 },
                 {
                   key: "retirar",
                   icon: "arrow-up-outline",
                   label: "Retirar",
-                  backgroundColor: "#E65100",
+                  backgroundColor: warnOrange,
                   onPress: () => abrirRetirar(item),
                 },
                 {
                   key: "excluir",
                   icon: "trash-outline",
                   label: "Excluir",
-                  backgroundColor: "#C62828",
+                  backgroundColor: danger,
                   onPress: () => confirmarExcluir(item),
                 },
               ]
@@ -281,8 +297,8 @@ export default function Caixinhas() {
           return (
             <SwipeCard
               icon="wallet-outline"
-              iconColor="#555"
-              tint="#f0f0f0"
+              iconColor={iconMuted}
+              tint={tintCard}
               title={item.nome}
               subtitle="Reservado"
               value={`R$ ${formatoMoeda.format(item.valor || 0)}`}
@@ -298,7 +314,7 @@ export default function Caixinhas() {
 
       {podeEditar && (caixinhas || []).length > 0 && (
         <TouchableOpacity
-          style={[styles.fab, { backgroundColor: colors.principal }]}
+          style={[styles.fab, { backgroundColor: principal }]}
           onPress={abrirCriar}
           activeOpacity={0.85}
         >
@@ -321,61 +337,84 @@ export default function Caixinhas() {
             behavior={Platform.OS === "ios" ? "padding" : undefined}
             style={{ width: "100%", alignItems: "center" }}
           >
-            <Pressable style={styles.modal} onPress={() => {}}>
-              <Text style={styles.modalTitle}>{tituloModal}</Text>
+            <Pressable
+              style={[styles.modal, { backgroundColor: card }]}
+              onPress={() => {}}
+            >
+              <Text style={[styles.modalTitle, { color: text }]}>
+                {tituloModal}
+              </Text>
 
               {modoModal === "criar" && (
                 <>
-                  <Text style={styles.label}>Nome</Text>
+                  <Text style={[styles.label, { color: muted }]}>Nome</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[
+                      styles.input,
+                      {
+                        backgroundColor: surface,
+                        color: text,
+                        borderColor: border,
+                      },
+                    ]}
                     value={nome}
                     onChangeText={setNome}
                     placeholder="Ex: Missões, Jovens..."
-                    placeholderTextColor="#aaa"
+                    placeholderTextColor={muted}
                   />
                 </>
               )}
 
               {modoModal !== "criar" && (
-                <Text style={styles.modalSub}>{cxSel?.nome}</Text>
+                <Text style={[styles.modalSub, { color: muted }]}>
+                  {cxSel?.nome}
+                </Text>
               )}
 
-              <Text style={styles.label}>
+              <Text style={[styles.label, { color: muted }]}>
                 {modoModal === "retirar" ? "Valor a retirar" : "Valor"}
               </Text>
               <TextInput
-                style={styles.input}
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: surface,
+                    color: text,
+                    borderColor: border,
+                  },
+                ]}
                 value={valor}
                 onChangeText={setValor}
                 keyboardType="decimal-pad"
                 placeholder="0,00"
-                placeholderTextColor="#aaa"
+                placeholderTextColor={muted}
               />
 
               {modoModal !== "retirar" && (
-                <Text style={styles.hint}>
+                <Text style={[styles.hint, { color: muted }]}>
                   Disponível no caixa livre: R${" "}
                   {formatoMoeda.format(saldoDisponivel || 0)}
                 </Text>
               )}
               {modoModal === "retirar" && (
-                <Text style={styles.hint}>
+                <Text style={[styles.hint, { color: muted }]}>
                   Na caixinha: R$ {formatoMoeda.format(cxSel?.valor || 0)}
                 </Text>
               )}
 
               <View style={styles.modalActions}>
                 <TouchableOpacity
-                  style={styles.btnCancel}
+                  style={[styles.btnCancel, { backgroundColor: surface }]}
                   onPress={() => setModalVisible(false)}
                 >
-                  <Text style={styles.btnCancelText}>Cancelar</Text>
+                  <Text style={[styles.btnCancelText, { color: muted }]}>
+                    Cancelar
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
                     styles.btnOk,
-                    { backgroundColor: colors.principal },
+                    { backgroundColor: principal },
                     salvando && { opacity: 0.7 },
                   ]}
                   onPress={confirmarModal}
@@ -395,7 +434,7 @@ export default function Caixinhas() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingTop: 14, paddingHorizontal:14 },
+  container: { flex: 1, paddingTop: 14, paddingHorizontal: 14 },
   list: { paddingBottom: 20 },
   emptyBox: {
     marginTop: 48,
@@ -406,7 +445,6 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 18,
-    backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -414,13 +452,11 @@ const styles = StyleSheet.create({
     marginTop: 14,
     fontSize: 16,
     fontFamily: "Roboto-Medium",
-    color: "#666",
   },
   emptyText: {
     marginTop: 6,
     fontSize: 13,
     fontFamily: "Roboto-Regular",
-    color: "#999",
     textAlign: "center",
   },
   emptyBtn: {
@@ -453,7 +489,7 @@ const styles = StyleSheet.create({
   },
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: "rgba(0,0,0,0.55)",
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
@@ -461,41 +497,36 @@ const styles = StyleSheet.create({
   modal: {
     width: "100%",
     maxWidth: 400,
-    backgroundColor: "#fff",
     borderRadius: 20,
     padding: 18,
   },
   modalTitle: {
     fontSize: 17,
     fontFamily: "Roboto-Bold",
-    color: "#1f2933",
     marginBottom: 12,
   },
   modalSub: {
     fontSize: 13,
     fontFamily: "Roboto-Regular",
-    color: "#888",
     marginBottom: 10,
   },
   label: {
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    color: "#777",
     marginBottom: 4,
   },
   input: {
-    backgroundColor: "#f4f5f7",
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
     fontFamily: "Roboto-Regular",
     marginBottom: 12,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   hint: {
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    color: "#888",
     marginBottom: 12,
   },
   modalActions: { flexDirection: "row", gap: 10 },
@@ -503,13 +534,11 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: "#f4f5f7",
     alignItems: "center",
   },
   btnCancelText: {
     fontSize: 14,
     fontFamily: "Roboto-Medium",
-    color: "#555",
   },
   btnOk: {
     flex: 1,

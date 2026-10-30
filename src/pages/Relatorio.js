@@ -14,8 +14,6 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
 import Load from "../componentes/Load";
-import GrafBarras from "../componentes/GrafBarras";
-import GrafLinhas from "../componentes/GrafLinhas";
 import { exportarRelatorioPDF } from "../utils/relatorioPdf";
 import { montarComentarioRelatorio } from "../utils/comentarioRelatorioOffline";
 
@@ -92,6 +90,11 @@ function seedSaldoInicial(lista, igreja) {
   return arred(Number(igreja?.saldoInicial) || 0);
 }
 
+function nomeMinisterio(item) {
+  const m = String(item?.ministerio || "").trim();
+  return m || "Sem ministério";
+}
+
 function realizadoNoIntervalo(lista, iniTs, fimTs) {
   const teto = Math.min(fimTs, hojeFimTs());
   let entradas = 0;
@@ -99,7 +102,16 @@ function realizadoNoIntervalo(lista, iniTs, fimTs) {
   let dizimos = 0;
   const porTipoEntrada = {};
   const porTipoSaida = {};
+  const porMinisterioSaida = {};
   let quantidade = 0;
+
+  function addSaida(item, tipo, v) {
+    saidas += v;
+    porTipoSaida[tipo] = (porTipoSaida[tipo] || 0) + v;
+    const min = nomeMinisterio(item);
+    porMinisterioSaida[min] = (porMinisterioSaida[min] || 0) + v;
+    quantidade += 1;
+  }
 
   (lista || []).forEach((item) => {
     if (item.tipo === "Saldo inicial") return;
@@ -141,9 +153,7 @@ function realizadoNoIntervalo(lista, iniTs, fimTs) {
         const ts = Number(p.data || 0);
         if (!ts || ts < iniTs || ts > teto) return;
         const v = Number(p.valor) || 0;
-        saidas += v;
-        porTipoSaida[tipo] = (porTipoSaida[tipo] || 0) + v;
-        quantidade += 1;
+        addSaida(item, tipo, v);
       });
       return;
     }
@@ -157,9 +167,7 @@ function realizadoNoIntervalo(lista, iniTs, fimTs) {
         const ts = Number(p.dataPagamento || p.pagoEm || p.data || 0);
         if (!ts || ts < iniTs || ts > teto) return;
         const v = Number(p.valor) || 0;
-        saidas += v;
-        porTipoSaida[tipo] = (porTipoSaida[tipo] || 0) + v;
-        quantidade += 1;
+        addSaida(item, tipo, v);
       });
       return;
     }
@@ -167,9 +175,7 @@ function realizadoNoIntervalo(lista, iniTs, fimTs) {
     const ts = tsItem(item);
     if (!ts || ts < iniTs || ts > teto) return;
     const v = Number(item.valorPagoTotal) || 0;
-    saidas += v;
-    porTipoSaida[tipo] = (porTipoSaida[tipo] || 0) + v;
-    quantidade += 1;
+    addSaida(item, tipo, v);
   });
 
   return {
@@ -178,6 +184,7 @@ function realizadoNoIntervalo(lista, iniTs, fimTs) {
     dizimos: arred(dizimos),
     porTipoEntrada,
     porTipoSaida,
+    porMinisterioSaida,
     quantidade,
   };
 }
@@ -342,7 +349,7 @@ export default function Relatorio() {
     formatoMoeda,
     igrejaAtiva,
   } = useContext(AppContext);
-  const { uid, authPronto } = useAuth();
+  const { user, uid, authPronto } = useAuth();
   const { colors, dark } = useTheme();
 
   const agora = new Date();
@@ -366,7 +373,6 @@ export default function Relatorio() {
   const bg = colors.background;
   const surface = dark ? "#2a2a2a" : "#f4f5f7";
   const border = colors.border || (dark ? "#333" : "#ececec");
-  const corDespesa = dark ? "#E57373" : "#C62828";
 
   useEffect(() => {
     if (!authPronto || !uid) return;
@@ -550,16 +556,6 @@ export default function Relatorio() {
     });
   }, [dadosFinancas]);
 
-  const dadosBarrasDizimo = useMemo(
-    () =>
-      seriesGraficos.map((s) => ({
-        label: s.label,
-        value: s.dizimo,
-        isAtual: s.isAtual,
-      })),
-    [seriesGraficos]
-  );
-
   const labelJanelaGrafico = useMemo(() => {
     if (!seriesGraficos.length) return "";
     const a = seriesGraficos[0];
@@ -599,6 +595,8 @@ export default function Relatorio() {
         historicoPeriodo,
         formatoMoeda,
         comentario,
+        nomeTesoureiro:
+          user?.displayName || user?.email || "Tesoureiro",
       });
     } catch (e) {
       console.log("ERRO PDF:", e);
@@ -777,30 +775,6 @@ export default function Relatorio() {
               </>
             )}
           </TouchableOpacity>
-        </View>
-
-        <View style={[styles.block, { backgroundColor: card }]}>
-          <Text style={[styles.previewTitle, { color: text }]}>Dízimos</Text>
-          <Text style={[styles.previewSub, { color: muted }]}>
-            Evolução das Coletas
-          </Text>
-          <GrafBarras
-            dados={dadosBarrasDizimo}
-            cor={principal}
-            altura={150}
-          />
-        </View>
-
-        <View style={[styles.block, { backgroundColor: card }]}>
-          <Text style={[styles.previewTitle, { color: text }]}>
-            Receitas e despesas
-          </Text>
-          <GrafLinhas
-            dados={seriesGraficos}
-            corReceita={principal}
-            corDespesa={corDespesa}
-            altura={150}
-          />
         </View>
       </ScrollView>
     </View>

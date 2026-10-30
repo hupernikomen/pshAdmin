@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import RNFS from "react-native-fs";
 import Share from "react-native-share";
@@ -7,6 +8,7 @@ const C = {
   muted: rgb(0.55, 0.58, 0.62),
   line: rgb(0.9, 0.91, 0.92),
   card: rgb(0.96, 0.965, 0.97),
+  headerBg: rgb(0.97, 0.975, 0.98),
   greenDark: rgb(0.22, 0.48, 0.28),
   red: rgb(0.78, 0.18, 0.18),
 };
@@ -35,6 +37,14 @@ function valorEntrada(item) {
 
 function valorSaida(item) {
   return Number(item.valorPagoTotal) || 0;
+}
+
+function diaDoRegistro(ts) {
+  const n = Number(ts) || 0;
+  if (!n) return "--";
+  const d = new Date(n);
+  if (isNaN(d.getTime())) return "--";
+  return String(d.getDate()).padStart(2, "0");
 }
 
 function labelMovimento(item) {
@@ -67,6 +77,76 @@ function resumoDizimos(historicoPeriodo) {
   return { total, qtd };
 }
 
+function base64ToUint8Array(base64) {
+  const binary =
+    typeof atob === "function"
+      ? atob(base64)
+      : Buffer.from(base64, "base64").toString("binary");
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+async function embedUmaFonteAndroid(pdfDoc, nomeArquivo) {
+  const relative = `fonts/${nomeArquivo}`;
+  const b64 = await RNFS.readFileAssets(relative, "base64");
+  if (!b64 || b64.length < 50) {
+    throw new Error(`Arquivo inválido: ${relative}`);
+  }
+  const bytes = base64ToUint8Array(b64);
+  return pdfDoc.embedFont(bytes, { subset: false });
+}
+
+async function embedUmaFonteIos(pdfDoc, nomeArquivo) {
+  const candidatos = [
+    `${RNFS.MainBundlePath}/fonts/${nomeArquivo}`,
+    `${RNFS.MainBundlePath}/${nomeArquivo}`,
+  ];
+  for (const path of candidatos) {
+    if (await RNFS.exists(path)) {
+      const b64 = await RNFS.readFile(path, "base64");
+      return pdfDoc.embedFont(base64ToUint8Array(b64), { subset: false });
+    }
+  }
+  throw new Error(`Fonte iOS não encontrada: ${nomeArquivo}`);
+}
+
+async function embedUmaFonte(pdfDoc, nomeArquivo) {
+  if (Platform.OS === "android") {
+    return embedUmaFonteAndroid(pdfDoc, nomeArquivo);
+  }
+  return embedUmaFonteIos(pdfDoc, nomeArquivo);
+}
+
+async function carregarFontes(pdfDoc) {
+  let font;
+  try {
+    font = await embedUmaFonte(pdfDoc, "Roboto-Regular.ttf");
+  } catch (e) {
+    console.log("[PDF] Regular falhou → Helvetica:", e?.message || e);
+    const h = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const hb = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    return { font: h, fontMedium: hb, fontBold: hb };
+  }
+
+  let fontMedium = font;
+  try {
+    fontMedium = await embedUmaFonte(pdfDoc, "Roboto-Medium.ttf");
+  } catch (e) {
+    console.log("[PDF] Medium ausente, usando Regular");
+  }
+
+  let fontBold = fontMedium;
+  try {
+    fontBold = await embedUmaFonte(pdfDoc, "Roboto-Bold.ttf");
+  } catch (e) {
+    console.log("[PDF] Bold ausente, usando Medium/Regular");
+  }
+
+  return { font, fontMedium, fontBold };
+}
+
 export async function exportarRelatorioPDF({
   nomeIgreja,
   labelPeriodo,
@@ -74,19 +154,20 @@ export async function exportarRelatorioPDF({
   projecao,
   historicoPeriodo,
   formatoMoeda,
+  nomeTesoureiro,
 }) {
   const pdfDoc = await PDFDocument.create();
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const { font, fontMedium, fontBold } = await carregarFontes(pdfDoc);
 
   const pageWidth = 595;
   const pageHeight = 842;
-  const margin = 40;
-  const gapCol = 28;
+  const margin = 36;
+  const gapCol = 24;
   const colRightW = 165;
   const colLeftW = pageWidth - margin * 2 - gapCol - colRightW;
   const xLeft = margin;
   const xRight = margin + colLeftW + gapCol;
+  const contentWidth = pageWidth - margin * 2;
 
   let page = pdfDoc.addPage([pageWidth, pageHeight]);
   let yLeft = pageHeight - margin;
@@ -94,22 +175,96 @@ export async function exportarRelatorioPDF({
 
   const pagesRef = () => pdfDoc.getPages();
 
-  const drawVLine = (p) => {
+  // ——— CABEÇALHO FULL WIDTH ———
+  const headerTop = pageHeight - 20;
+  const headerH = 50;
+  const headerBottom = headerTop - headerH;
+
+  page.drawRectangle({
+    x: 0,
+    y: headerBottom,
+    width: pageWidth,
+    height: headerH + 20,
+    color: C.headerBg,
+  });
+
+  // faixa inferior do header
+  page.drawLine({
+    start: { x: 0, y: headerBottom },
+    end: { x: pageWidth, y: headerBottom },
+    thickness: 0.8,
+    color: C.line,
+  });
+
+  const headerPadX = margin;
+  const leftBlockW = contentWidth * 0.58;
+  const rightBlockX = headerPadX + leftBlockW + 12;
+  const rightBlockW = contentWidth - leftBlockW - 12;
+
+  // ESQUERDA: app + igreja
+  let yH = headerTop - 6;
+  page.drawText(safe("Tig · Tesouraria Igrejas"), {
+    x: headerPadX,
+    y: yH,
+    size: 8,
+    font: fontMedium,
+    color: C.muted,
+    maxWidth: leftBlockW,
+  });
+  yH -= 16;
+  page.drawText(safe(nomeIgreja || "Tesouraria"), {
+    x: headerPadX,
+    y: yH,
+    size: 14,
+    font: fontBold,
+    color: C.ink,
+    maxWidth: leftBlockW,
+  });
+
+  // DIREITA: período + tesoureiro (alinhado à direita)
+  const periodoTxt = safe(labelPeriodo || "Período não informado");
+  const tesoureiroTxt = safe(
+    nomeTesoureiro ? `Emitido por ${nomeTesoureiro}` : "Emitido pelo app"
+  );
+
+  const drawRightLine = (text, size, fnt, color, y) => {
+    const w = fnt.widthOfTextAtSize(text, size);
+    page.drawText(text, {
+      x: rightBlockX + rightBlockW - w,
+      y,
+      size,
+      font: fnt,
+      color,
+    });
+  };
+
+  let yR = headerTop - 10;
+  drawRightLine(periodoTxt, 9, fontBold, C.ink, yR);
+  yR -= 14;
+  drawRightLine(tesoureiroTxt, 8, fontMedium, C.muted, yR);
+
+  // conteúdo começa abaixo do header
+  const contentTop = headerBottom - 16;
+  yLeft = contentTop;
+  yRight = contentTop;
+
+  const drawVLine = (p, topY) => {
     p.drawLine({
       start: { x: xRight - gapCol / 2, y: margin + 20 },
-      end: { x: xRight - gapCol / 2, y: pageHeight - margin },
+      end: { x: xRight - gapCol / 2, y: topY },
       thickness: 0.5,
       color: C.line,
     });
   };
 
-  drawVLine(page);
+  drawVLine(page, contentTop + 4);
 
   const novaPagina = () => {
     page = pdfDoc.addPage([pageWidth, pageHeight]);
+    // páginas seguintes: só linha vertical, sem repetir header grande
     yLeft = pageHeight - margin;
     yRight = pageHeight - margin;
-    drawVLine(page);
+    drawVLine(page, pageHeight - margin);
   };
 
   const ensureLeft = (h) => {
@@ -118,7 +273,7 @@ export async function exportarRelatorioPDF({
 
   const sectionLeft = (titulo) => {
     ensureLeft(40);
-    yLeft -= 14;
+    yLeft -= 12;
 
     page.drawText(safe(titulo), {
       x: xLeft,
@@ -138,7 +293,6 @@ export async function exportarRelatorioPDF({
     yLeft -= 14;
   };
 
-  /** Nota orientativa (como a da coluna ao lado) */
   const notaOrientativa = (linhas) => {
     const list = (Array.isArray(linhas) ? linhas : [linhas]).filter(Boolean);
     const lineH = 11;
@@ -170,7 +324,16 @@ export async function exportarRelatorioPDF({
     yLeft -= boxH + 10;
   };
 
-  const drawCard = (x, top, w, h, label, valueText, valueColor) => {
+  const drawCard = (
+    x,
+    top,
+    w,
+    h,
+    label,
+    valueText,
+    valueColor,
+    destaque = false
+  ) => {
     page.drawRectangle({
       x,
       y: top - h,
@@ -189,7 +352,7 @@ export async function exportarRelatorioPDF({
       x: x + 8,
       y: top - 28,
       size: 10,
-      font: fontBold,
+      font: destaque ? fontBold : fontMedium,
       color: valueColor || C.ink,
       maxWidth: w - 14,
     });
@@ -220,12 +383,12 @@ export async function exportarRelatorioPDF({
         maxWidth: colLeftW - 72,
       });
       const val = money(formatoMoeda, total);
-      const vw = fontBold.widthOfTextAtSize(val, 8);
+      const vw = fontMedium.widthOfTextAtSize(val, 8);
       page.drawText(val, {
         x: xLeft + colLeftW - vw,
         y: yLeft,
         size: 8,
-        font: fontBold,
+        font: fontMedium,
         color: cor,
       });
       yLeft -= 14;
@@ -233,76 +396,51 @@ export async function exportarRelatorioPDF({
     yLeft -= 8;
   };
 
-  // ——— CABEÇALHO ———
-  page.drawText(safe(nomeIgreja || "Tesouraria"), {
-    x: xLeft,
-    y: yLeft,
-    size: 14,
-    font: fontBold,
-    color: C.ink,
-    maxWidth: colLeftW,
-  });
-  yLeft -= 16;
-  page.drawText(safe(labelPeriodo || ""), {
-    x: xLeft,
-    y: yLeft,
-    size: 9,
-    font,
-    color: C.muted,
-    maxWidth: colLeftW,
-  });
-  yLeft -= 12;
-
-  // ——— RESULTADO DO PERÍODO (sem nota) ———
+  // ——— RESULTADO DO PERÍODO ———
   sectionLeft("Resultado do período");
   {
-    const gap = 8;
+    const gap = 3;
     const cardH = 44;
-    const cardW = (colLeftW - gap) / 2;
-    ensureLeft(cardH * 2 + gap + 12);
+    const cardW = (colLeftW - gap * 3) / 4;
+    ensureLeft(cardH + 12);
 
     const itens = [
-      ["Saldo anterior", money(formatoMoeda, resumo.saldoAnterior || 0), C.ink],
-      ["Saldo atual", money(formatoMoeda, resumo.saldoAtual || 0), C.ink],
-      ["Receitas", money(formatoMoeda, resumo.entradas), C.greenDark],
-      ["Despesas", money(formatoMoeda, resumo.saidas), C.red],
+      ["Saldo anterior", money(formatoMoeda, resumo.saldoAnterior || 0), C.ink, false],
+      ["Receitas", money(formatoMoeda, resumo.entradas), C.greenDark, false],
+      ["Despesas", money(formatoMoeda, resumo.saidas), C.red, false],
+      ["Saldo atual", money(formatoMoeda, resumo.saldoAtual || 0), C.ink, true],
     ];
     itens.forEach((k, i) => {
-      const col = i % 2;
-      const row = Math.floor(i / 2);
-      const x = xLeft + col * (cardW + gap);
-      const top = yLeft - row * (cardH + gap);
-      drawCard(x, top, cardW, cardH, k[0], k[1], k[2]);
+      const x = xLeft + i * (cardW + gap);
+      drawCard(x, yLeft, cardW, cardH, k[0], k[1], k[2], k[3]);
     });
-    yLeft -= cardH * 2 + gap + 10;
+    yLeft -= cardH + 10;
   }
 
   // ——— PROJEÇÃO ———
   sectionLeft("Projeção");
   {
-    const gap = 8;
+    const gap = 3;
     const cardH = 44;
     const cardW = (colLeftW - gap * 2) / 3;
     ensureLeft(cardH + 12);
 
     const itens = [
-      ["A receber", money(formatoMoeda, projecao.aReceber), C.greenDark],
-      ["A pagar", money(formatoMoeda, projecao.aPagar), C.red],
-      ["Saldo projetado", money(formatoMoeda, projecao.saldoProjetado), C.ink],
+      ["A receber", money(formatoMoeda, projecao.aReceber), C.greenDark, false],
+      ["A pagar", money(formatoMoeda, projecao.aPagar), C.red, false],
+      ["Saldo projetado", money(formatoMoeda, projecao.saldoProjetado), C.ink, true],
     ];
     itens.forEach((k, i) => {
       const x = xLeft + i * (cardW + gap);
-      drawCard(x, yLeft, cardW, cardH, k[0], k[1], k[2]);
+      drawCard(x, yLeft, cardW, cardH, k[0], k[1], k[2], k[3]);
     });
     yLeft -= cardH + 10;
   }
   notaOrientativa([
     "Projeção indica o que a igreja teria em caixa após quitar todas as dívidas futuras.",
   ]);
-  
 
-
-    // ——— DÍZIMOS E OFERTAS ———
+  // ——— DÍZIMOS E OFERTAS ———
   const diz = resumoDizimos(historicoPeriodo);
 
   let totalOfertas = 0;
@@ -331,73 +469,63 @@ export async function exportarRelatorioPDF({
 
   sectionLeft("Dízimos e ofertas");
   {
-    const gap = 8;
+    const gap = 3;
     const cardH = 44;
-    const cardW = (colLeftW - gap) / 2;
+    const cardW = (colLeftW - gap * 2) / 3;
     ensureLeft(cardH * 2 + gap + 12);
 
-    // linha 1 — dízimos
-    drawCard(
-      xLeft,
-      yLeft,
-      cardW,
-      cardH,
-      "Dízimos (% receitas)",
-      fmtPct(pctDizimos),
-      C.greenDark
-    );
-    drawCard(
-      xLeft + cardW + gap,
-      yLeft,
-      cardW,
-      cardH,
-      "Qtd. de dizimistas",
-      String(diz.qtd),
-      C.ink
-    );
+    const linhaDiz = [
+      ["Dízimos (% receitas)", fmtPct(pctDizimos), C.greenDark, false],
+      ["Qtd. de dizimistas", String(diz.qtd), C.ink, false],
+      ["Total dízimos", money(formatoMoeda, totalDizimos), C.greenDark, true],
+    ];
+    linhaDiz.forEach((k, i) => {
+      const x = xLeft + i * (cardW + gap);
+      drawCard(x, yLeft, cardW, cardH, k[0], k[1], k[2], k[3]);
+    });
 
-    // linha 2 — ofertas
     const top2 = yLeft - cardH - gap;
-    drawCard(
-      xLeft,
-      top2,
-      cardW,
-      cardH,
-      "Ofertas (% receitas)",
-      fmtPct(pctOfertas),
-      C.greenDark
-    );
-    drawCard(
-      xLeft + cardW + gap,
-      top2,
-      cardW,
-      cardH,
-      "Qtd. de ofertas",
-      String(qtdOfertas),
-      C.ink
-    );
+    const linhaOfe = [
+      ["Ofertas (% receitas)", fmtPct(pctOfertas), C.greenDark, false],
+      ["Qtd. de ofertas", String(qtdOfertas), C.ink, false],
+      ["Total ofertas", money(formatoMoeda, totalOfertas), C.greenDark, true],
+    ];
+    linhaOfe.forEach((k, i) => {
+      const x = xLeft + i * (cardW + gap);
+      drawCard(x, top2, cardW, cardH, k[0], k[1], k[2], k[3]);
+    });
 
     yLeft -= cardH * 2 + gap + 10;
   }
-  notaOrientativa([
-    "Percentuais em relação ao total de receitas do período",
-  ]);
 
-  // ——— POR TIPO ———
+  // ——— DESPESAS FIXAS ———
+  const porFixa = {};
+  (historicoPeriodo || []).forEach((item) => {
+    if (item.tipoMovimento !== "saida") return;
+    const t = String(item.tipo || "").toLowerCase();
+    if (!t.includes("fixa")) return;
+    const chave = String(item.descricao || item.tipo || "Conta fixa").trim();
+    porFixa[chave] = (porFixa[chave] || 0) + valorSaida(item);
+  });
+
   listaTipo(
-    "Receitas por tipo",
-    Object.entries(resumo.porTipoEntrada || {}).sort((a, b) => b[1] - a[1]),
-    C.greenDark
-  );
-  listaTipo(
-    "Despesas por tipo",
-    Object.entries(resumo.porTipoSaida || {}).sort((a, b) => b[1] - a[1]),
+    "Despesas fixas",
+    Object.entries(porFixa).sort((a, b) => b[1] - a[1]),
     C.red
   );
-  notaOrientativa([
-    "O detalhamento de cada lançamento (valores e descrições) está na coluna ao lado.",
-    "Dízimos e ofertas aparecem de forma protegida (***).",
-  ]);
+
+  // ——— DESPESAS POR MINISTÉRIOS ———
+  const porMinisterio =
+    resumo.porMinisterioSaida &&
+    typeof resumo.porMinisterioSaida === "object"
+      ? resumo.porMinisterioSaida
+      : {};
+
+  listaTipo(
+    "Despesas por ministérios",
+    Object.entries(porMinisterio).sort((a, b) => b[1] - a[1]),
+    C.red
+  );
 
   // ——— COLUNA DIREITA ———
   const drawRightHeader = () => {
@@ -420,7 +548,7 @@ export async function exportarRelatorioPDF({
   };
 
   page = pagesRef()[0];
-  yRight = pageHeight - margin;
+  yRight = contentTop;
   drawRightHeader();
 
   const hist = historicoPeriodo || [];
@@ -435,6 +563,7 @@ export async function exportarRelatorioPDF({
   } else {
     for (let i = 0; i < hist.length; i++) {
       const item = hist[i];
+      const dia = diaDoRegistro(item.data);
       const lab = labelMovimento(item);
       const valor = valorMovimento(item);
       const isEnt = item.tipoMovimento === "entrada";
@@ -448,14 +577,14 @@ export async function exportarRelatorioPDF({
           page = all[idx + 1];
         } else {
           page = pdfDoc.addPage([pageWidth, pageHeight]);
-          drawVLine(page);
+          drawVLine(page, pageHeight - margin);
         }
         yRight = pageHeight - margin;
         drawRightHeader();
       }
 
-      let nome = safe(lab);
-      if (nome.length > 20) nome = nome.slice(0, 19) + ".";
+      let nome = safe(`${dia} ${lab}`);
+      if (nome.length > 22) nome = nome.slice(0, 21) + ".";
 
       page.drawText(nome, {
         x: xRight,
@@ -466,12 +595,12 @@ export async function exportarRelatorioPDF({
         maxWidth: colRightW - 56,
       });
 
-      const vw = fontBold.widthOfTextAtSize(valorTxt, 8);
+      const vw = fontMedium.widthOfTextAtSize(valorTxt, 8);
       page.drawText(valorTxt, {
         x: xRight + colRightW - vw,
         y: yRight,
         size: 8,
-        font: fontBold,
+        font: fontMedium,
         color: corVal,
       });
 
