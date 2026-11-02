@@ -6,7 +6,6 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
-  Alert,
   StatusBar,
   KeyboardAvoidingView,
   Platform,
@@ -17,8 +16,10 @@ import { useTheme } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
+import { useAppAlert } from "../context/AlertContext";
 
 export default function Login() {
+  const { showAlert } = useAppAlert();
   const {
     loginComGoogle,
     loginComEmail,
@@ -29,10 +30,11 @@ export default function Login() {
   const { colors, dark } = useTheme();
 
   const principal = colors.principal || colors.primary || "#65C556";
-  const text = colors.text || "#1a1a1a";
+  const text = colors.text || "#1f2933";
   const muted = colors.muted || "#9aa0a6";
   const line = colors.border || "#e5e7eb";
-  const bg = colors.background || (dark ? "#121212" : "#fff");
+  const bg = colors.background || (dark ? "#121212" : "#f4f5f7");
+  const inputBg = dark ? "#1a1a1a" : "#e9ebef";
   const card = colors.card || (dark ? "#1e1e1e" : "#fff");
 
   const [modo, setModo] = useState("entrar");
@@ -67,7 +69,7 @@ export default function Login() {
       else if (code === "auth/too-many-requests")
         msg = "Muitas tentativas. Tente novamente em alguns minutos.";
 
-      Alert.alert("Erro", msg);
+      showAlert({ title: "Erro", message: msg });
     } finally {
       setLoading(false);
     }
@@ -79,7 +81,10 @@ export default function Login() {
       await loginComGoogle();
     } catch (e) {
       console.log("Erro login Google:", e);
-      Alert.alert("Erro", e?.message || "Não foi possível entrar com Google");
+      showAlert({
+        title: "Erro",
+        message: e?.message || "Não foi possível entrar com Google",
+      });
     } finally {
       setLoading(false);
     }
@@ -87,25 +92,32 @@ export default function Login() {
 
   async function handleEsqueciSenha() {
     if (!String(email || "").trim()) {
-      Alert.alert("Atenção", "Digite seu e-mail no campo acima.");
+      showAlert({
+        title: "Atenção",
+        message: "Digite seu e-mail no campo acima.",
+      });
       return;
     }
     try {
       setLoading(true);
       await enviarRedefinicaoSenha(email);
-      Alert.alert(
-        "E-mail enviado",
-        "Se existir conta com esse e-mail, você receberá o link para redefinir a senha."
-      );
+      showAlert({
+        title: "E-mail enviado",
+        message:
+          "Se existir conta com esse e-mail, você receberá o link para redefinir a senha.",
+      });
     } catch (e) {
-      Alert.alert("Erro", e?.message || "Não foi possível enviar o e-mail.");
+      showAlert({
+        title: "Erro",
+        message: e?.message || "Não foi possível enviar o e-mail.",
+      });
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top, backgroundColor: bg }]}>
+    <View style={[styles.root, { backgroundColor: bg }]}>
       <StatusBar
         barStyle={dark ? "light-content" : "dark-content"}
         backgroundColor={bg}
@@ -118,150 +130,151 @@ export default function Login() {
         <ScrollView
           contentContainerStyle={[
             styles.content,
-            { paddingBottom: Math.max(insets.bottom, 24) + 16 },
+            {
+              paddingTop: insets.top + 36,
+              paddingBottom: Math.max(insets.bottom, 20) + 16,
+            },
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.header}>
-            <Text style={[styles.title, { color: text }]}>
-              {modo === "entrar" ? "Bem-vindo de volta" : "Criar conta"}
+          <View style={styles.brandBlock}>
+            <Text style={[styles.brandName, { color: text }]}>
+              Tesouraria Igrejas
             </Text>
-            <Text style={[styles.subtitle, { color: muted }]}>
-              {modo === "entrar"
-                ? "Entre para acompanhar a tesouraria da igreja"
-                : "Preencha os dados para começar a usar o app"}
+            <Text style={[styles.brandHint, { color: muted }]}>
+              Controle financeiro da igreja
             </Text>
           </View>
 
-          <View style={styles.form}>
-            {modo === "cadastrar" && (
-              <View style={[styles.inputWrap, { borderBottomColor: line }]}>
-                <Ionicons name="person-outline" size={18} color={muted} />
-                <TextInput
-                  style={[styles.input, { color: text }]}
-                  value={nome}
-                  onChangeText={setNome}
-                  placeholder="Nome"
-                  placeholderTextColor={muted}
-                  autoCapitalize="words"
-                />
-              </View>
-            )}
+          <Text style={[styles.sectionTitle, { color: text }]}>
+            {modo === "entrar" ? "Entrar" : "Criar conta"}
+          </Text>
+          <Text style={[styles.sectionSub, { color: muted }]}>
+            {modo === "entrar"
+              ? "Use e-mail e senha ou entre com Google"
+              : "Preencha os dados para começar"}
+          </Text>
 
-            <View style={[styles.inputWrap, { borderBottomColor: line }]}>
-              <Ionicons name="mail-outline" size={18} color={muted} />
+          {modo === "cadastrar" && (
+            <View style={[styles.field, { backgroundColor: inputBg }]}>
+              <Text style={[styles.fieldLabel, { color: muted }]}>Nome</Text>
               <TextInput
-                style={[styles.input, { color: text }]}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="E-mail"
+                style={[styles.fieldInput, { color: text }]}
+                value={nome}
+                onChangeText={setNome}
+                placeholder="Como devemos te chamar"
                 placeholderTextColor={muted}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
+                autoCapitalize="words"
               />
             </View>
+          )}
 
-            <View style={[styles.inputWrap, { borderBottomColor: line }]}>
-              <Ionicons name="lock-closed-outline" size={18} color={muted} />
+          <View style={[styles.field, { backgroundColor: inputBg }]}>
+            <Text style={[styles.fieldLabel, { color: muted }]}>E-mail</Text>
+            <TextInput
+              style={[styles.fieldInput, { color: text }]}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="seu@email.com"
+              placeholderTextColor={muted}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+
+          <View style={[styles.field, { backgroundColor: inputBg }]}>
+            <Text style={[styles.fieldLabel, { color: muted }]}>Senha</Text>
+            <View style={styles.fieldRow}>
               <TextInput
-                style={[styles.input, { color: text }]}
+                style={[styles.fieldInput, { color: text, flex: 1 }]}
                 value={senha}
                 onChangeText={setSenha}
-                placeholder="Senha"
+                placeholder={
+                  modo === "cadastrar" ? "Mínimo 6 caracteres" : "••••••••"
+                }
                 placeholderTextColor={muted}
                 secureTextEntry={!mostrarSenha}
               />
-              <Pressable onPress={() => setMostrarSenha((v) => !v)} hitSlop={12}>
+              <Pressable
+                onPress={() => setMostrarSenha((v) => !v)}
+                hitSlop={10}
+                style={styles.eyeBtn}
+              >
                 <Ionicons
                   name={mostrarSenha ? "eye-off-outline" : "eye-outline"}
-                  size={18}
+                  size={20}
                   color={muted}
                 />
               </Pressable>
             </View>
+          </View>
 
-            {modo === "entrar" && (
-              <Pressable onPress={handleEsqueciSenha} style={styles.forgotRow}>
-                <Text style={[styles.forgot, { color: muted }]}>
-                  Esqueceu a senha?
-                </Text>
-              </Pressable>
+          {modo === "entrar" && (
+            <Pressable onPress={handleEsqueciSenha} style={styles.forgotRow}>
+              <Text style={[styles.forgot, { color: principal }]}>
+                Esqueceu a senha?
+              </Text>
+            </Pressable>
+          )}
+
+          <Pressable
+            onPress={handleEmail}
+            disabled={loading}
+            style={[
+              styles.btnPrimary,
+              { backgroundColor: principal },
+              modo === "cadastrar" && { marginTop: 8 },
+              loading && { opacity: 0.75 },
+            ]}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.btnPrimaryText}>
+                {modo === "cadastrar" ? "Criar conta" : "Entrar"}
+              </Text>
             )}
+          </Pressable>
 
-            <Pressable
-              onPress={handleEmail}
-              disabled={loading}
-              style={[
-                styles.btnLogin,
-                { backgroundColor: principal },
-                modo === "cadastrar" && styles.btnLoginSpaced,
-                loading && { opacity: 0.75 },
-              ]}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.btnLoginText}>
-                  {modo === "cadastrar" ? "Cadastrar" : "Entrar"}
-                </Text>
-              )}
-            </Pressable>
+          <View style={styles.dividerRow}>
+            <View style={[styles.dividerLine, { backgroundColor: line }]} />
+            <Text style={[styles.orText, { color: muted }]}>ou</Text>
+            <View style={[styles.dividerLine, { backgroundColor: line }]} />
           </View>
 
-          <View style={styles.altBlock}>
-            <View style={styles.dividerRow}>
-              <View style={[styles.dividerLine, { backgroundColor: line }]} />
-              <Text style={[styles.orText, { color: muted }]}>ou entre com</Text>
-              <View style={[styles.dividerLine, { backgroundColor: line }]} />
-            </View>
-
-            <Pressable
-              onPress={handleGoogle}
-              disabled={loading}
-              style={[
-                styles.socialBtn,
-                {
-                  backgroundColor: card,
-                  borderColor: line,
-                },
-                loading && { opacity: 0.75 },
-              ]}
-            >
-              <Image
-                source={require("../../assets/google-logo.png")}
-                style={styles.googleLogo}
-                resizeMode="contain"
-              />
-              <Text style={[styles.socialText, { color: text }]}>Google</Text>
-            </Pressable>
-          </View>
+          <Pressable
+            onPress={handleGoogle}
+            disabled={loading}
+            style={[
+              styles.btnGoogle,
+              { borderColor: line, backgroundColor: card },
+              loading && { opacity: 0.75 },
+            ]}
+          >
+            <Image
+              source={require("../../assets/google-logo.png")}
+              style={styles.googleLogo}
+              resizeMode="contain"
+            />
+            <Text style={[styles.btnGoogleText, { color: text }]}>
+              Continuar com Google
+            </Text>
+          </Pressable>
 
           <View style={styles.footer}>
-            {modo === "entrar" ? (
-              <>
-                <Text style={[styles.switchMuted, { color: muted }]}>
-                  Não tem conta?{" "}
-                </Text>
-                <Pressable onPress={() => setModo("cadastrar")} hitSlop={8}>
-                  <Text style={[styles.switchLink, { color: principal }]}>
-                    Cadastre-se
-                  </Text>
-                </Pressable>
-              </>
-            ) : (
-              <>
-                <Text style={[styles.switchMuted, { color: muted }]}>
-                  Já tem conta?{" "}
-                </Text>
-                <Pressable onPress={() => setModo("entrar")} hitSlop={8}>
-                  <Text style={[styles.switchLink, { color: principal }]}>
-                    Entrar
-                  </Text>
-                </Pressable>
-              </>
-            )}
+            <Text style={[styles.footerMuted, { color: muted }]}>
+              {modo === "entrar" ? "Não tem conta?" : "Já tem conta?"}
+            </Text>
+            <Pressable
+              onPress={() => setModo(modo === "entrar" ? "cadastrar" : "entrar")}
+              hitSlop={8}
+            >
+              <Text style={[styles.footerLink, { color: principal }]}>
+                {modo === "entrar" ? " Cadastre-se" : " Entrar"}
+              </Text>
+            </Pressable>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -275,73 +288,81 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 28,
+    paddingHorizontal: 35,
     justifyContent: "center",
   },
-  header: {
-    marginBottom: 28,
+  brandBlock: {
+    marginBottom: 32,
   },
-  title: {
+  brandName: {
     fontFamily: "Roboto-Bold",
     fontSize: 26,
     letterSpacing: -0.4,
-    marginBottom: 8,
   },
-  subtitle: {
+  brandHint: {
+    marginTop: 6,
     fontFamily: "Roboto-Regular",
     fontSize: 14,
-    lineHeight: 20,
-    maxWidth: 300,
   },
-  form: {
-    marginBottom: 8,
+  sectionTitle: {
+    fontFamily: "Roboto-Bold",
+    fontSize: 18,
+    marginBottom: 4,
   },
-  inputWrap: {
+  sectionSub: {
+    fontFamily: "Roboto-Regular",
+    fontSize: 14,
+    lineHeight: 18,
+    marginBottom: 18,
+  },
+  field: {
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 10,
+  },
+  fieldLabel: {
+    fontFamily: "Roboto-Regular",
+    fontSize: 11,
+    marginBottom: 4,
+  },
+  fieldRow: {
     flexDirection: "row",
     alignItems: "center",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 14,
-    marginBottom: 4,
-    gap: 12,
   },
-  input: {
-    flex: 1,
-    fontSize: 15,
+  fieldInput: {
     fontFamily: "Roboto-Regular",
+    fontSize: 15,
     padding: 0,
+  },
+  eyeBtn: {
+    paddingLeft: 8,
   },
   forgotRow: {
     alignSelf: "flex-end",
-    marginTop: 10,
-    marginBottom: 20,
-    paddingVertical: 4,
+    marginBottom: 14,
+    marginTop: 2,
+    paddingVertical: 2,
   },
   forgot: {
     fontFamily: "Roboto-Medium",
     fontSize: 13,
   },
-  btnLogin: {
-    height: 50,
+  btnPrimary: {
+    height: 52,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
-  btnLoginSpaced: {
-    marginTop: 18,
-  },
-  btnLoginText: {
+  btnPrimaryText: {
     color: "#fff",
     fontSize: 16,
     fontFamily: "Roboto-Bold",
   },
-  altBlock: {
-    marginTop: 28,
-    marginBottom: 8,
-  },
   dividerRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
+    marginVertical: 18,
     gap: 12,
   },
   dividerLine: {
@@ -350,37 +371,37 @@ const styles = StyleSheet.create({
   },
   orText: {
     fontFamily: "Roboto-Regular",
-    fontSize: 13,
+    fontSize: 12,
   },
-  socialBtn: {
+  btnGoogle: {
+    height: 52,
+    borderRadius: 14,
+    borderWidth: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    height: 50,
-    borderRadius: 14,
-    borderWidth: 1,
   },
   googleLogo: {
     width: 20,
     height: 20,
   },
-  socialText: {
+  btnGoogleText: {
     fontFamily: "Roboto-Medium",
     fontSize: 15,
   },
   footer: {
-    marginTop: 32,
+    marginTop: 28,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     flexWrap: "wrap",
   },
-  switchMuted: {
+  footerMuted: {
     fontFamily: "Roboto-Regular",
     fontSize: 14,
   },
-  switchLink: {
+  footerLink: {
     fontFamily: "Roboto-Medium",
     fontSize: 14,
   },

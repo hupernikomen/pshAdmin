@@ -13,8 +13,10 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import changeNavigationBarColor from "react-native-navigation-bar-color";
 import Ionicons from "react-native-vector-icons/Ionicons";
 
+import AppAlert from "./src/componentes/AppAlert";
 import AuthProvider, { AuthContext } from "./src/context/AuthContext";
 import AppProvider, { AppContext } from "./src/context/AppContext";
+import AlertProvider from "./src/context/AlertContext";
 import ThemeProvider, { useAppTheme } from "./src/context/ThemeContext";
 import Rotas from "./src/rotas";
 import Login from "./src/pages/Login";
@@ -149,6 +151,7 @@ function AppNavigator() {
           backgroundColor={colors.background}
         />
         <Login />
+        <AppAlert />
       </NavigationContainer>
     );
   }
@@ -157,7 +160,6 @@ function AppNavigator() {
     return <TelaCarregamento colors={colors} />;
   }
 
-  // Offline e sem igreja carregada → tela específica (não "criar igreja")
   if (semConexao && !igrejaAtiva?.id) {
     return (
       <NavigationContainer theme={tema}>
@@ -169,6 +171,7 @@ function AppNavigator() {
           colors={colors}
           onRetry={() => carregarIgrejasDoUsuario?.()}
         />
+        <AppAlert />
       </NavigationContainer>
     );
   }
@@ -180,6 +183,7 @@ function AppNavigator() {
         backgroundColor={colors.background}
       />
       <Rotas />
+      <AppAlert />
     </NavigationContainer>
   );
 }
@@ -188,11 +192,13 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <AuthProvider>
-          <AppProvider>
-            <AppNavigator />
-          </AppProvider>
-        </AuthProvider>
+        <AlertProvider>
+          <AuthProvider>
+            <AppProvider>
+              <AppNavigator />
+            </AppProvider>
+          </AuthProvider>
+        </AlertProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );

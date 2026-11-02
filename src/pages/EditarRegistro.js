@@ -6,7 +6,6 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  Alert,
   Platform,
 } from "react-native";
 import { useNavigation, useRoute, useTheme } from "@react-navigation/native";
@@ -21,6 +20,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebaseConnection";
 import { AppContext } from "../context/AppContext";
+import { useAppAlert } from "../context/AlertContext";
 import Load from "../componentes/Load";
 import { LIMITE_MS } from "../utils/registroEdit";
 
@@ -59,11 +59,9 @@ function formatarData(d) {
 
 function alinharDatasLista(lista, dataAntiga, dataNova) {
   if (!Array.isArray(lista) || lista.length === 0) return lista;
-
   if (lista.length === 1) {
     return [{ ...lista[0], data: dataNova }];
   }
-
   return lista.map((p) => {
     const ts = Number(p?.data || 0);
     if (!ts || ts === dataAntiga) return { ...p, data: dataNova };
@@ -73,15 +71,12 @@ function alinharDatasLista(lista, dataAntiga, dataNova) {
 
 function alinharParcelasPagas(parcelas, dataAntiga, dataNova) {
   if (!Array.isArray(parcelas) || parcelas.length === 0) return parcelas;
-
   const pagas = parcelas.filter(
     (p) => p?.status === "paga" || p?.status === "quitada" || p?.pago
   );
-
   return parcelas.map((p) => {
     const paga = p?.status === "paga" || p?.status === "quitada" || p?.pago;
     if (!paga) return p;
-
     const ts = Number(p.dataPagamento || p.pagoEm || 0);
     const unica = pagas.length === 1;
     if (unica || !ts || ts === dataAntiga) {
@@ -93,7 +88,6 @@ function alinharParcelasPagas(parcelas, dataAntiga, dataNova) {
 
 function montarDevolucoesCaixinha(item) {
   const map = new Map();
-
   const add = (cxId, valor) => {
     if (!cxId || !(valor > 0)) return;
     map.set(cxId, arred((map.get(cxId) || 0) + valor));
@@ -144,6 +138,7 @@ export default function EditarRegistro() {
   const { id } = useRoute().params || {};
   const navigation = useNavigation();
   const { colors, dark } = useTheme();
+  const { showAlert } = useAppAlert();
   const {
     HistoricoMovimentos,
     ResumoFinanceiro,
@@ -170,7 +165,7 @@ export default function EditarRegistro() {
 
   const principal = colors.principal || colors.primary;
   const text = colors.text;
-  const muted = colors.muted || (dark ? "#9aa0a6" : "#9aa0a6");
+  const muted = colors.muted || "#9aa0a6";
   const card = colors.card;
   const bg = colors.background;
   const placeholder = muted;
@@ -187,23 +182,23 @@ export default function EditarRegistro() {
       setLoad(true);
 
       if (!podeEditar) {
-        Alert.alert(
-          "Somente leitura",
-          "Seu perfil não permite editar registros."
-        );
+        showAlert({
+          title: "Somente leitura",
+          message: "Seu perfil não permite editar registros.",
+        });
         navigation.goBack();
         return;
       }
 
       if (!id) {
-        Alert.alert("Erro", "Registro inválido.");
+        showAlert({ title: "Erro", message: "Registro inválido." });
         navigation.goBack();
         return;
       }
 
       const snap = await getDoc(doc(db, "registros", id));
       if (!snap.exists()) {
-        Alert.alert("Erro", "Registro não encontrado.");
+        showAlert({ title: "Erro", message: "Registro não encontrado." });
         navigation.goBack();
         return;
       }
@@ -211,20 +206,20 @@ export default function EditarRegistro() {
       const dataDoc = { id: snap.id, ...snap.data() };
 
       if (igrejaId && dataDoc.igrejaId && dataDoc.igrejaId !== igrejaId) {
-        Alert.alert(
-          "Acesso negado",
-          "Este registro não pertence à igreja selecionada."
-        );
+        showAlert({
+          title: "Acesso negado",
+          message: "Este registro não pertence à igreja selecionada.",
+        });
         navigation.goBack();
         return;
       }
 
       const criado = dataDoc.createdAt || dataDoc.reg || 0;
       if (Date.now() - Number(criado) > LIMITE_MS) {
-        Alert.alert(
-          "Edição bloqueada",
-          "Só é possível editar registros nas primeiras 24 horas."
-        );
+        showAlert({
+          title: "Edição bloqueada",
+          message: "Só é possível editar registros nas primeiras 24 horas.",
+        });
         navigation.goBack();
         return;
       }
@@ -235,7 +230,10 @@ export default function EditarRegistro() {
       setValorTotal(String(dataDoc.valorTotal ?? "").replace(".", ","));
       setData(tsParaDate(dataDoc.data || dataDoc.createdAt || dataDoc.reg));
     } catch (e) {
-      Alert.alert("Erro", "Não foi possível carregar o registro.");
+      showAlert({
+        title: "Erro",
+        message: "Não foi possível carregar o registro.",
+      });
       navigation.goBack();
     } finally {
       setLoad(false);
@@ -252,53 +250,56 @@ export default function EditarRegistro() {
     if (!item) return;
 
     if (!podeEditar) {
-      Alert.alert(
-        "Somente leitura",
-        "Seu perfil não permite editar registros."
-      );
+      showAlert({
+        title: "Somente leitura",
+        message: "Seu perfil não permite editar registros.",
+      });
       return;
     }
 
     if (igrejaId && item.igrejaId && item.igrejaId !== igrejaId) {
-      Alert.alert(
-        "Acesso negado",
-        "Este registro não pertence à igreja selecionada."
-      );
+      showAlert({
+        title: "Acesso negado",
+        message: "Este registro não pertence à igreja selecionada.",
+      });
       return;
     }
 
     const criado = item.createdAt || item.reg || 0;
     if (Date.now() - Number(criado) > LIMITE_MS) {
-      Alert.alert(
-        "Edição bloqueada",
-        "O prazo de 24 horas para edição encerrou."
-      );
+      showAlert({
+        title: "Edição bloqueada",
+        message: "O prazo de 24 horas para edição encerrou.",
+      });
       return;
     }
 
     const novoTotal = parseNumero(valorTotal);
     if (!descricao.trim()) {
-      Alert.alert("Atenção", "Informe a descrição.");
+      showAlert({ title: "Atenção", message: "Informe a descrição." });
       return;
     }
     if (novoTotal <= 0) {
-      Alert.alert("Atenção", "Informe um valor total válido.");
+      showAlert({
+        title: "Atenção",
+        message: "Informe um valor total válido.",
+      });
       return;
     }
     if (!data || Number.isNaN(data.getTime())) {
-      Alert.alert("Atenção", "Informe uma data válida.");
+      showAlert({ title: "Atenção", message: "Informe uma data válida." });
       return;
     }
 
     const pago =
       Number(item.valorPagoTotal || item.valorRecebidoTotal || 0) || 0;
     if (novoTotal < pago) {
-      Alert.alert(
-        "Atenção",
-        `O total não pode ser menor que o já pago/recebido (R$ ${formatoMoeda.format(
+      showAlert({
+        title: "Atenção",
+        message: `O total não pode ser menor que o já pago/recebido (R$ ${formatoMoeda.format(
           pago
-        )}).`
-      );
+        )}).`,
+      });
       return;
     }
 
@@ -348,7 +349,10 @@ export default function EditarRegistro() {
       await Promise.all([HistoricoMovimentos(), ResumoFinanceiro?.()]);
       navigation.goBack();
     } catch (e) {
-      Alert.alert("Erro", e?.message || "Não foi possível salvar.");
+      showAlert({
+        title: "Erro",
+        message: e?.message || "Não foi possível salvar.",
+      });
     } finally {
       setSalvando(false);
     }
@@ -359,10 +363,10 @@ export default function EditarRegistro() {
 
     const criado = item.createdAt || item.reg || 0;
     if (Date.now() - Number(criado) > LIMITE_MS) {
-      Alert.alert(
-        "Exclusão bloqueada",
-        "Só é possível excluir registros nas primeiras 24 horas."
-      );
+      showAlert({
+        title: "Exclusão bloqueada",
+        message: "Só é possível excluir registros nas primeiras 24 horas.",
+      });
       return;
     }
 
@@ -375,18 +379,18 @@ export default function EditarRegistro() {
       )}) serão devolvidos às caixinhas.`;
     }
 
-    Alert.alert(
-      "Excluir registro",
-      `Tem certeza? O lançamento será removido e o saldo será recalculado.${extra}`,
-      [
+    showAlert({
+      title: "Excluir registro",
+      message: `Tem certeza? O lançamento será removido e o saldo será recalculado.${extra}`,
+      buttons: [
         { text: "Cancelar", style: "cancel" },
         {
           text: "Excluir",
           style: "destructive",
           onPress: excluir,
         },
-      ]
-    );
+      ],
+    });
   }
 
   async function devolverParaCaixinhas(itemAtual) {
@@ -437,10 +441,16 @@ export default function EditarRegistro() {
         CarregarCaixinhas?.(),
       ]);
 
-      Alert.alert("Excluído", "Registro removido e saldo atualizado.");
+      showAlert({
+        title: "Excluído",
+        message: "Registro removido e saldo atualizado.",
+      });
       navigation.goBack();
     } catch (e) {
-      Alert.alert("Erro", e?.message || "Não foi possível excluir.");
+      showAlert({
+        title: "Erro",
+        message: e?.message || "Não foi possível excluir.",
+      });
     } finally {
       setExcluindo(false);
     }
@@ -472,7 +482,6 @@ export default function EditarRegistro() {
           mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
           onChange={onChangeData}
-          // Android dark: tema do sistema; iOS spinner acompanha o SO
         />
       )}
 

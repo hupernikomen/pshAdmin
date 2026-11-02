@@ -48,6 +48,19 @@ function arred(v) {
   return Math.round((Number(v) || 0) * 100) / 100;
 }
 
+function inicioDoDia(d) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+/** Data do lançamento é estritamente depois de hoje */
+function isDataFutura(d) {
+  const hoje = inicioDoDia(new Date());
+  const dia = inicioDoDia(d || new Date());
+  return dia.getTime() > hoje.getTime();
+}
+
 function montarParcelas({
   valorTotal,
   qtd,
@@ -119,10 +132,7 @@ function montarParcelas({
 }
 
 const TIPOS_ENTRADA = [
-  {
-    id: "Dízimo",
-    exemplo: "",
-  },
+  { id: "Dízimo", exemplo: "" },
   {
     id: "Oferta",
     exemplo: "Oferta de culto, oferta alçada, etc.",
@@ -230,6 +240,16 @@ export default function Registro() {
     setReciboUri(null);
   }
 
+  /** Na criação: quanto já entra como pago/recebido */
+  function valorPagoNaCriacao(total) {
+    // Parcelada / Sem Prazo: sempre pendente na criação
+    if (tipo === "Parcelada" || tipo === "Sem Prazo") return 0;
+    // Data futura: não dá baixa — vai para A receber / A pagar
+    if (isDataFutura(data)) return 0;
+    // Hoje ou passado: considera quitado na criação
+    return total;
+  }
+
   async function salvarImagemLocal(uri) {
     const nomeArquivo = `recibo_${Date.now()}.jpg`;
     const pastaDestino = `${RNFS.DocumentDirectoryPath}/recibos`;
@@ -282,11 +302,6 @@ export default function Registro() {
     } catch (error) {
       Alert.alert("Erro", "Não foi possível abrir a galeria.");
     }
-  }
-
-  function valorPagoNaCriacao(total) {
-    if (tipo === "Parcelada" || tipo === "Sem Prazo") return 0;
-    return total;
   }
 
   function validarOrigemSaida(valorPagoAgora) {
@@ -703,7 +718,6 @@ export default function Registro() {
                   value={data}
                   mode="date"
                   display="default"
-                  maximumDate={new Date()}
                   onChange={(e, selected) => {
                     setShowDatePicker(false);
                     if (selected) setData(selected);
@@ -954,7 +968,6 @@ export default function Registro() {
         )}
       </ScrollView>
 
-      {/* Modal Tipo */}
       <Modal
         visible={modalTipo}
         transparent
@@ -1012,7 +1025,6 @@ export default function Registro() {
         </Pressable>
       </Modal>
 
-      {/* Modal Ministério */}
       <Modal
         visible={modalMinisterio}
         transparent

@@ -6,7 +6,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  Alert,
   Modal,
   Pressable,
   KeyboardAvoidingView,
@@ -18,14 +17,20 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../context/AppContext";
 import { db } from "../firebaseConnection";
-import { doc, updateDoc } from "firebase/firestore";
+import {
+  doc,
+  updateDoc,
+  deleteDoc,
+  addDoc,
+  collection,
+} from "firebase/firestore";
 import Load from "../componentes/Load";
 import SwipeCard from "../componentes/SwipeCard";
 import { useAuth } from "../context/AuthContext";
+import { useAppAlert } from "../context/AlertContext";
 import {
   arred,
   fimDoDiaTs,
-  dataDoItem,
   valorAReceberItem,
   isEntradaFutura,
   tsDoDia,
@@ -59,8 +64,10 @@ export default function AReceber() {
     ResumoFinanceiro,
     podeEditarFinanceiro,
     igrejaAtiva,
+    getIgrejaId,
   } = useContext(AppContext);
 
+  const { showAlert } = useAppAlert();
   const { colors, dark } = useTheme();
   const { uid, authPronto } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
@@ -75,6 +82,7 @@ export default function AReceber() {
 
   const podeEditar = podeEditarFinanceiro?.() !== false;
   const limiteHoje = fimDoDiaTs();
+  const igrejaId = getIgrejaId?.() || igrejaAtiva?.id || null;
 
   const principal = colors.principal || colors.primary;
   const text = colors.text;
@@ -85,6 +93,7 @@ export default function AReceber() {
   const border = colors.border || (dark ? "#333" : "#ececec");
   const okGreen = dark ? "#81C784" : "#2E7D32";
   const warnOrange = dark ? "#FFB74D" : "#EF6C00";
+  const danger = dark ? "#E57373" : "#C62828";
   const tintOk = dark ? "#1B3D2F" : "#E8F5E9";
   const tintWarn = dark ? "#3D2A14" : "#FFF3E0";
 
@@ -126,10 +135,10 @@ export default function AReceber() {
 
   function abrirReceber(item) {
     if (!podeEditar) {
-      Alert.alert(
-        "Somente leitura",
-        "Seu perfil não permite registrar recebimentos."
-      );
+      showAlert({
+        title: "Somente leitura",
+        message: "Seu perfil não permite registrar recebimentos.",
+      });
       return;
     }
     setItemSel(item);
@@ -148,34 +157,94 @@ export default function AReceber() {
   }
 
   function onChangeData(event, selected) {
-    if (Platform.OS === "android") {
-      setShowDatePicker(false);
-    }
+    if (Platform.OS === "android") setShowDatePicker(false);
     if (event?.type === "dismissed") return;
     if (selected) setDataRecebimento(selected);
   }
 
+  function pedirExcluir(item) {
+    if (!podeEditar) {
+      showAlert({
+        title: "Somente leitura",
+        message: "Seu perfil não permite excluir.",
+      });
+      return;
+    }
+
+    const recebido = Number(item.valorRecebidoTotal) || 0;
+    const extra =
+      recebido > 0
+        ? `\n\nJá existem R$ ${formatoMoeda.format(
+            recebido
+          )} recebidos. Todo o lançamento será removido.`
+        : "";
+
+    showAlert({
+      title: "Excluir registro",
+      message: `Remover "${item.descricao || "esta entrada"}"?${extra}`,
+      buttons: [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Excluir",
+          style: "destructive",
+          onPress: () => excluirRegistro(item),
+        },
+      ],
+    });
+    setAbertoId(null);
+  }
+
+  async function excluirRegistro(item) {
+    if (!item?.id) return;
+    try {
+      setLoad(true);
+      try {
+        const { id: _id, rowId, falta, isFuturo, ...resto } = item;
+        await addDoc(collection(db, "lixeira"), {
+          ...resto,
+          registroIdOriginal: item.id,
+          dataexclusao: Date.now(),
+          igrejaId: item.igrejaId || igrejaId || null,
+          idUsuario: item.idUsuario || uid || null,
+        });
+      } catch (e) {
+        console.log("Aviso lixeira:", e);
+      }
+
+      await deleteDoc(doc(db, "registros", item.id));
+      await Promise.all([HistoricoMovimentos(), ResumoFinanceiro?.()]);
+      showAlert({ title: "Excluído", message: "Registro removido." });
+    } catch (e) {
+      showAlert({
+        title: "Erro",
+        message: e?.message || "Não foi possível excluir.",
+      });
+    } finally {
+      setLoad(false);
+    }
+  }
+
   async function confirmarRecebimento() {
     if (!uid) {
-      Alert.alert("Atenção", "Faça login novamente.");
+      showAlert({ title: "Atenção", message: "Faça login novamente." });
       return;
     }
     if (!podeEditar) {
-      Alert.alert("Somente leitura", "Sem permissão.");
+      showAlert({ title: "Somente leitura", message: "Sem permissão." });
       return;
     }
     if (!itemSel) return;
 
     const valor = parseNumero(valorRecebido);
     if (valor <= 0) {
-      Alert.alert("Atenção", "Informe um valor válido.");
+      showAlert({ title: "Atenção", message: "Informe um valor válido." });
       return;
     }
     if (valor > itemSel.falta + 0.001) {
-      Alert.alert(
-        "Atenção",
-        `Máximo: R$ ${formatoMoeda.format(itemSel.falta)}`
-      );
+      showAlert({
+        title: "Atenção",
+        message: `Máximo: R$ ${formatoMoeda.format(itemSel.falta)}`,
+      });
       return;
     }
 
@@ -216,9 +285,12 @@ export default function AReceber() {
 
       await Promise.all([HistoricoMovimentos(), ResumoFinanceiro?.()]);
       fecharModal();
-      Alert.alert("Sucesso", "Recebimento registrado.");
+      showAlert({ title: "Sucesso", message: "Recebimento registrado." });
     } catch (e) {
-      Alert.alert("Erro", e?.message || "Não foi possível registrar.");
+      showAlert({
+        title: "Erro",
+        message: e?.message || "Não foi possível registrar.",
+      });
     } finally {
       setSalvando(false);
     }
@@ -281,6 +353,13 @@ export default function AReceber() {
                   label: item.isFuturo ? "Baixar" : "Receber",
                   backgroundColor: principal,
                   onPress: () => abrirReceber(item),
+                },
+                {
+                  key: "excluir",
+                  icon: "trash-outline",
+                  label: "Excluir",
+                  backgroundColor: danger,
+                  onPress: () => pedirExcluir(item),
                 },
               ]
             : [];

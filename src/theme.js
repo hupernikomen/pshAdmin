@@ -1,7 +1,7 @@
 import { DefaultTheme, DarkTheme } from "@react-navigation/native";
 
 /** Cor principal — tema claro */
-export const PRINCIPAL = "#2A80F8";
+export const PRINCIPAL = "#3D6FA8";
 
 /** Cor principal — tema escuro (mais clara, combina com fundo escuro) */
 export const PRINCIPAL_DARK = "#3D6FA8";

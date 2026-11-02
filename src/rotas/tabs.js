@@ -29,6 +29,7 @@ export default function Tabs() {
           color: colors.text,
           fontSize:18,
         },
+        headerShadowVisible:false,
         sceneStyle: {
           backgroundColor: colors.background,
 

@@ -6,7 +6,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  Alert,
   Modal,
   Pressable,
   KeyboardAvoidingView,
@@ -18,10 +17,18 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../context/AppContext";
 import { db } from "../firebaseConnection";
-import { doc, updateDoc } from "firebase/firestore";
+import {
+  doc,
+  updateDoc,
+  deleteDoc,
+  addDoc,
+  collection,
+  getDoc,
+} from "firebase/firestore";
 import Load from "../componentes/Load";
 import SwipeCard from "../componentes/SwipeCard";
 import { useAuth } from "../context/AuthContext";
+import { useAppAlert } from "../context/AlertContext";
 
 function parseNumero(txt) {
   if (txt === null || txt === undefined) return 0;
@@ -51,6 +58,40 @@ function tsDoDia(d) {
   return x.getTime();
 }
 
+function montarDevolucoesCaixinha(item) {
+  const map = new Map();
+  const add = (cxId, valor) => {
+    if (!cxId || !(valor > 0)) return;
+    map.set(cxId, arred((map.get(cxId) || 0) + valor));
+  };
+
+  const pagos = Array.isArray(item.valoresPagos) ? item.valoresPagos : [];
+  pagos.forEach((p) => {
+    if (p?.origemPagamento === "caixinha" && p.caixinhaId) {
+      add(p.caixinhaId, Number(p.valor) || 0);
+    }
+  });
+
+  const parcelas = Array.isArray(item.parcelas) ? item.parcelas : [];
+  parcelas.forEach((p) => {
+    if (
+      p?.status === "paga" &&
+      p?.origemPagamento === "caixinha" &&
+      p.caixinhaId
+    ) {
+      const ja = pagos.some(
+        (vp) =>
+          vp.parcelaNumero === p.numero &&
+          vp.origemPagamento === "caixinha" &&
+          vp.caixinhaId === p.caixinhaId
+      );
+      if (!ja) add(p.caixinhaId, Number(p.valor) || 0);
+    }
+  });
+
+  return map;
+}
+
 export default function APagar() {
   const {
     dadosFinancas,
@@ -61,12 +102,15 @@ export default function APagar() {
     caixinhas,
     saldoDisponivel,
     RetirarDaCaixinha,
+    DepositarNaCaixinha,
     CarregarCaixinhas,
     ResumoFinanceiro,
     podeEditarFinanceiro,
     igrejaAtiva,
+    getIgrejaId,
   } = useContext(AppContext);
 
+  const { showAlert } = useAppAlert();
   const { colors, dark } = useTheme();
   const { uid, authPronto } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
@@ -82,6 +126,7 @@ export default function APagar() {
   const [salvando, setSalvando] = useState(false);
 
   const podeEditar = podeEditarFinanceiro?.() !== false;
+  const igrejaId = getIgrejaId?.() || igrejaAtiva?.id || null;
 
   const principal = colors.principal || colors.primary;
   const text = colors.text;
@@ -158,10 +203,10 @@ export default function APagar() {
 
   function abrirPagar(item) {
     if (!podeEditar) {
-      Alert.alert(
-        "Somente leitura",
-        "Seu perfil não permite registrar pagamentos."
-      );
+      showAlert({
+        title: "Somente leitura",
+        message: "Seu perfil não permite registrar pagamentos.",
+      });
       return;
     }
     setItemSel(item);
@@ -183,20 +228,112 @@ export default function APagar() {
   }
 
   function onChangeData(event, selected) {
-    if (Platform.OS === "android") {
-      setShowDatePicker(false);
-    }
+    if (Platform.OS === "android") setShowDatePicker(false);
     if (event?.type === "dismissed") return;
     if (selected) setDataPagamento(selected);
   }
 
+  function pedirExcluir(item) {
+    if (!podeEditar) {
+      showAlert({
+        title: "Somente leitura",
+        message: "Seu perfil não permite excluir.",
+      });
+      return;
+    }
+
+    const pago = Number(item.valorPagoTotal) || 0;
+    const extra =
+      pago > 0
+        ? `\n\nJá existem R$ ${formatoMoeda.format(
+            pago
+          )} pagos neste registro. Valores de caixinha serão devolvidos e o lançamento inteiro será removido.`
+        : item.isParcela
+        ? "\n\nTodo o registro (incluindo outras parcelas) será removido."
+        : "";
+
+    showAlert({
+      title: "Excluir registro",
+      message: `Remover "${item.descricao || "este lançamento"}"?${extra}`,
+      buttons: [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Excluir",
+          style: "destructive",
+          onPress: () => excluirRegistro(item),
+        },
+      ],
+    });
+    setAbertoId(null);
+  }
+
+  async function devolverParaCaixinhas(item) {
+    const devolucoes = montarDevolucoesCaixinha(item);
+    if (devolucoes.size === 0) return;
+
+    for (const [cxId, valor] of devolucoes.entries()) {
+      if (typeof DepositarNaCaixinha === "function") {
+        await DepositarNaCaixinha(cxId, valor);
+      } else {
+        const ref = doc(db, "caixinhas", cxId);
+        const snap = await getDoc(ref);
+        if (!snap.exists()) continue;
+        const atual = Number(snap.data().valor) || 0;
+        await updateDoc(ref, {
+          valor: arred(atual + valor),
+          atualizadoEm: Date.now(),
+        });
+      }
+    }
+  }
+
+  async function excluirRegistro(item) {
+    if (!item?.id) return;
+    try {
+      setLoad(true);
+      await devolverParaCaixinhas(item);
+
+      try {
+        const { id: _id, isParcela, rowId, parcelaRef, falta, ...resto } =
+          item;
+        await addDoc(collection(db, "lixeira"), {
+          ...resto,
+          registroIdOriginal: item.id,
+          dataexclusao: Date.now(),
+          igrejaId: item.igrejaId || igrejaId || null,
+          idUsuario: item.idUsuario || uid || null,
+        });
+      } catch (e) {
+        console.log("Aviso lixeira:", e);
+      }
+
+      await deleteDoc(doc(db, "registros", item.id));
+      await Promise.all([
+        HistoricoMovimentos(),
+        ResumoFinanceiro?.(),
+        CarregarCaixinhas?.(),
+      ]);
+      showAlert({ title: "Excluído", message: "Registro removido." });
+    } catch (e) {
+      showAlert({
+        title: "Erro",
+        message: e?.message || "Não foi possível excluir.",
+      });
+    } finally {
+      setLoad(false);
+    }
+  }
+
   async function confirmarPagamento() {
     if (!uid) {
-      Alert.alert("Atenção", "Faça login novamente.");
+      showAlert({ title: "Atenção", message: "Faça login novamente." });
       return;
     }
     if (!podeEditar) {
-      Alert.alert("Somente leitura", "Sem permissão para pagar.");
+      showAlert({
+        title: "Somente leitura",
+        message: "Sem permissão para pagar.",
+      });
       return;
     }
     if (!itemSel) return;
@@ -206,33 +343,38 @@ export default function APagar() {
       : parseNumero(valorPago);
 
     if (valor <= 0) {
-      Alert.alert("Atenção", "Informe um valor válido.");
+      showAlert({ title: "Atenção", message: "Informe um valor válido." });
       return;
     }
     if (!itemSel.isParcela && valor > itemSel.falta + 0.001) {
-      Alert.alert(
-        "Atenção",
-        `Máximo: R$ ${formatoMoeda.format(itemSel.falta)}`
-      );
+      showAlert({
+        title: "Atenção",
+        message: `Máximo: R$ ${formatoMoeda.format(itemSel.falta)}`,
+      });
       return;
     }
 
     if (origemPagamento === "geral") {
       if (valor > (Number(saldoDisponivel) || 0) + 0.001) {
-        Alert.alert(
-          "Saldo insuficiente",
-          `Caixa livre: R$ ${formatoMoeda.format(saldoDisponivel || 0)}`
-        );
+        showAlert({
+          title: "Saldo insuficiente",
+          message: `Caixa livre: R$ ${formatoMoeda.format(
+            saldoDisponivel || 0
+          )}`,
+        });
         return;
       }
     } else {
       if (!caixinhaId) {
-        Alert.alert("Atenção", "Selecione a caixinha.");
+        showAlert({ title: "Atenção", message: "Selecione a caixinha." });
         return;
       }
       const cx = (caixinhas || []).find((c) => c.id === caixinhaId);
       if (!cx || valor > (Number(cx.valor) || 0) + 0.001) {
-        Alert.alert("Saldo insuficiente na caixinha.");
+        showAlert({
+          title: "Saldo insuficiente",
+          message: "Saldo insuficiente na caixinha.",
+        });
         return;
       }
     }
@@ -318,9 +460,12 @@ export default function APagar() {
       ]);
 
       fecharModal();
-      Alert.alert("Sucesso", "Pagamento registrado.");
+      showAlert({ title: "Sucesso", message: "Pagamento registrado." });
     } catch (e) {
-      Alert.alert("Erro", e?.message || "Não foi possível registrar.");
+      showAlert({
+        title: "Erro",
+        message: e?.message || "Não foi possível registrar.",
+      });
     } finally {
       setSalvando(false);
     }
@@ -388,6 +533,13 @@ export default function APagar() {
                   label: "Pagar",
                   backgroundColor: principal,
                   onPress: () => abrirPagar(item),
+                },
+                {
+                  key: "excluir",
+                  icon: "trash-outline",
+                  label: "Excluir",
+                  backgroundColor: danger,
+                  onPress: () => pedirExcluir(item),
                 },
               ]
             : [];

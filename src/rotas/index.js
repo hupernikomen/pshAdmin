@@ -29,6 +29,7 @@ export default function Rotas() {
             color: colors.text,
             fontSize: 18
           },
+          headerShadowVisible: false,
           contentStyle: {
             backgroundColor: colors.background,
           },

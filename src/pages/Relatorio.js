@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Modal,
+  Pressable,
 } from "react-native";
 import { useTheme } from "@react-navigation/native";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -16,7 +18,6 @@ import { useAuth } from "../context/AuthContext";
 import Load from "../componentes/Load";
 import { exportarRelatorioPDF } from "../utils/relatorioPdf";
 import { montarComentarioRelatorio } from "../utils/comentarioRelatorioOffline";
-
 import {
   arred,
   fimDoDiaTs,
@@ -26,33 +27,13 @@ import {
 } from "../utils/financeiro";
 
 const MESES = [
-  "Janeiro",
-  "Fevereiro",
-  "Março",
-  "Abril",
-  "Maio",
-  "Junho",
-  "Julho",
-  "Agosto",
-  "Setembro",
-  "Outubro",
-  "Novembro",
-  "Dezembro",
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 
 const MESES_CURTO = [
-  "Jan",
-  "Fev",
-  "Mar",
-  "Abr",
-  "Mai",
-  "Jun",
-  "Jul",
-  "Ago",
-  "Set",
-  "Out",
-  "Nov",
-  "Dez",
+  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+  "Jul", "Ago", "Set", "Out", "Nov", "Dez",
 ];
 
 function inicioDoDia(d) {
@@ -307,7 +288,6 @@ function montarJanelaMesesGrafico() {
   const TOTAL = 12;
   const FUTUROS = 3;
   const PASSADOS = TOTAL - 1 - FUTUROS;
-
   const agora = new Date();
   let y = agora.getFullYear();
   let m = agora.getMonth() - PASSADOS;
@@ -315,7 +295,6 @@ function montarJanelaMesesGrafico() {
     m += 12;
     y -= 1;
   }
-
   const pontos = [];
   for (let i = 0; i < TOTAL; i++) {
     pontos.push({
@@ -349,6 +328,9 @@ export default function Relatorio() {
     formatoMoeda,
     igrejaAtiva,
     ocultarNomesDoadores,
+    podeGerarPdf,
+    getInfoAssinaturaPdf,
+    solicitarLiberacaoPdf,
   } = useContext(AppContext);
   const { user, uid, authPronto } = useAuth();
   const { colors, dark } = useTheme();
@@ -366,6 +348,8 @@ export default function Relatorio() {
   const [showDe, setShowDe] = useState(false);
   const [showAte, setShowAte] = useState(false);
   const [gerando, setGerando] = useState(false);
+  const [enviandoPedido, setEnviandoPedido] = useState(false);
+  const [modalPix, setModalPix] = useState(false);
 
   const principal = colors.principal || colors.primary || "#65C556";
   const text = colors.text;
@@ -374,6 +358,18 @@ export default function Relatorio() {
   const bg = colors.background;
   const surface = dark ? "#2a2a2a" : "#f4f5f7";
   const border = colors.border || (dark ? "#333" : "#ececec");
+
+  const pdfLiberado = typeof podeGerarPdf === "function" ? podeGerarPdf() : true;
+  const infoPdf =
+    typeof getInfoAssinaturaPdf === "function"
+      ? getInfoAssinaturaPdf()
+      : {
+          ativo: true,
+          diasRestantes: 0,
+          textoPreco: "R$ 14,90/ano",
+          pixChave: "",
+          pixTitular: "",
+        };
 
   useEffect(() => {
     if (!authPronto || !uid) return;
@@ -403,11 +399,7 @@ export default function Relatorio() {
 
   const historicoPeriodo = useMemo(
     () =>
-      montarHistoricoPeriodo(
-        dadosFinancas || [],
-        intervalo.ini,
-        intervalo.fim
-      ),
+      montarHistoricoPeriodo(dadosFinancas || [], intervalo.ini, intervalo.fim),
     [dadosFinancas, intervalo]
   );
 
@@ -417,7 +409,6 @@ export default function Relatorio() {
     const saldoAnterior = acumuladoAte(lista, seed, intervalo.ini - 1);
     const mov = realizadoNoIntervalo(lista, intervalo.ini, intervalo.fim);
     const saldoAtual = arred(saldoAnterior + mov.entradas - mov.saidas);
-
     return {
       ...mov,
       saldoAnterior,
@@ -430,15 +421,12 @@ export default function Relatorio() {
     const lista = dadosFinancas || [];
     let aReceber = 0;
     let aPagar = 0;
-
     lista.forEach((i) => {
       aReceber += valorAReceberItem(i);
       aPagar += valorAPagarItem(i);
     });
-
     aReceber = arred(aReceber);
     aPagar = arred(aPagar);
-
     return {
       aReceber,
       aPagar,
@@ -469,9 +457,7 @@ export default function Relatorio() {
             if (!ts || !noMes(ts, slot.ano, slot.mes)) return;
             if (ts <= limite) return;
             const v =
-              Number(item.valorTotal) ||
-              Number(item.valorRecebidoTotal) ||
-              0;
+              Number(item.valorTotal) || Number(item.valorRecebidoTotal) || 0;
             receita += v;
             if (isDizimo(item)) dizimo += v;
             return;
@@ -516,8 +502,7 @@ export default function Relatorio() {
           const ts = tsItem(item);
           if (!ts || ts <= limite) return;
           if (!noMes(ts, slot.ano, slot.mes)) return;
-          despesa +=
-            Number(item.valorTotal) || Number(item.valorPagoTotal) || 0;
+          despesa += Number(item.valorTotal) || Number(item.valorPagoTotal) || 0;
           return;
         }
 
@@ -577,6 +562,11 @@ export default function Relatorio() {
   }, [modoFiltro, dataDe, dataAte, mesSelecionado, anoSelecionado]);
 
   async function onExportar() {
+    if (!pdfLiberado) {
+      setModalPix(true);
+      return;
+    }
+
     setGerando(true);
     try {
       const comentario = montarComentarioRelatorio({
@@ -605,6 +595,41 @@ export default function Relatorio() {
     } finally {
       setGerando(false);
     }
+  }
+
+  function onJaPaguei() {
+    Alert.alert(
+      "Confirmar pagamento",
+      "Só continue se o Pix já tiver sido feito.\n\nEnviaremos um pedido de liberação. O PDF só é liberado após a confirmação manual.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Já paguei",
+          onPress: async () => {
+            if (typeof solicitarLiberacaoPdf !== "function") {
+              Alert.alert("Erro", "Função de solicitação indisponível.");
+              return;
+            }
+            try {
+              setEnviandoPedido(true);
+              await solicitarLiberacaoPdf();
+              setModalPix(false);
+              Alert.alert(
+                "Pedido enviado",
+                "Recebemos o aviso. A liberação do PDF é feita manualmente após a confirmação do pagamento."
+              );
+            } catch (e) {
+              Alert.alert(
+                "Erro",
+                e?.message || "Não foi possível enviar o pedido."
+              );
+            } finally {
+              setEnviandoPedido(false);
+            }
+          },
+        },
+      ]
+    );
   }
 
   if ((!authPronto || load) && !(dadosFinancas || []).length) return <Load />;
@@ -757,27 +782,170 @@ export default function Relatorio() {
             </Text>
           </View>
 
-          <TouchableOpacity
-            style={[
-              styles.pdfBtn,
-              { backgroundColor: principal },
-              gerando && { opacity: 0.75 },
-            ]}
-            onPress={onExportar}
-            disabled={gerando}
-            activeOpacity={0.85}
-          >
-            {gerando ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
+          <View style={[styles.assinaturaBox, { backgroundColor: surface }]}>
+            <View style={styles.assinaturaHeader}>
+              <Ionicons
+                name={pdfLiberado ? "time-outline" : "lock-closed-outline"}
+                size={18}
+                color={pdfLiberado ? principal : muted}
+              />
+              <Text style={[styles.assinaturaTitulo, { color: text }]}>
+                {pdfLiberado ? "Relatório PDF liberado" : "Relatório PDF bloqueado"}
+              </Text>
+            </View>
+
+            {pdfLiberado ? (
               <>
-                <Ionicons name="document-text-outline" size={20} color="#fff" />
-                <Text style={styles.pdfBtnText}>Gerar relatório</Text>
+                <Text style={[styles.assinaturaTexto, { color: muted }]}>
+                  {infoPdf.diasRestantes > 0
+                    ? `Restam ${infoPdf.diasRestantes} dia${
+                        infoPdf.diasRestantes === 1 ? "" : "s"
+                      } de uso gratuito.`
+                    : "Seu acesso ao PDF está ativo."}
+                </Text>
+                <Text style={[styles.assinaturaTexto, { color: muted }]}>
+                  Depois desse período, a geração de PDF passa a custar{" "}
+                  <Text style={{ fontFamily: "Roboto-Bold", color: text }}>
+                    {infoPdf.textoPreco || "R$ 14,90/ano"}
+                  </Text>
+                  . O restante do app continua gratuito.
+                </Text>
               </>
+            ) : (
+              <Text style={[styles.assinaturaTexto, { color: muted }]}>
+                O período gratuito encerrou. Toque em{" "}
+                <Text style={{ fontFamily: "Roboto-Bold", color: text }}>
+                  Como pagar
+                </Text>{" "}
+                para ver o valor e a chave Pix (
+                {infoPdf.textoPreco || "R$ 14,90/ano"}).
+              </Text>
             )}
-          </TouchableOpacity>
+          </View>
+
+          {pdfLiberado ? (
+            <TouchableOpacity
+              style={[
+                styles.pdfBtn,
+                { backgroundColor: principal },
+                gerando && { opacity: 0.75 },
+              ]}
+              onPress={onExportar}
+              disabled={gerando}
+              activeOpacity={0.85}
+            >
+              {gerando ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="document-text-outline" size={20} color="#fff" />
+                  <Text style={styles.pdfBtnText}>Gerar relatório</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          ) : (
+            <View style={{ gap: 10, marginTop: 16 }}>
+              <TouchableOpacity
+                style={[styles.pdfBtn, { backgroundColor: principal, marginTop: 0 }]}
+                onPress={() => setModalPix(true)}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="qr-code-outline" size={20} color="#fff" />
+                <Text style={styles.pdfBtnText}>Como pagar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.pdfBtnOutline,
+                  { borderColor: principal },
+                  enviandoPedido && { opacity: 0.75 },
+                ]}
+                onPress={onJaPaguei}
+                disabled={enviandoPedido}
+                activeOpacity={0.85}
+              >
+                {enviandoPedido ? (
+                  <ActivityIndicator color={principal} />
+                ) : (
+                  <>
+                    <Ionicons
+                      name="checkmark-circle-outline"
+                      size={20}
+                      color={principal}
+                    />
+                    <Text style={[styles.pdfBtnOutlineText, { color: principal }]}>
+                      Já paguei
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </ScrollView>
+
+      {/* Modal Pix */}
+      <Modal
+        visible={modalPix}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalPix(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setModalPix(false)}
+        >
+          <Pressable
+            style={[styles.modalCard, { backgroundColor: card }]}
+            onPress={() => {}}
+          >
+            <Text style={[styles.modalTitle, { color: text }]}>
+              Pagamento do PDF
+            </Text>
+            <Text style={[styles.modalSub, { color: muted }]}>
+              Plano anual da geração de relatórios em PDF desta igreja.
+            </Text>
+
+            <View style={[styles.modalRow, { backgroundColor: surface }]}>
+              <Text style={[styles.modalLabel, { color: muted }]}>Valor</Text>
+              <Text style={[styles.modalValue, { color: text }]}>
+                {infoPdf.textoPreco || "R$ 14,90/ano"}
+              </Text>
+            </View>
+
+            <View style={[styles.modalRow, { backgroundColor: surface }]}>
+              <Text style={[styles.modalLabel, { color: muted }]}>
+                Beneficiário
+              </Text>
+              <Text style={[styles.modalValue, { color: text }]}>
+                {infoPdf.pixTitular || "—"}
+              </Text>
+            </View>
+
+            <View style={[styles.modalRow, { backgroundColor: surface }]}>
+              <Text style={[styles.modalLabel, { color: muted }]}>
+                Chave Pix
+              </Text>
+              <Text style={[styles.modalPixKey, { color: text }]} selectable>
+                {infoPdf.pixChave || "—"}
+              </Text>
+            </View>
+
+            <Text style={[styles.modalHint, { color: muted }]}>
+              Abra o app do seu banco, escolha Pix e cole a chave acima. Depois
+              de pagar, feche este aviso e toque em &quot;Já paguei&quot;.
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.modalBtn, { backgroundColor: principal }]}
+              onPress={() => setModalPix(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modalBtnText}>Entendi</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -878,6 +1046,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Roboto-Medium",
   },
+  assinaturaBox: {
+    marginTop: 16,
+    borderRadius: 14,
+    padding: 14,
+  },
+  assinaturaHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  assinaturaTitulo: {
+    fontSize: 14,
+    fontFamily: "Roboto-Bold",
+  },
+  assinaturaTexto: {
+    fontSize: 13,
+    fontFamily: "Roboto-Regular",
+    lineHeight: 19,
+    marginTop: 4,
+  },
   pdfBtn: {
     marginTop: 16,
     height: 52,
@@ -892,14 +1081,79 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "Roboto-Bold",
   },
-  previewTitle: {
+  pdfBtnOutline: {
+    height: 52,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "transparent",
+  },
+  pdfBtnOutlineText: {
+    fontSize: 16,
+    fontFamily: "Roboto-Bold",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    padding: 24,
+  },
+  modalCard: {
+    borderRadius: 18,
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: "Roboto-Bold",
+    marginBottom: 6,
+  },
+  modalSub: {
+    fontSize: 13,
+    fontFamily: "Roboto-Regular",
+    lineHeight: 19,
+    marginBottom: 16,
+  },
+  modalRow: {
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
+  modalLabel: {
+    fontSize: 11,
+    fontFamily: "Roboto-Regular",
+    marginBottom: 4,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  modalValue: {
     fontSize: 15,
     fontFamily: "Roboto-Medium",
   },
-  previewSub: {
-    marginTop: 2,
-    marginBottom: 12,
+  modalPixKey: {
+    fontSize: 16,
+    fontFamily: "Roboto-Bold",
+    lineHeight: 22,
+  },
+  modalHint: {
     fontSize: 12,
     fontFamily: "Roboto-Regular",
+    lineHeight: 18,
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  modalBtn: {
+    height: 48,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalBtnText: {
+    color: "#fff",
+    fontSize: 15,
+    fontFamily: "Roboto-Bold",
   },
 });
