@@ -24,10 +24,11 @@ export default function Saldo({
   const fmt = (v) => `R$ ${formatoMoeda.format(Number(v) || 0)}`;
 
   const meses = Math.max(1, Number(projecaoMeses) || 1);
-  const labelProjecao = `Saldo Projetado (${meses} ${meses === 1 ? "mês" : "meses"})`;
+  const labelProjecao = `Saldo Projetado`;
 
   return (
     <View style={styles.container}>
+      {/* Abas integradas perfeitamente ao topo da janela */}
       {/* Abas integradas perfeitamente ao topo da janela */}
       <View style={styles.tabsContainer}>
         <TouchableOpacity
@@ -52,25 +53,6 @@ export default function Saldo({
         <TouchableOpacity
           style={[
             styles.tabItem,
-            abaAtiva === "caixinhas" && [styles.tabActive, { backgroundColor: colors.card }],
-          ]}
-          onPress={() => setAbaAtiva("caixinhas")}
-          activeOpacity={0.8}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              { color: colors.text },
-              abaAtiva === "caixinhas" && styles.tabTextActive,
-            ]}
-          >
-            Caixinhas
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.tabItem,
             abaAtiva === "projecao" && [styles.tabActive, { backgroundColor: colors.card }],
           ]}
           onPress={() => setAbaAtiva("projecao")}
@@ -84,6 +66,25 @@ export default function Saldo({
             ]}
           >
             Projeção
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.tabItem,
+            abaAtiva === "caixinhas" && [styles.tabActive, { backgroundColor: colors.card }],
+          ]}
+          onPress={() => setAbaAtiva("caixinhas")}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              { color: colors.text },
+              abaAtiva === "caixinhas" && styles.tabTextActive,
+            ]}
+          >
+            Caixinhas
           </Text>
         </TouchableOpacity>
       </View>
@@ -201,7 +202,7 @@ export default function Saldo({
           <View style={styles.balanceMiddle}>
             <View>
               <Text style={[styles.miniLabel, { color: colors.text }]}>
-                Estimativa calculada
+                Estimativa calculada para {meses} {meses === 1 ? "mês" : "meses"}
               </Text>
               <Text style={[styles.miniValue, { color: colors.text }]}>
                 Baseada nos meses futuros

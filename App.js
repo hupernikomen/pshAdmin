@@ -35,27 +35,21 @@ function useVerificarAtualizacao() {
       inAppUpdates
         .checkNeedsUpdate()
         .then((result) => {
-          if (result?.shouldUpdate) {
-            Alert.alert(
-              "Nova atualização disponível",
-              "Existe uma nova versão do Tesouraria Igrejas disponível com melhorias. Deseja atualizar agora?",
-              [
-                { text: "Depois", style: "cancel" },
-                {
-                  text: "Atualizar",
-                  onPress: () => {
-                    inAppUpdates.startUpdate({
-                      updateType: IAUUpdateKind.FLEXIBLE,
-                    });
-                  },
-                },
-              ]
-            );
+          if (!result?.shouldUpdate) return;
+
+          let updateType = null;
+
+          if (result.isFlexibleUpdateAllowed) {
+            updateType = IAUUpdateKind.FLEXIBLE;
+          } else if (result.isImmediateUpdateAllowed) {
+            updateType = IAUUpdateKind.IMMEDIATE;
           }
+
+          if (!updateType) return;
+
+          inAppUpdates.startUpdate({ updateType });
         })
-        .catch(() => {
-          // Ignora erros em dev / ambiente sem Play Store
-        });
+        .catch(() => {});
     } catch (e) {}
   }, []);
 }
@@ -175,9 +169,9 @@ function AppNavigator() {
     try {
       const result = changeNavigationBarColor(barColor, lightIcons);
       if (result != null && typeof result.then === "function") {
-        result.catch(() => {});
+        result.catch(() => { });
       }
-    } catch (e) {}
+    } catch (e) { }
   }, [tema.dark]);
 
   if (!ready || !authPronto) {
