@@ -8,7 +8,6 @@ import {
   TextInput,
   Modal,
   Pressable,
-  Alert,
   RefreshControl,
   KeyboardAvoidingView,
   Platform,
@@ -16,6 +15,7 @@ import {
 import { useTheme } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../context/AppContext";
+import { useAppAlert } from "../context/AlertContext";
 import Load from "../componentes/Load";
 import SwipeCard from "../componentes/SwipeCard";
 
@@ -50,6 +50,7 @@ export default function Membros() {
     removerMembro,
   } = useContext(AppContext);
 
+  const { showAlert } = useAppAlert();
   const { colors, dark } = useTheme();
   const [membros, setMembros] = useState([]);
   const [load, setLoad] = useState(true);
@@ -76,12 +77,15 @@ export default function Membros() {
       setMembros(lista || []);
     } catch (e) {
       console.log("Erro listarMembros:", e);
-      Alert.alert("Erro", "Não foi possível carregar os membros.");
+      showAlert({
+        title: "Erro",
+        message: "Não foi possível carregar os membros.",
+      });
     } finally {
       setLoad(false);
       setRefreshing(false);
     }
-  }, [listarMembros]);
+  }, [listarMembros, showAlert]);
 
   useEffect(() => {
     carregar();
@@ -95,7 +99,10 @@ export default function Membros() {
 
   function abrirNovo() {
     if (!isAdmin) {
-      Alert.alert("Sem permissão", "Apenas administradores.");
+      showAlert({
+        title: "Sem permissão",
+        message: "Apenas administradores.",
+      });
       return;
     }
     setEmail("");
@@ -109,9 +116,12 @@ export default function Membros() {
       await adicionarMembro({ email, papel });
       setModalVisible(false);
       await carregar();
-      Alert.alert("Sucesso", "Membro cadastrado.");
+      showAlert({ title: "Sucesso", message: "Membro cadastrado." });
     } catch (e) {
-      Alert.alert("Erro", e?.message || "Não foi possível cadastrar.");
+      showAlert({
+        title: "Erro",
+        message: e?.message || "Não foi possível cadastrar.",
+      });
     } finally {
       setSalvando(false);
     }
@@ -120,46 +130,62 @@ export default function Membros() {
   function confirmarRemover(item) {
     if (!isAdmin) return;
     if (item.id === igrejaAtiva?.membroId) {
-      Alert.alert("Atenção", "Você não pode remover a si mesmo por aqui.");
+      showAlert({
+        title: "Atenção",
+        message: "Você não pode remover a si mesmo por aqui.",
+      });
       return;
     }
-    Alert.alert("Remover membro", `Remover ${item.email} desta igreja?`, [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Remover",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            setAbertoId(null);
-            await removerMembro(item.id);
-            await carregar();
-          } catch (e) {
-            Alert.alert("Erro", e?.message || "Falha ao remover.");
-          }
+    showAlert({
+      title: "Remover membro",
+      message: `Remover ${item.email} desta igreja?`,
+      buttons: [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Remover",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setAbertoId(null);
+              await removerMembro(item.id);
+              await carregar();
+            } catch (e) {
+              showAlert({
+                title: "Erro",
+                message: e?.message || "Falha ao remover.",
+              });
+            }
+          },
         },
-      },
-    ]);
+      ],
+    });
   }
 
   function alterarPapel(item) {
     if (!isAdmin) return;
 
-    Alert.alert(
-      "Alterar papel",
-      item.email,
-      PAPEIS.map((p) => ({
-        text: p.label + (item.papel === p.id ? " ✓" : ""),
-        onPress: async () => {
-          try {
-            setAbertoId(null);
-            await atualizarPapelMembro(item.id, p.id);
-            await carregar();
-          } catch (e) {
-            Alert.alert("Erro", e?.message || "Falha ao atualizar.");
-          }
-        },
-      })).concat([{ text: "Cancelar", style: "cancel" }])
-    );
+    showAlert({
+      title: "Alterar papel",
+      message: item.email,
+      buttons: [
+        ...PAPEIS.map((p) => ({
+          text: p.label + (item.papel === p.id ? " ✓" : ""),
+          onPress: async () => {
+            try {
+              setAbertoId(null);
+              await atualizarPapelMembro(item.id, p.id);
+              await carregar();
+            } catch (e) {
+              showAlert({
+                title: "Erro",
+                message: e?.message || "Falha ao atualizar.",
+              });
+            }
+          },
+        })),
+        { text: "Cancelar", style: "cancel" },
+      ],
+    });
   }
 
   function labelPapel(p) {
@@ -170,11 +196,7 @@ export default function Membros() {
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
-      <View style={styles.headerInfo}>
-        <Text style={[styles.igrejaSub, { color: muted }]}>
-          {membros.length} membro{membros.length === 1 ? "" : "s"}
-        </Text>
-      </View>
+
 
       <FlatList
         data={membros}
@@ -353,7 +375,7 @@ export default function Membros() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: 14 },
+  container: { flex: 1, paddingHorizontal: 14, paddingTop:14 },
   headerInfo: {
     paddingTop: 14,
     paddingBottom: 8,

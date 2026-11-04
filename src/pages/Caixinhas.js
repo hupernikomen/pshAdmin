@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   TextInput,
   Modal,
-  Alert,
   RefreshControl,
   Pressable,
   KeyboardAvoidingView,
@@ -16,6 +15,7 @@ import {
 import { useNavigation, useTheme } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../context/AppContext";
+import { useAppAlert } from "../context/AlertContext";
 import Load from "../componentes/Load";
 import SwipeCard from "../componentes/SwipeCard";
 
@@ -53,6 +53,7 @@ export default function Caixinhas() {
     igrejaAtiva,
   } = useContext(AppContext);
 
+  const { showAlert } = useAppAlert();
   const { colors, dark } = useTheme();
   const navigation = useNavigation();
   const [refreshing, setRefreshing] = useState(false);
@@ -104,10 +105,10 @@ export default function Caixinhas() {
 
   function abrirCriar() {
     if (!podeEditar) {
-      Alert.alert(
-        "Somente leitura",
-        "Seu perfil não permite alterar caixinhas."
-      );
+      showAlert({
+        title: "Somente leitura",
+        message: "Seu perfil não permite alterar caixinhas.",
+      });
       return;
     }
     setModoModal("criar");
@@ -119,7 +120,10 @@ export default function Caixinhas() {
 
   function abrirDepositar(cx) {
     if (!podeEditar) {
-      Alert.alert("Somente leitura", "Seu perfil não permite depositar.");
+      showAlert({
+        title: "Somente leitura",
+        message: "Seu perfil não permite depositar.",
+      });
       return;
     }
     setModoModal("depositar");
@@ -131,7 +135,10 @@ export default function Caixinhas() {
 
   function abrirRetirar(cx) {
     if (!podeEditar) {
-      Alert.alert("Somente leitura", "Seu perfil não permite retirar.");
+      showAlert({
+        title: "Somente leitura",
+        message: "Seu perfil não permite retirar.",
+      });
       return;
     }
     setModoModal("retirar");
@@ -143,13 +150,16 @@ export default function Caixinhas() {
 
   function confirmarExcluir(cx) {
     if (!podeEditar) {
-      Alert.alert("Somente leitura", "Seu perfil não permite excluir.");
+      showAlert({
+        title: "Somente leitura",
+        message: "Seu perfil não permite excluir.",
+      });
       return;
     }
-    Alert.alert(
-      "Excluir caixinha",
-      `Excluir "${cx.nome}"? O valor volta a contar só no caixa livre (não gera lançamento automático).`,
-      [
+    showAlert({
+      title: "Excluir caixinha",
+      message: `Excluir "${cx.nome}"? O valor volta a contar só no caixa livre (não gera lançamento automático).`,
+      buttons: [
         { text: "Cancelar", style: "cancel" },
         {
           text: "Excluir",
@@ -158,12 +168,15 @@ export default function Caixinhas() {
             try {
               await ExcluirCaixinha(cx.id);
             } catch (e) {
-              Alert.alert("Erro", e?.message || "Não foi possível excluir.");
+              showAlert({
+                title: "Erro",
+                message: e?.message || "Não foi possível excluir.",
+              });
             }
           },
         },
-      ]
-    );
+      ],
+    });
   }
 
   async function confirmarModal() {
@@ -175,41 +188,50 @@ export default function Caixinhas() {
       if (modoModal === "criar") {
         const n = String(nome || "").trim();
         if (!n) {
-          Alert.alert("Atenção", "Informe o nome da caixinha.");
+          showAlert({
+            title: "Atenção",
+            message: "Informe o nome da caixinha.",
+          });
           return;
         }
         if (v < 0) {
-          Alert.alert("Atenção", "Valor inválido.");
+          showAlert({ title: "Atenção", message: "Valor inválido." });
           return;
         }
         if (v > (Number(saldoDisponivel) || 0) + 0.001) {
-          Alert.alert(
-            "Saldo insuficiente",
-            `Caixa livre disponível: R$ ${formatoMoeda.format(
+          showAlert({
+            title: "Saldo insuficiente",
+            message: `Caixa livre disponível: R$ ${formatoMoeda.format(
               saldoDisponivel || 0
-            )}`
-          );
+            )}`,
+          });
           return;
         }
         await CriarCaixinha(n, v);
       } else if (modoModal === "depositar") {
         if (v <= 0) {
-          Alert.alert("Atenção", "Informe um valor válido.");
+          showAlert({
+            title: "Atenção",
+            message: "Informe um valor válido.",
+          });
           return;
         }
         if (v > (Number(saldoDisponivel) || 0) + 0.001) {
-          Alert.alert(
-            "Saldo insuficiente",
-            `Caixa livre disponível: R$ ${formatoMoeda.format(
+          showAlert({
+            title: "Saldo insuficiente",
+            message: `Caixa livre disponível: R$ ${formatoMoeda.format(
               saldoDisponivel || 0
-            )}`
-          );
+            )}`,
+          });
           return;
         }
         await DepositarNaCaixinha(cxSel.id, v);
       } else if (modoModal === "retirar") {
         if (v <= 0) {
-          Alert.alert("Atenção", "Informe um valor válido.");
+          showAlert({
+            title: "Atenção",
+            message: "Informe um valor válido.",
+          });
           return;
         }
         await RetirarDaCaixinha(cxSel.id, v);
@@ -217,7 +239,10 @@ export default function Caixinhas() {
 
       setModalVisible(false);
     } catch (e) {
-      Alert.alert("Erro", e?.message || "Não foi possível salvar.");
+      showAlert({
+        title: "Erro",
+        message: e?.message || "Não foi possível salvar.",
+      });
     } finally {
       setSalvando(false);
     }

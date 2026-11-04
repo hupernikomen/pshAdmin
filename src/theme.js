@@ -1,10 +1,10 @@
 import { DefaultTheme, DarkTheme } from "@react-navigation/native";
 
-/** Cor principal — tema claro */
-export const PRINCIPAL = "#3D6FA8";
+/** Cor principal — tema claro (Azul Royal vibrante e moderno) */
+export const PRINCIPAL = "#488fe0ff";
 
-/** Cor principal — tema escuro (mais clara, combina com fundo escuro) */
-export const PRINCIPAL_DARK = "#3D6FA8";
+/** Cor principal — tema escuro */
+export const PRINCIPAL_DARK = "#488fe0ff";
 
 export const TemaClaro = {
   ...DefaultTheme,
@@ -12,18 +12,18 @@ export const TemaClaro = {
   colors: {
     ...DefaultTheme.colors,
     primary: PRINCIPAL,
-    background: "#f4f5f7",
-    card: "#ffffff",
-    text: "#000",
-    border: "#ececec",
+    background: "#F8FAFC",
+    card: "#FFFFFF",
+    text: "#0F172A", // Escuro mais definido para alto contraste
+    border: "#E2E8F0",
     notification: PRINCIPAL,
 
     principal: PRINCIPAL,
-    neutro: "#f6f6f6",
-    negativo: "#EB271C",
-    muted: "#9aa0a6",
-    entrada: "#2E7D32",
-    saida: "#C62828",
+    neutro: "#F1F5F9",
+    negativo: "#DC2626",
+    muted: "#64748B", // Muted mais legível
+    entrada: "#16A34A", // Verde vivo
+    saida: "#DC2626", // Vermelho vivo
   },
 };
 

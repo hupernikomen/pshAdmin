@@ -6,7 +6,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  Alert,
   Modal,
   Pressable,
   KeyboardAvoidingView,
@@ -28,6 +27,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebaseConnection";
 import { AppContext } from "../context/AppContext";
+import { useAppAlert } from "../context/AlertContext";
 import Load from "../componentes/Load";
 import SwipeCard from "../componentes/SwipeCard";
 import {
@@ -311,9 +311,7 @@ function simularViabilidade({
 
   for (const m of meses) {
     saldo = arred(
-      saldo +
-        (Number(mediaDizimos) || 0) -
-        (Number(mediaContaFixa) || 0)
+      saldo + (Number(mediaDizimos) || 0) - (Number(mediaContaFixa) || 0)
     );
 
     const listaMes = porMes[m.key] || [];
@@ -370,7 +368,6 @@ function simularViabilidade({
   };
 }
 
-/** Saldo estimado no mês da data escolhida (antes de incluir o novo gasto) */
 function saldoEstimadoNoMes({
   saldoProjetadoInicial,
   mediaDizimos,
@@ -385,7 +382,6 @@ function saldoEstimadoNoMes({
   const mesFim = alvo.getMonth();
   const anoFim = alvo.getFullYear();
 
-  // data no passado em relação ao mês atual: usa o saldo projetado base
   if (anoFim < anoIni || (anoFim === anoIni && mesFim < mesIni)) {
     return arred(saldoProjetadoInicial);
   }
@@ -402,9 +398,7 @@ function saldoEstimadoNoMes({
 
   for (const m of meses) {
     saldo = arred(
-      saldo +
-        (Number(mediaDizimos) || 0) -
-        (Number(mediaContaFixa) || 0)
+      saldo + (Number(mediaDizimos) || 0) - (Number(mediaContaFixa) || 0)
     );
 
     const listaMes = porMes[m.key] || [];
@@ -432,6 +426,7 @@ export default function ProjecaoGastos() {
     podeEditarFinanceiro,
   } = useContext(AppContext);
 
+  const { showAlert } = useAppAlert();
   const { colors, dark } = useTheme();
   const [refreshing, setRefreshing] = useState(false);
   const [lista, setLista] = useState([]);
@@ -571,17 +566,20 @@ export default function ProjecaoGastos() {
 
   async function salvar() {
     if (!podeEditar) {
-      Alert.alert("Aviso", "Você não tem permissão para registrar.");
+      showAlert({
+        title: "Aviso",
+        message: "Você não tem permissão para registrar.",
+      });
       return;
     }
     const nome = String(descricao || "").trim();
     const valor = parseNumero(valorTxt);
     if (!nome) {
-      Alert.alert("Atenção", "Informe o nome do gasto.");
+      showAlert({ title: "Atenção", message: "Informe o nome do gasto." });
       return;
     }
     if (!(valor > 0)) {
-      Alert.alert("Atenção", "Informe um valor válido.");
+      showAlert({ title: "Atenção", message: "Informe um valor válido." });
       return;
     }
 
@@ -596,13 +594,16 @@ export default function ProjecaoGastos() {
     });
 
     if (!teste.ok) {
-      Alert.alert("Não é viável", teste.motivo || "Saldo futuro insuficiente.");
+      showAlert({
+        title: "Não é viável",
+        message: teste.motivo || "Saldo futuro insuficiente.",
+      });
       return;
     }
 
     const igrejaId = getIgrejaId?.();
     if (!igrejaId) {
-      Alert.alert("Erro", "Nenhuma igreja selecionada.");
+      showAlert({ title: "Erro", message: "Nenhuma igreja selecionada." });
       return;
     }
 
@@ -621,34 +622,42 @@ export default function ProjecaoGastos() {
       });
       setModal(false);
       await carregarGastos();
-      Alert.alert(
-        "Registrado",
-        "Gasto projetado salvo para consulta. Não altera o caixa real."
-      );
+      showAlert({
+        title: "Registrado",
+        message:
+          "Gasto projetado salvo para consulta. Não altera o caixa real.",
+      });
     } catch (e) {
       console.log("Erro salvar gasto projetado:", e);
-      Alert.alert("Erro", "Não foi possível salvar.");
+      showAlert({ title: "Erro", message: "Não foi possível salvar." });
     } finally {
       setSalvando(false);
     }
   }
 
-  async function excluir(item) {
-    Alert.alert("Excluir", `Remover "${item.descricao}"?`, [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Excluir",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await deleteDoc(doc(db, "gastosProjetados", item.id));
-            await carregarGastos();
-          } catch (e) {
-            Alert.alert("Erro", "Não foi possível excluir.");
-          }
+  function excluir(item) {
+    showAlert({
+      title: "Excluir",
+      message: `Remover "${item.descricao}"?`,
+      buttons: [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Excluir",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteDoc(doc(db, "gastosProjetados", item.id));
+              await carregarGastos();
+            } catch (e) {
+              showAlert({
+                title: "Erro",
+                message: "Não foi possível excluir.",
+              });
+            }
+          },
         },
-      },
-    ]);
+      ],
+    });
   }
 
   if ((load || carregandoLista) && !refreshing) return <Load />;
@@ -669,34 +678,6 @@ export default function ProjecaoGastos() {
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           <View style={styles.headerBlock}>
-            {/* <View style={styles.kpiRow}>
-              <View style={[styles.kpi, { backgroundColor: card }]}>
-                <Text style={[styles.kpiLabel, { color: muted }]}>
-                  Saldo projetado
-                </Text>
-                <Text style={[styles.kpiValue, { color: text }]}>
-                  R$ {formatoMoeda.format(indicadores.saldoProjetado)}
-                </Text>
-              </View>
-              <View style={[styles.kpi, { backgroundColor: card }]}>
-                <Text style={[styles.kpiLabel, { color: muted }]}>
-                  Média dízimos
-                </Text>
-                <Text style={[styles.kpiValue, { color: text }]}>
-                  R$ {formatoMoeda.format(indicadores.mediaDizimos)}
-                </Text>
-              </View>
-            </View>
-
-            <View style={[styles.kpiSingle, { backgroundColor: card }]}>
-              <Text style={[styles.kpiLabel, { color: muted }]}>
-                Média conta fixa (mensal)
-              </Text>
-              <Text style={[styles.kpiValue, { color: text }]}>
-                R$ {formatoMoeda.format(indicadores.mediaContaFixa)}
-              </Text>
-            </View> */}
-
             {podeEditar && (
               <TouchableOpacity
                 style={[styles.addBtn, { backgroundColor: principal }]}
@@ -707,10 +688,6 @@ export default function ProjecaoGastos() {
                 <Text style={styles.addBtnText}>Novo gasto projetado</Text>
               </TouchableOpacity>
             )}
-
-            {/* <Text style={[styles.sectionTitle, { color: text }]}>
-              Gastos projetados
-            </Text> */}
           </View>
         }
         ListEmptyComponent={
@@ -720,8 +697,9 @@ export default function ProjecaoGastos() {
               Nenhum gasto projetado
             </Text>
             <Text style={[styles.emptyText, { color: muted }]}>
-              Registre despesas futuras fictícias para testar a viabilidade considerando
-              o saldo projetado, a média de dízimos e a média de conta fixa.
+              Registre despesas futuras fictícias para testar a viabilidade
+              considerando o saldo projetado, a média de dízimos e a média de
+              conta fixa.
             </Text>
           </View>
         }
@@ -770,7 +748,6 @@ export default function ProjecaoGastos() {
             />
           );
         }}
-        
       />
 
       <Modal visible={modal} transparent animationType="fade">
@@ -786,12 +763,8 @@ export default function ProjecaoGastos() {
             <Text style={[styles.modalTitle, { color: text }]}>
               Novo gasto projetado
             </Text>
-            
 
-            {/* 1) DATA */}
-            <Text style={[styles.inputLabel, { color: muted }]}>
-              Data
-            </Text>
+            <Text style={[styles.inputLabel, { color: muted }]}>Data</Text>
             <TouchableOpacity
               style={[styles.input, { backgroundColor: inputBg }]}
               onPress={() => setShowDate(true)}
@@ -811,14 +784,13 @@ export default function ProjecaoGastos() {
                 value={dataPag}
                 mode="date"
                 display={Platform.OS === "ios" ? "spinner" : "default"}
-                onValueChange={(_, d) => {
+                onChange={(_, d) => {
                   setShowDate(Platform.OS === "ios");
                   if (d) setDataPag(d);
                 }}
               />
             )}
 
-            {/* Saldo do mês da data */}
             <View style={[styles.saldoMesBox, { backgroundColor: inputBg }]}>
               <Text style={[styles.saldoMesLabel, { color: muted }]}>
                 Saldo estimado neste mês
@@ -826,10 +798,8 @@ export default function ProjecaoGastos() {
               <Text style={[styles.saldoMesValue, { color: text }]}>
                 R$ {formatoMoeda.format(saldoMesSelecionado)}
               </Text>
-             
             </View>
 
-            {/* 2) NOME */}
             <Text style={[styles.inputLabel, { color: muted }]}>Nome</Text>
             <TextInput
               style={[
@@ -842,7 +812,6 @@ export default function ProjecaoGastos() {
               placeholderTextColor={muted}
             />
 
-            {/* 3) VALOR */}
             <Text style={[styles.inputLabel, { color: muted }]}>Valor</Text>
             <TextInput
               style={[
@@ -972,7 +941,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 17,
     fontFamily: "Roboto-Bold",
-    marginBottom:14
+    marginBottom: 14,
   },
   modalSub: {
     marginTop: 4,

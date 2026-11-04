@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   ScrollView,
   TouchableOpacity,
@@ -23,6 +22,7 @@ import {
 import { db } from "../firebaseConnection";
 import { AppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
+import { useAppAlert } from "../context/AlertContext";
 
 const MS_30_DIAS = 30 * 24 * 60 * 60 * 1000;
 
@@ -63,6 +63,7 @@ function diasRestantes(previstaEm) {
 export default function Configuracoes() {
   const { colors, dark } = useTheme();
   const { uid } = useAuth();
+  const { showAlert } = useAppAlert();
   const {
     igrejaAtiva,
     atualizarNomeIgreja,
@@ -170,11 +171,14 @@ export default function Configuracoes() {
   async function handleCriarIgreja() {
     const limpo = String(nome || "").trim();
     if (!limpo) {
-      Alert.alert("Atenção", "Informe o nome da igreja.");
+      showAlert({ title: "Atenção", message: "Informe o nome da igreja." });
       return;
     }
     if (!criarIgreja) {
-      Alert.alert("Erro", "Função de criar igreja indisponível.");
+      showAlert({
+        title: "Erro",
+        message: "Função de criar igreja indisponível.",
+      });
       return;
     }
     if (criando) return;
@@ -183,7 +187,10 @@ export default function Configuracoes() {
       setCriando(true);
       await criarIgreja(limpo);
     } catch (e) {
-      Alert.alert("Erro", e?.message || "Não foi possível criar a igreja.");
+      showAlert({
+        title: "Erro",
+        message: e?.message || "Não foi possível criar a igreja.",
+      });
     } finally {
       setCriando(false);
     }
@@ -201,7 +208,10 @@ export default function Configuracoes() {
       await atualizarNomeIgreja(limpo);
       nomeSalvoRef.current = limpo;
     } catch (e) {
-      Alert.alert("Erro", e?.message || "Não foi possível salvar o nome.");
+      showAlert({
+        title: "Erro",
+        message: e?.message || "Não foi possível salvar o nome.",
+      });
     } finally {
       salvandoRef.current = false;
     }
@@ -264,10 +274,10 @@ export default function Configuracoes() {
       saldoSalvoRef.current = valor;
       await Promise.all([HistoricoMovimentos(), ResumoFinanceiro?.()]);
     } catch (e) {
-      Alert.alert(
-        "Erro",
-        e?.message || "Não foi possível salvar o saldo inicial."
-      );
+      showAlert({
+        title: "Erro",
+        message: e?.message || "Não foi possível salvar o saldo inicial.",
+      });
     } finally {
       salvandoRef.current = false;
     }
@@ -279,18 +289,18 @@ export default function Configuracoes() {
     const nomeIg = igrejaAtiva?.nome || "esta igreja";
     const prevista = formatarData(Date.now() + MS_30_DIAS);
 
-    Alert.alert(
-      "Agendar exclusão",
-      `A igreja "${nomeIg}" será excluída permanentemente em 30 dias (${prevista}).\n\nAté lá você pode cancelar a exclusão. Depois dessa data, registros, caixinhas e membros serão apagados.`,
-      [
+    showAlert({
+      title: "Agendar exclusão",
+      message: `A igreja "${nomeIg}" será excluída permanentemente em 30 dias (${prevista}).\n\nAté lá você pode cancelar a exclusão. Depois dessa data, registros, caixinhas e membros serão apagados.`,
+      buttons: [
         { text: "Cancelar", style: "cancel" },
         {
           text: "Agendar exclusão",
           style: "destructive",
           onPress: agendarExclusao,
         },
-      ]
-    );
+      ],
+    });
   }
 
   async function agendarExclusao() {
@@ -310,18 +320,18 @@ export default function Configuracoes() {
         await carregarIgrejasDoUsuario();
       }
 
-      Alert.alert(
-        "Exclusão agendada",
-        `A igreja será excluída em ${formatarData(
+      showAlert({
+        title: "Exclusão agendada",
+        message: `A igreja será excluída em ${formatarData(
           agora + MS_30_DIAS
-        )}. Você pode cancelar antes disso nesta tela.`
-      );
+        )}. Você pode cancelar antes disso nesta tela.`,
+      });
     } catch (e) {
       console.log("Erro agendar exclusão:", e);
-      Alert.alert(
-        "Erro",
-        e?.message || "Não foi possível agendar a exclusão."
-      );
+      showAlert({
+        title: "Erro",
+        message: e?.message || "Não foi possível agendar a exclusão.",
+      });
     } finally {
       setProcessandoExclusao(false);
     }
@@ -330,17 +340,18 @@ export default function Configuracoes() {
   function pedirCancelarExclusao() {
     if (!isAdmin || !igrejaId || processandoExclusao) return;
 
-    Alert.alert(
-      "Cancelar exclusão",
-      "A igreja deixará de estar marcada para exclusão e continuará ativa normalmente.",
-      [
+    showAlert({
+      title: "Cancelar exclusão",
+      message:
+        "A igreja deixará de estar marcada para exclusão e continuará ativa normalmente.",
+      buttons: [
         { text: "Voltar", style: "cancel" },
         {
           text: "Manter igreja",
           onPress: cancelarExclusao,
         },
-      ]
-    );
+      ],
+    });
   }
 
   async function cancelarExclusao() {
@@ -359,13 +370,16 @@ export default function Configuracoes() {
         await carregarIgrejasDoUsuario();
       }
 
-      Alert.alert("Exclusão cancelada", "A igreja permanece ativa.");
+      showAlert({
+        title: "Exclusão cancelada",
+        message: "A igreja permanece ativa.",
+      });
     } catch (e) {
       console.log("Erro cancelar exclusão:", e);
-      Alert.alert(
-        "Erro",
-        e?.message || "Não foi possível cancelar a exclusão."
-      );
+      showAlert({
+        title: "Erro",
+        message: e?.message || "Não foi possível cancelar a exclusão.",
+      });
     } finally {
       setProcessandoExclusao(false);
     }
@@ -533,9 +547,7 @@ export default function Configuracoes() {
             <Text style={[styles.rowLabel, { color: colors.text }]}>
               Ocultar nomes no relatório
             </Text>
-            <Text style={[styles.switchHint, { color: muted }]}>
-              Dízimos e ofertas como Diz. *** / Oferta ***
-            </Text>
+            
           </View>
           <Switch
             value={!!ocultarNomesDoadores}
@@ -550,7 +562,7 @@ export default function Configuracoes() {
       </View>
 
       <Text style={[styles.hint, { color: muted }]}>
-        As alterações são salvas ao sair do campo ou da página.
+        As alterações são salvas automaticamente.
       </Text>
 
       {isAdmin && (

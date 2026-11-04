@@ -7,7 +7,6 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Alert,
 } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -23,6 +22,7 @@ import ThemeProvider, { useAppTheme } from "./src/context/ThemeContext";
 import Rotas from "./src/rotas";
 import Login from "./src/pages/Login";
 import { PRINCIPAL } from "./src/theme";
+import Load from "./src/componentes/Load";
 
 // Hook simples para verificar atualização no Android via Play Store
 function useVerificarAtualizacao() {
@@ -52,21 +52,6 @@ function useVerificarAtualizacao() {
         .catch(() => {});
     } catch (e) {}
   }, []);
-}
-
-function TelaCarregamento({ colors }) {
-  return (
-    <View
-      style={{
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-        backgroundColor: colors?.background || "#f4f5f7",
-      }}
-    >
-      <ActivityIndicator size="large" color={colors?.principal || PRINCIPAL} />
-    </View>
-  );
 }
 
 function TelaSemConexao({ colors, onRetry, carregando }) {
@@ -169,13 +154,15 @@ function AppNavigator() {
     try {
       const result = changeNavigationBarColor(barColor, lightIcons);
       if (result != null && typeof result.then === "function") {
-        result.catch(() => { });
+        result.catch(() => {});
       }
-    } catch (e) { }
+    } catch (e) {}
   }, [tema.dark]);
 
-  if (!ready || !authPronto) {
-    return <TelaCarregamento colors={colors} />;
+  // UNIFICAÇÃO DO CARREGAMENTO:
+  // Se o tema/auth não estiverem prontos OU se o usuário estiver logado mas as igrejas ainda estiverem buscando dados, mantém o Load contínuo sem piscar.
+  if (!ready || !authPronto || (user && !igrejasProntas)) {
+    return <Load />;
   }
 
   if (!user) {
@@ -189,10 +176,6 @@ function AppNavigator() {
         <AppAlert />
       </NavigationContainer>
     );
-  }
-
-  if (!igrejasProntas) {
-    return <TelaCarregamento colors={colors} />;
   }
 
   if (semConexao && !igrejaAtiva?.id) {

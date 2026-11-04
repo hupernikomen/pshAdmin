@@ -21,7 +21,7 @@ import Load from "../componentes/Load";
 import SwipeCard from "../componentes/SwipeCard";
 import { podeEditarRegistro } from "../utils/registroEdit";
 
-const LIMITES = [30, 60, 90, 150];
+const LIMITES = [5, 30, 100, 150];
 
 function normalizarUri(uri) {
   if (!uri) return null;
@@ -234,7 +234,7 @@ export default function Historico() {
   const navigation = useNavigation();
   const [refreshing, setRefreshing] = useState(false);
   const [fotoSelecionada, setFotoSelecionada] = useState(null);
-  const [limite, setLimite] = useState(30);
+  const [limite, setLimite] = useState(5); // Iniciando em 5
   const [abertoId, setAbertoId] = useState(null);
 
   const principal = colors.principal || colors.primary;
@@ -242,8 +242,7 @@ export default function Historico() {
   const muted = colors.muted || (dark ? "#9aa0a6" : "#888");
   const card = colors.card;
   const bg = colors.background;
-
-  // Carga principal fica no AppContext (igrejaAtiva.id)
+  const border = colors.border;
 
   const onRefresh = async () => {
     if (!uid) return;
@@ -310,7 +309,7 @@ export default function Historico() {
           </View>
         }
         ListHeaderComponent={
-          <View style={[styles.filtroWrap, { backgroundColor: bg }]}>
+          <View style={styles.filtroContainer}>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -323,8 +322,8 @@ export default function Historico() {
                     key={n}
                     style={[
                       styles.filtroChip,
-                      { backgroundColor: card },
-                      ativo && { backgroundColor: principal },
+                      { backgroundColor: card, borderColor: border },
+                      ativo && { backgroundColor: principal, borderColor: principal },
                     ]}
                     onPress={() => setLimite(n)}
                     activeOpacity={0.8}
@@ -333,16 +332,26 @@ export default function Historico() {
                       style={[
                         styles.filtroChipText,
                         { color: text },
-                        ativo && { color: "#fff" },
+                        ativo && { color: "#fff", fontFamily: "Roboto-Bold" },
                       ]}
                     >
-                      {n}
+                      Últimos {n}
                     </Text>
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
           </View>
+        }
+        // AVISO NO RODAPÉ: Só exibe se o limite atual for 7 e houver mais dados para mostrar
+        ListFooterComponent={
+          limite === 5 && linhas.length > 5 ? (
+            <View style={styles.footerAviso}>
+              <Text style={[styles.footerAvisoText, { color: text }]}>
+                Exibindo apenas os 5 registros mais recentes. Selecione 30, 100 ou 150 acima para ver mais dados.
+              </Text>
+            </View>
+          ) : null
         }
         refreshControl={
           <RefreshControl
@@ -357,8 +366,8 @@ export default function Historico() {
 
           const textoParcela =
             item.parcelaNumero != null &&
-              item.parcelaTotal != null &&
-              item.parcelaTotal > 1
+            item.parcelaTotal != null &&
+            item.parcelaTotal > 1
               ? `Parcela ${item.parcelaNumero}/${item.parcelaTotal}`
               : null;
 
@@ -376,7 +385,6 @@ export default function Historico() {
             ? new Date(item.data).toLocaleDateString("pt-BR")
             : "-";
 
-          // Limpa a observação para remover quebras de linha excessivas, se houver
           const obsLimpa = item.observacao
             ? String(item.observacao).trim().replace(/\n/g, " ")
             : null;
@@ -386,7 +394,7 @@ export default function Historico() {
             item.tipo,
             textoParcela,
             origem ? `Pago: ${origem}` : null,
-            obsLimpa ? `${obsLimpa}` : null, // ← Adicionada a observação aqui
+            obsLimpa ? `${obsLimpa}` : null,
           ].filter(Boolean);
 
           const actions = [];
@@ -473,9 +481,8 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 14,
   },
-  filtroWrap: {
-    paddingTop: 10,
-    paddingBottom: 14,
+  filtroContainer: {
+    paddingVertical: 10,
   },
   filtroRow: {
     flexDirection: "row",
@@ -484,12 +491,28 @@ const styles = StyleSheet.create({
   },
   filtroChip: {
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
   },
   filtroChipText: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: "Roboto-Medium",
+  },
+  footerAviso: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    marginTop: 4,
+  },
+  footerAvisoText: {
+    fontSize: 13,
+    fontFamily: "Roboto-Light",
+    textAlign: "center",
+    flex: 1,
   },
   listContent: {
     paddingTop: 4,

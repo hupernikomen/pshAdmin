@@ -265,7 +265,7 @@ const styles = StyleSheet.create({
   },
   value: {
     fontSize: 14,
-    fontFamily: "Roboto-Regular",
+    fontFamily: "Roboto-Medium",
   },
   subRow: {
     marginTop: 2,

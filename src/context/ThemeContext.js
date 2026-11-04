@@ -10,11 +10,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { TemaClaro, TemaEscuro } from "../theme";
 
 const KEY = "@theme_preference"; // "system" | "light" | "dark"
+const DEFAULT_PREFERENCE = "dark"; // tema padrão após instalar
 
 export const ThemeContext = createContext({
-  preference: "system",
-  isDark: false,
-  tema: TemaClaro,
+  preference: DEFAULT_PREFERENCE,
+  isDark: true,
+  tema: TemaEscuro,
   setPreference: async () => {},
   toggleLightDark: async () => {},
   ready: false,
@@ -22,7 +23,7 @@ export const ThemeContext = createContext({
 
 export function ThemeProvider({ children }) {
   const system = useColorScheme();
-  const [preference, setPreferenceState] = useState("system");
+  const [preference, setPreferenceState] = useState(DEFAULT_PREFERENCE);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -31,8 +32,14 @@ export function ThemeProvider({ children }) {
         const saved = await AsyncStorage.getItem(KEY);
         if (saved === "light" || saved === "dark" || saved === "system") {
           setPreferenceState(saved);
+        } else {
+          // primeira instalação: grava dark como preferência
+          setPreferenceState(DEFAULT_PREFERENCE);
+          await AsyncStorage.setItem(KEY, DEFAULT_PREFERENCE);
         }
-      } catch (_) {}
+      } catch (_) {
+        setPreferenceState(DEFAULT_PREFERENCE);
+      }
       setReady(true);
     })();
   }, []);

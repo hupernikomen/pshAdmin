@@ -28,8 +28,6 @@ export default function Saldo({
 
   return (
     <View style={styles.container}>
-      {/* Abas integradas perfeitamente ao topo da janela */}
-      {/* Abas integradas perfeitamente ao topo da janela */}
       <View style={styles.tabsContainer}>
         <TouchableOpacity
           style={[
@@ -114,7 +112,6 @@ export default function Saldo({
             </TouchableOpacity>
           </View>
 
-          <View style={[styles.divider, { backgroundColor: colors.border || "#eee" }]} />
 
           <View style={styles.balanceMiddle}>
             <View>
@@ -202,10 +199,10 @@ export default function Saldo({
           <View style={styles.balanceMiddle}>
             <View>
               <Text style={[styles.miniLabel, { color: colors.text }]}>
-                Estimativa calculada para {meses} {meses === 1 ? "mês" : "meses"}
+                Estimativa calculada
               </Text>
               <Text style={[styles.miniValue, { color: colors.text }]}>
-                Baseada nos meses futuros
+                {meses} {meses === 1 ? "mês" : "meses"}
               </Text>
             </View>
 
@@ -219,7 +216,7 @@ export default function Saldo({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 18,
+    marginVertical: 14,
   },
   tabsContainer: {
     flexDirection: "row",
@@ -235,7 +232,6 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   tabActive: {
-    // Remove qualquer sombra indesejada para fundir perfeitamente com o card principal abaixo
     shadowColor: "transparent",
     elevation: 0,
   },
@@ -249,7 +245,6 @@ const styles = StyleSheet.create({
     opacity: 1,
   },
   balanceCard: {
-    // Cantos superiores levemente retos na aba ativa ou bordas arredondadas harmônicas coladas nas abas
     borderTopLeftRadius: 0,
     borderTopRightRadius: 22,
     borderBottomLeftRadius: 22,

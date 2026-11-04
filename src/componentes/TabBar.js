@@ -8,8 +8,8 @@ import {
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 
-const TAB_SIZE = 52;
-const PILL_SIZE = 50;
+const TAB_SIZE = 50;
+const PILL_SIZE = 48;
 
 function nomeIcone(nome, focado) {
   if (!nome) return "ellipse-outline";
@@ -68,7 +68,10 @@ export default function TabbarPersonalizada({
 
   return (
     <Animated.View style={styles.container}>
-      <View style={[styles.content, { elevation: dark ? 0 : 2,backgroundColor: card, borderColor: dark ? colors.muted : colors.background, borderWidth: .5 }]}>
+      <View style={[styles.content, { 
+        elevation:dark ? 14 : 5,
+        backgroundColor: card, 
+         }]}>
         <Animated.View
           pointerEvents="none"
           style={[
