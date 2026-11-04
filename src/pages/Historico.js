@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import {
   View,
   FlatList,
@@ -9,7 +9,6 @@ import {
   Modal,
   TouchableOpacity,
   Pressable,
-  Alert,
   ScrollView,
 } from "react-native";
 import { useNavigation, useTheme } from "@react-navigation/native";
@@ -17,6 +16,7 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 import RNFS from "react-native-fs";
 import { AppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
+import { useAppAlert } from "../context/AlertContext";
 import Load from "../componentes/Load";
 import SwipeCard from "../componentes/SwipeCard";
 import { podeEditarRegistro } from "../utils/registroEdit";
@@ -111,6 +111,7 @@ function montarLinhasHistorico(dadosFinancas) {
           valorTotal: Number(p.valor) || 0,
           valorPagoTotal: Number(p.valor) || 0,
           status: "quitada",
+          observacao: item.observacao || null,
           origemPagamento: p.origemPagamento || item.origemPagamento || null,
           caixinhaNome: p.caixinhaNome || item.caixinhaNome || null,
           caixinhaId: p.caixinhaId || item.caixinhaId || null,
@@ -146,6 +147,7 @@ function montarLinhasHistorico(dadosFinancas) {
             valorTotal: Number(p.valor) || 0,
             valorPagoTotal: Number(p.valor) || 0,
             status: "quitada",
+            observacao: item.observacao || null,
             origemPagamento: p.origemPagamento || item.origemPagamento || null,
             caixinhaNome: p.caixinhaNome || item.caixinhaNome || null,
             caixinhaId: p.caixinhaId || item.caixinhaId || null,
@@ -181,6 +183,7 @@ function montarLinhasHistorico(dadosFinancas) {
           tipo: item.tipo || "Recebimento",
           descricao: item.descricao || item.tipo || "Receita",
           data: tsRec,
+          observacao: item.observacao || null,
           valorTotal: Number(p.valor) || 0,
           valorRecebidoTotal: Number(p.valor) || 0,
           status: "quitada",
@@ -200,6 +203,7 @@ function montarLinhasHistorico(dadosFinancas) {
       rowId: item.id,
       sortKey: sortBase,
       createdAt: createdAtPai,
+      observacao: item.observacao || null,
       reg: createdAtPai,
       parcelaNumero: null,
       parcelaTotal: null,
@@ -218,12 +222,13 @@ export default function Historico() {
   const {
     dadosFinancas,
     load,
-    setLoad,
+    financasProntas,
     HistoricoMovimentos,
     formatoMoeda,
     podeEditarFinanceiro,
   } = useContext(AppContext);
 
+  const { showAlert } = useAppAlert();
   const { uid, authPronto } = useAuth();
   const { colors, dark } = useTheme();
   const navigation = useNavigation();
@@ -238,17 +243,7 @@ export default function Historico() {
   const card = colors.card;
   const bg = colors.background;
 
-  useEffect(() => {
-    if (!authPronto) return;
-    if (!uid) return;
-    carregarDados();
-  }, [authPronto, uid]);
-
-  async function carregarDados() {
-    setLoad(true);
-    await HistoricoMovimentos();
-    setLoad(false);
-  }
+  // Carga principal fica no AppContext (igrejaAtiva.id)
 
   const onRefresh = async () => {
     if (!uid) return;
@@ -264,10 +259,10 @@ export default function Historico() {
     try {
       const existe = await RNFS.exists(path);
       if (!existe) {
-        Alert.alert(
-          "Recibo não encontrado",
-          "O arquivo da foto não está mais neste aparelho."
-        );
+        showAlert({
+          title: "Recibo não encontrado",
+          message: "O arquivo da foto não está mais neste aparelho.",
+        });
         return;
       }
       setFotoSelecionada(uri);
@@ -288,7 +283,9 @@ export default function Historico() {
 
   const podeEditarPapel = podeEditarFinanceiro?.() !== false;
 
-  if ((!authPronto || load) && !refreshing) return <Load />;
+  if (!authPronto) return <Load />;
+  if (!financasProntas && !refreshing) return <Load />;
+  if (load && !refreshing) return <Load />;
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
@@ -360,8 +357,8 @@ export default function Historico() {
 
           const textoParcela =
             item.parcelaNumero != null &&
-            item.parcelaTotal != null &&
-            item.parcelaTotal > 1
+              item.parcelaTotal != null &&
+              item.parcelaTotal > 1
               ? `Parcela ${item.parcelaNumero}/${item.parcelaTotal}`
               : null;
 
@@ -379,11 +376,17 @@ export default function Historico() {
             ? new Date(item.data).toLocaleDateString("pt-BR")
             : "-";
 
+          // Limpa a observação para remover quebras de linha excessivas, se houver
+          const obsLimpa = item.observacao
+            ? String(item.observacao).trim().replace(/\n/g, " ")
+            : null;
+
           const partesSub = [
             dataStr,
             item.tipo,
             textoParcela,
             origem ? `Pago: ${origem}` : null,
+            obsLimpa ? `${obsLimpa}` : null, // ← Adicionada a observação aqui
           ].filter(Boolean);
 
           const actions = [];

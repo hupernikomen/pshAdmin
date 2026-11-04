@@ -1,11 +1,10 @@
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import {
   View,
   Text,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
   Modal,
   Pressable,
@@ -15,6 +14,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
+import { useAppAlert } from "../context/AlertContext";
 import Load from "../componentes/Load";
 import { exportarRelatorioPDF } from "../utils/relatorioPdf";
 import { montarComentarioRelatorio } from "../utils/comentarioRelatorioOffline";
@@ -22,8 +22,8 @@ import {
   arred,
   fimDoDiaTs,
   dataDoItem,
-  valorAReceberItem,
-  valorAPagarItem,
+  valorAReceberAte,
+  valorAPagarAte,
 } from "../utils/financeiro";
 
 const MESES = [
@@ -323,7 +323,7 @@ function noMes(ts, ano, mes) {
 export default function Relatorio() {
   const {
     dadosFinancas,
-    load,
+    financasProntas,
     HistoricoMovimentos,
     formatoMoeda,
     igrejaAtiva,
@@ -332,7 +332,8 @@ export default function Relatorio() {
     getInfoAssinaturaPdf,
     solicitarLiberacaoPdf,
   } = useContext(AppContext);
-  const { user, uid, authPronto } = useAuth();
+  const { showAlert } = useAppAlert();
+  const { user, authPronto } = useAuth();
   const { colors, dark } = useTheme();
 
   const agora = new Date();
@@ -356,7 +357,7 @@ export default function Relatorio() {
   const muted = colors.muted || (dark ? "#9aa0a6" : "#888");
   const card = colors.card;
   const bg = colors.background;
-  const surface = dark ? "#2a2a2a" : "#f4f5f7";
+  const surface = dark ? "#2a2a2a" : colors.neutro;
   const border = colors.border || (dark ? "#333" : "#ececec");
 
   const pdfLiberado = typeof podeGerarPdf === "function" ? podeGerarPdf() : true;
@@ -371,10 +372,7 @@ export default function Relatorio() {
           pixTitular: "",
         };
 
-  useEffect(() => {
-    if (!authPronto || !uid) return;
-    HistoricoMovimentos();
-  }, [authPronto, uid, igrejaAtiva?.id]);
+  // Carga principal fica no AppContext (igrejaAtiva.id)
 
   const intervalo = useMemo(() => {
     if (modoFiltro === "periodo") {
@@ -418,21 +416,22 @@ export default function Relatorio() {
   }, [dadosFinancas, igrejaAtiva, intervalo]);
 
   const projecao = useMemo(() => {
-    const lista = dadosFinancas || [];
-    let aReceber = 0;
-    let aPagar = 0;
-    lista.forEach((i) => {
-      aReceber += valorAReceberItem(i);
-      aPagar += valorAPagarItem(i);
-    });
-    aReceber = arred(aReceber);
-    aPagar = arred(aPagar);
-    return {
-      aReceber,
-      aPagar,
-      saldoProjetado: arred(resumo.saldoAtual + aReceber - aPagar),
-    };
-  }, [dadosFinancas, resumo.saldoAtual]);
+  const lista = dadosFinancas || [];
+  const fim = intervalo.fim;
+  let aReceber = 0;
+  let aPagar = 0;
+  lista.forEach((i) => {
+    aReceber += valorAReceberAte(i, fim);
+    aPagar += valorAPagarAte(i, fim);
+  });
+  aReceber = arred(aReceber);
+  aPagar = arred(aPagar);
+  return {
+    aReceber,
+    aPagar,
+    saldoProjetado: arred(resumo.saldoAtual + aReceber - aPagar),
+  };
+}, [dadosFinancas, resumo.saldoAtual, intervalo.fim]);
 
   const seriesGraficos = useMemo(() => {
     const lista = dadosFinancas || [];
@@ -591,48 +590,57 @@ export default function Relatorio() {
       });
     } catch (e) {
       console.log("ERRO PDF:", e);
-      Alert.alert("Erro ao exportar PDF", e?.message || "Erro desconhecido");
+      showAlert({
+        title: "Erro ao exportar PDF",
+        message: e?.message || "Erro desconhecido",
+      });
     } finally {
       setGerando(false);
     }
   }
 
   function onJaPaguei() {
-    Alert.alert(
-      "Confirmar pagamento",
-      "Só continue se o Pix já tiver sido feito.\n\nEnviaremos um pedido de liberação. O PDF só é liberado após a confirmação manual.",
-      [
+    showAlert({
+      title: "Confirmar pagamento",
+      message:
+        "Só continue se o Pix já tiver sido feito.\n\nEnviaremos um pedido de liberação. O PDF só é liberado após a confirmação manual.",
+      buttons: [
         { text: "Cancelar", style: "cancel" },
         {
           text: "Já paguei",
           onPress: async () => {
             if (typeof solicitarLiberacaoPdf !== "function") {
-              Alert.alert("Erro", "Função de solicitação indisponível.");
+              showAlert({
+                title: "Erro",
+                message: "Função de solicitação indisponível.",
+              });
               return;
             }
             try {
               setEnviandoPedido(true);
               await solicitarLiberacaoPdf();
               setModalPix(false);
-              Alert.alert(
-                "Pedido enviado",
-                "Recebemos o aviso. A liberação do PDF é feita manualmente após a confirmação do pagamento."
-              );
+              showAlert({
+                title: "Pedido enviado",
+                message:
+                  "Recebemos o aviso. A liberação do PDF é feita manualmente após a confirmação do pagamento.",
+              });
             } catch (e) {
-              Alert.alert(
-                "Erro",
-                e?.message || "Não foi possível enviar o pedido."
-              );
+              showAlert({
+                title: "Erro",
+                message: e?.message || "Não foi possível enviar o pedido.",
+              });
             } finally {
               setEnviandoPedido(false);
             }
           },
         },
-      ]
-    );
+      ],
+    });
   }
 
-  if ((!authPronto || load) && !(dadosFinancas || []).length) return <Load />;
+  if (!authPronto) return <Load />;
+  if (!financasProntas && !(dadosFinancas || []).length) return <Load />;
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
@@ -884,7 +892,6 @@ export default function Relatorio() {
         </View>
       </ScrollView>
 
-      {/* Modal Pix */}
       <Modal
         visible={modalPix}
         transparent

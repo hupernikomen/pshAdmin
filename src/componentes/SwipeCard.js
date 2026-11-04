@@ -11,6 +11,7 @@ import {
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../context/AppContext";
 import { useTheme } from "@react-navigation/native";
+import ValorOculto from "./ValorOculto"; // Import do novo componente
 
 const ACTION_WIDTH = 64;
 const OPEN_THRESHOLD = 40;
@@ -152,17 +153,28 @@ export default function SwipeCard({
           </View>
 
           <View style={styles.center}>
+           {/* Dentro do componente SwipeCard.js: */}
+
+            {/* Substituir o trecho do valor no titleRow: */}
             <View style={styles.titleRow}>
               <Text style={[styles.title, { color: text }]} numberOfLines={1}>
                 {title}
               </Text>
-              <Text style={[styles.value, { color: text }]} numberOfLines={1}>
-                {valorExibido}
-              </Text>
+              {ocultarValores ? (
+                <ValorOculto size="medium" style={{ alignSelf: "center" }} />
+              ) : (
+                <Text style={[styles.value, { color: text }]} numberOfLines={1}>
+                  {value}
+                </Text>
+              )}
             </View>
 
-            <View style={styles.subRow}>
-              <Text style={[styles.subtitle, { color: muted }]} numberOfLines={2}>
+           <View style={styles.subRow}>
+              <Text 
+                style={[styles.subtitle, { color: text }]} 
+                numberOfLines={2} // Aumente para 3 se quiser mais espaço para a observação
+                ellipsizeMode="tail"
+              >
                 {subtitle}
               </Text>
               <View style={styles.badges}>
@@ -249,11 +261,11 @@ const styles = StyleSheet.create({
   title: {
     flex: 1,
     fontSize: 14,
-    fontFamily: "Roboto-Regular",
+    fontFamily: "Roboto-Medium",
   },
   value: {
     fontSize: 14,
-    fontFamily: "Roboto-Medium",
+    fontFamily: "Roboto-Regular",
   },
   subRow: {
     marginTop: 2,
@@ -266,6 +278,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     fontFamily: "Roboto-Light",
+    lineHeight: 16,
   },
   badges: {
     flexDirection: "row",

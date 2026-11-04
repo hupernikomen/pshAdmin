@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -59,6 +59,7 @@ export default function AReceber() {
     dadosFinancas,
     load,
     setLoad,
+    financasProntas,
     HistoricoMovimentos,
     formatoMoeda,
     ResumoFinanceiro,
@@ -97,16 +98,7 @@ export default function AReceber() {
   const tintOk = dark ? "#1B3D2F" : "#E8F5E9";
   const tintWarn = dark ? "#3D2A14" : "#FFF3E0";
 
-  useEffect(() => {
-    if (!authPronto || !uid) return;
-    carregar();
-  }, [authPronto, uid, igrejaAtiva?.id]);
-
-  async function carregar() {
-    setLoad(true);
-    await HistoricoMovimentos();
-    setLoad(false);
-  }
+  // Carga principal fica no AppContext (igrejaAtiva.id)
 
   const onRefresh = async () => {
     if (!uid) return;
@@ -296,7 +288,9 @@ export default function AReceber() {
     }
   }
 
-  if ((!authPronto || load) && !refreshing) return <Load />;
+  if (!authPronto) return <Load />;
+  if (!financasProntas && !refreshing) return <Load />;
+  if (load && !refreshing) return <Load />;
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>

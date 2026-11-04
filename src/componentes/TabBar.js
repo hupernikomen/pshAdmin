@@ -68,7 +68,7 @@ export default function TabbarPersonalizada({
 
   return (
     <Animated.View style={styles.container}>
-      <View style={[styles.content, { backgroundColor: card, borderColor: colors.muted, borderWidth: .3 }]}>
+      <View style={[styles.content, { elevation: dark ? 0 : 2,backgroundColor: card, borderColor: dark ? colors.muted : colors.background, borderWidth: .5 }]}>
         <Animated.View
           pointerEvents="none"
           style={[
@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: -10,
     marginBottom: 21,
-    padding: 1,
+    padding: 2,
     borderRadius: 35,
   },
   pill: {

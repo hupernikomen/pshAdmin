@@ -9,14 +9,15 @@ import {
   Image,
   Modal,
   Pressable,
-  Alert,
 } from "react-native";
 import { useNavigation, useTheme } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
+import { useAppAlert } from "../context/AlertContext";
 import Load from "../componentes/Load";
 import Saldo from "../componentes/Saldo";
+import Menu from "../componentes/Menu"
 import SwipeCard from "../componentes/SwipeCard";
 import { useAppTheme } from "../context/ThemeContext";
 import {
@@ -146,7 +147,6 @@ function mesesHorizonteProjecao(lista) {
 
     if (pegouParcela) continue;
 
-    // Futura sem prazo: não empurra o horizonte
     if (item.tipo === "Sem Prazo" && !item.vencimento) continue;
 
     const ts = Number(item.vencimento || item.data || dataDoItem(item) || 0);
@@ -170,10 +170,14 @@ export default function Home() {
     saldo,
     saldoDisponivel,
     totalReservado,
+    totalAReceber,
+    totalAPagar,
+    saldoProjetado,
     caixinhas,
     dadosFinancas,
     load,
     setLoad,
+    financasProntas,
     HistoricoMovimentos,
     CarregarCaixinhas,
     formatoMoeda,
@@ -184,6 +188,7 @@ export default function Home() {
     toggleOcultarValores,
   } = useContext(AppContext);
 
+  const { showAlert } = useAppAlert();
   const { isDark, toggleLightDark } = useAppTheme();
 
   const { user, logout } = useAuth();
@@ -206,9 +211,8 @@ export default function Home() {
   const border = colors.border || (dark ? "#333" : "#eee");
   const bg = colors.background;
 
-  useEffect(() => {
-    if (!semIgreja) carregar();
-  }, [igrejaAtiva?.id]);
+  // Carga principal fica no AppContext (igrejaAtiva.id).
+  // Aqui só pull-to-refresh e ações manuais.
 
   useEffect(() => {
     navigation.setOptions({
@@ -245,6 +249,11 @@ export default function Home() {
           >
             Olá, {nome.trim().split(" ")[0]}
           </Text>
+          <Text style={{
+            fontSize: 12,
+            fontFamily: "Roboto-Light",
+            color: text,
+          }}>{igrejaAtiva.nome}</Text>
         </View>
       ),
       headerRight: () => (
@@ -252,13 +261,13 @@ export default function Home() {
           style={{
             flexDirection: "row",
             alignItems: "center",
-            marginRight: 8,
-            gap: 14,
+            marginRight: 14,
+            gap: 10,
           }}
         >
           <TouchableOpacity
             onPress={() => toggleOcultarValores?.()}
-            style={{ padding: 6 }}
+            style={{ padding: 8 }}
             activeOpacity={0.7}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
@@ -271,7 +280,7 @@ export default function Home() {
 
           <TouchableOpacity
             onPress={toggleLightDark}
-            style={{ padding: 6 }}
+            style={{ padding: 8 }}
             activeOpacity={0.7}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
@@ -299,12 +308,6 @@ export default function Home() {
     toggleOcultarValores,
   ]);
 
-  async function carregar() {
-    setLoad(true);
-    await Promise.all([HistoricoMovimentos(), CarregarCaixinhas?.()]);
-    setLoad(false);
-  }
-
   const onRefresh = async () => {
     if (semIgreja) {
       setRefreshing(false);
@@ -320,7 +323,10 @@ export default function Home() {
     try {
       await logout();
     } catch (e) {
-      Alert.alert("Erro", "Não foi possível sair.");
+      showAlert({
+        title: "Erro",
+        message: "Não foi possível sair.",
+      });
     }
   }
 
@@ -373,15 +379,12 @@ export default function Home() {
 
   const saldoAnterior = arred(saldoAtual - entradasMesAtual + saidasMesAtual);
 
-  const aReceberTotal = arred(
-    lista.reduce((acc, i) => acc + valorAReceberItem(i), 0)
+  // Totais oficiais vêm do Context (mesma regra do utils/financeiro)
+  const aReceberTotal = arred(Number(totalAReceber) || 0);
+  const despesasFuturas = arred(Number(totalAPagar) || 0);
+  const projecaoFutura = arred(
+    Number(saldoProjetado) || saldoAtual + aReceberTotal - despesasFuturas
   );
-
-  const despesasFuturas = arred(
-    lista.reduce((acc, i) => acc + valorAPagarItem(i), 0)
-  );
-
-  const projecaoFutura = arred(saldoAtual + aReceberTotal - despesasFuturas);
   const projecaoMeses = mesesHorizonteProjecao(lista);
 
   const totalDizimosMes = lista
@@ -529,6 +532,8 @@ export default function Home() {
     ]
   );
 
+  // Aguarda a carga do Context; evita segundo fetch no mount
+  if (!semIgreja && !financasProntas && !refreshing) return <Load />;
   if (load && !refreshing && !semIgreja) return <Load />;
 
   return (
@@ -588,13 +593,13 @@ export default function Home() {
               actions={
                 item.route
                   ? [
-                      {
-                        key: "go",
-                        icon: "arrow-forward",
-                        backgroundColor: principal,
-                        onPress: () => navigation.navigate(item.route),
-                      },
-                    ]
+                    {
+                      key: "go",
+                      icon: "arrow-forward",
+                      backgroundColor: principal,
+                      onPress: () => navigation.navigate(item.route),
+                    },
+                  ]
                   : []
               }
               onPress={
@@ -606,115 +611,18 @@ export default function Home() {
         />
       )}
 
-      <Modal
+      <Menu
         visible={menuAberto}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setMenuAberto(false)}
-      >
-        <Pressable
-          style={[
-            styles.menuOverlay,
-            { backgroundColor: dark ? "#00000099" : "#21212199" },
-          ]}
-          onPress={() => setMenuAberto(false)}
-        >
-          <Pressable
-            style={[styles.menuCard, { backgroundColor: card }]}
-            onPress={() => {}}
-          >
-            <View style={[styles.menuUser, { borderBottomColor: border }]}>
-              {foto ? (
-                <Image source={{ uri: foto }} style={styles.menuAvatar} />
-              ) : (
-                <View
-                  style={[
-                    styles.menuAvatar,
-                    styles.avatarFallback,
-                    { backgroundColor: principal },
-                  ]}
-                >
-                  <Ionicons name="person" size={18} color="#fff" />
-                </View>
-              )}
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.menuNome, { color: text }]} numberOfLines={1}>
-                  {nome}
-                </Text>
-                {!!igrejaAtiva?.papel && (
-                  <Text
-                    style={[styles.menuIgreja, { color: muted }]}
-                    numberOfLines={1}
-                  >
-                    {igrejaAtiva.papel}
-                  </Text>
-                )}
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={abrirProjecao}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="analytics" size={18} color={text} />
-              <Text style={[styles.menuItemText, { color: text }]}>
-                Projeção de Gastos
-              </Text>
-            </TouchableOpacity>
-
-            {isAdmin && (
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={abrirMembros}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="people-outline" size={18} color={text} />
-                <Text style={[styles.menuItemText, { color: text }]}>
-                  Membros
-                </Text>
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={abrirConfiguracoes}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="settings-outline" size={18} color={text} />
-              <Text style={[styles.menuItemText, { color: text }]}>
-                Configurações
-              </Text>
-            </TouchableOpacity>
-
-            {variasIgrejas && (
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={abrirTrocarIgreja}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name="swap-horizontal-outline"
-                  size={18}
-                  color={text}
-                />
-                <Text style={[styles.menuItemText, { color: text }]}>
-                  Trocar igreja
-                </Text>
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={handleLogout}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="log-out-outline" size={18} color={text} />
-              <Text style={[styles.menuItemText, { color: text }]}>Sair</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
+        onClose={() => setMenuAberto(false)}
+        user={user}
+        igrejaAtiva={igrejaAtiva}
+        variasIgrejas={variasIgrejas}
+        onOpenProjecao={abrirProjecao}
+        onOpenMembros={abrirMembros}
+        onOpenConfiguracoes={abrirConfiguracoes}
+        onOpenTrocarIgreja={abrirTrocarIgreja}
+        onLogout={handleLogout}
+      />
 
       <Modal
         visible={modalIgrejas}
@@ -728,7 +636,7 @@ export default function Home() {
         >
           <Pressable
             style={[styles.menuCard, { width: 280, backgroundColor: card }]}
-            onPress={() => {}}
+            onPress={() => { }}
           >
             <Text style={[styles.modalIgrejaTitulo, { color: text }]}>
               Suas igrejas
@@ -780,8 +688,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   avatar: {
-    width: 42,
-    height: 42,
+    width: 40,
+    height: 40,
     borderRadius: 25,
     marginHorizontal: 14,
   },

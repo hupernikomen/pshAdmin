@@ -14,7 +14,7 @@ export const TemaClaro = {
     primary: PRINCIPAL,
     background: "#f4f5f7",
     card: "#ffffff",
-    text: "#222",
+    text: "#000",
     border: "#ececec",
     notification: PRINCIPAL,
 
@@ -38,7 +38,6 @@ export const TemaEscuro = {
     text: "#b4b4b4ff",
     border: "#333333",
     notification: PRINCIPAL_DARK,
-
     principal: PRINCIPAL_DARK,
     neutro: "#2a2a2a",
     negativo: "#EF5350",

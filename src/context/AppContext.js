@@ -24,6 +24,11 @@ import {
   PIX_TITULAR,
   PIX_CIDADE,
 } from "../constants/assinatura";
+import {
+  arred as arredondarMoney,
+  calcularSaldoRealizado,
+  totaisPendentes,
+} from "../utils/financeiro";
 
 export const AppContext = createContext({});
 
@@ -33,24 +38,10 @@ const KEY_OCULTAR_NOMES_DOADORES = "@ocultar_nomes_doadores";
 
 const MS_DIA = 24 * 60 * 60 * 1000;
 
-function arredondarMoney(v) {
-  return Math.round((Number(v) || 0) * 100) / 100;
-}
-
 function normalizarEmail(email) {
   return String(email || "")
     .trim()
     .toLowerCase();
-}
-
-function fimDoDiaTs(d = new Date()) {
-  const x = new Date(d);
-  x.setHours(23, 59, 59, 999);
-  return x.getTime();
-}
-
-function dataDoMovimento(item) {
-  return Number(item?.data || item?.createdAt || item?.reg || 0) || 0;
 }
 
 function resolverPdfLiberadoAte(dataIgreja) {
@@ -59,68 +50,6 @@ function resolverPdfLiberadoAte(dataIgreja) {
 
   const criado = Number(dataIgreja?.createdAt) || Date.now();
   return criado + DIAS_GRATIS_PDF * MS_DIA;
-}
-
-function valorRealizadoEntradaAte(item, limiteTs) {
-  const recebidos = Array.isArray(item.valoresRecebidos)
-    ? item.valoresRecebidos
-    : [];
-
-  if (recebidos.length > 0) {
-    return recebidos.reduce((acc, r) => {
-      const ts = Number(r.data || 0);
-      if (ts && ts <= limiteTs) return acc + (Number(r.valor) || 0);
-      return acc;
-    }, 0);
-  }
-
-  const ts = dataDoMovimento(item);
-  if (ts && ts <= limiteTs) return Number(item.valorRecebidoTotal) || 0;
-  return 0;
-}
-
-function valorRealizadoSaidaAte(item, limiteTs) {
-  const pagos = Array.isArray(item.valoresPagos) ? item.valoresPagos : [];
-
-  if (pagos.length > 0) {
-    return pagos.reduce((acc, p) => {
-      const ts = Number(p.data || 0);
-      if (ts && ts <= limiteTs) return acc + (Number(p.valor) || 0);
-      return acc;
-    }, 0);
-  }
-
-  const parcelas = Array.isArray(item.parcelas) ? item.parcelas : [];
-  const pagas = parcelas.filter(
-    (p) => p.status === "paga" || p.status === "quitada" || !!p.pago
-  );
-
-  if (pagas.length > 0) {
-    return pagas.reduce((acc, p) => {
-      const ts = Number(p.dataPagamento || p.pagoEm || p.data || 0);
-      if (ts && ts <= limiteTs) return acc + (Number(p.valor) || 0);
-      return acc;
-    }, 0);
-  }
-
-  const ts = dataDoMovimento(item);
-  if (ts && ts <= limiteTs) return Number(item.valorPagoTotal) || 0;
-  return 0;
-}
-
-function calcularSaldoRealizado(lista) {
-  const limite = fimDoDiaTs();
-  let total = 0;
-
-  (lista || []).forEach((item) => {
-    if (item.tipoMovimento === "entrada") {
-      total += valorRealizadoEntradaAte(item, limite);
-    } else if (item.tipoMovimento === "saida") {
-      total -= valorRealizadoSaidaAte(item, limite);
-    }
-  });
-
-  return arredondarMoney(total);
 }
 
 function montarIgrejaAtiva(item) {
@@ -158,6 +87,7 @@ export function AppProvider({ children }) {
   const [igrejasDoUsuario, setIgrejasDoUsuario] = useState([]);
   const [igrejaAtiva, setIgrejaAtiva] = useState(null);
   const [igrejasProntas, setIgrejasProntas] = useState(false);
+  const [financasProntas, setFinancasProntas] = useState(false);
 
   const [ocultarValores, setOcultarValoresState] = useState(false);
   const [ocultarNomesDoadores, setOcultarNomesDoadoresState] = useState(true);
@@ -305,6 +235,7 @@ export function AppProvider({ children }) {
       setCaixinhas([]);
       setSaldo(0);
       setTotalReservado(0);
+      setFinancasProntas(true);
       return;
     }
 
@@ -317,9 +248,23 @@ export function AppProvider({ children }) {
       setCaixinhas([]);
       setSaldo(0);
       setTotalReservado(0);
+      setFinancasProntas(true);
       return;
     }
-    Promise.all([HistoricoMovimentos(), CarregarCaixinhas()]);
+
+    let cancelled = false;
+    (async () => {
+      setFinancasProntas(false);
+      try {
+        await Promise.all([HistoricoMovimentos(), CarregarCaixinhas()]);
+      } finally {
+        if (!cancelled) setFinancasProntas(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [igrejaAtiva?.id]);
 
   function isErroRede(e) {
@@ -832,6 +777,11 @@ export function AppProvider({ children }) {
     (Number(saldo) || 0) - (Number(totalReservado) || 0)
   );
 
+  const { totalAReceber, totalAPagar } = totaisPendentes(dadosFinancas);
+  const saldoProjetado = arredondarMoney(
+    (Number(saldo) || 0) + totalAReceber - totalAPagar
+  );
+
   return (
     <AppContext.Provider
       value={{
@@ -840,12 +790,16 @@ export function AppProvider({ children }) {
         saldo,
         saldoDisponivel,
         totalReservado,
+        totalAReceber,
+        totalAPagar,
+        saldoProjetado,
         caixinhas,
         futurosTotal,
         dadosParcelas,
         lixo,
         load,
         setLoad,
+        financasProntas,
         usuarioDoAS,
         setUsuarioDoAS,
         aviso,

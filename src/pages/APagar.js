@@ -1,4 +1,4 @@
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -29,6 +29,7 @@ import Load from "../componentes/Load";
 import SwipeCard from "../componentes/SwipeCard";
 import { useAuth } from "../context/AuthContext";
 import { useAppAlert } from "../context/AlertContext";
+import { arred, tsDoDia } from "../utils/financeiro";
 
 function parseNumero(txt) {
   if (txt === null || txt === undefined) return 0;
@@ -46,16 +47,6 @@ function parseNumero(txt) {
   }
   const n = Number(s);
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
-}
-
-function arred(v) {
-  return Math.round((Number(v) || 0) * 100) / 100;
-}
-
-function tsDoDia(d) {
-  const x = new Date(d);
-  x.setHours(12, 0, 0, 0);
-  return x.getTime();
 }
 
 function montarDevolucoesCaixinha(item) {
@@ -92,11 +83,29 @@ function montarDevolucoesCaixinha(item) {
   return map;
 }
 
+/** Primeira parcela ainda aberta deste registro. */
+function proximaParcelaAberta(item) {
+  const parcelas = Array.isArray(item?.parcelas) ? item.parcelas : [];
+  const abertas = parcelas
+    .filter((p) => p.status === "aberta" || !p.status)
+    .sort((a, b) => (Number(a.numero) || 0) - (Number(b.numero) || 0));
+  return abertas[0] || null;
+}
+
+/** Só a próxima da fila pode receber baixa. */
+function podeBaixarParcela(item) {
+  if (!item?.isParcela) return true;
+  const proxima = proximaParcelaAberta(item);
+  if (!proxima) return true;
+  return Number(proxima.numero) === Number(item.parcelaNumero);
+}
+
 export default function APagar() {
   const {
     dadosFinancas,
     load,
     setLoad,
+    financasProntas,
     HistoricoMovimentos,
     formatoMoeda,
     caixinhas,
@@ -137,17 +146,6 @@ export default function APagar() {
   const border = colors.border || (dark ? "#333" : "#ececec");
   const danger = dark ? "#E57373" : "#C62828";
   const tintDanger = dark ? "#3D1F1F" : "#FFEBEE";
-
-  useEffect(() => {
-    if (!authPronto || !uid) return;
-    carregar();
-  }, [authPronto, uid, igrejaAtiva?.id]);
-
-  async function carregar() {
-    setLoad(true);
-    await Promise.all([HistoricoMovimentos(), CarregarCaixinhas?.()]);
-    setLoad(false);
-  }
 
   const onRefresh = async () => {
     if (!uid) return;
@@ -201,12 +199,26 @@ export default function APagar() {
     });
   }, [dadosFinancas]);
 
+  function avisarForaDeOrdem(item) {
+    const proxima = proximaParcelaAberta(item);
+    const n = proxima?.numero || 1;
+    const total = item.parcelaTotal || item.quantidadeParcelas || "?";
+    showAlert({
+      title: "Fora de ordem",
+      message: `Quite primeiro a parcela ${n}/${total}. A ${item.parcelaNumero}/${total} só pode ser paga depois.`,
+    });
+  }
+
   function abrirPagar(item) {
     if (!podeEditar) {
       showAlert({
         title: "Somente leitura",
         message: "Seu perfil não permite registrar pagamentos.",
       });
+      return;
+    }
+    if (!podeBaixarParcela(item)) {
+      avisarForaDeOrdem(item);
       return;
     }
     setItemSel(item);
@@ -246,11 +258,11 @@ export default function APagar() {
     const extra =
       pago > 0
         ? `\n\nJá existem R$ ${formatoMoeda.format(
-            pago
-          )} pagos neste registro. Valores de caixinha serão devolvidos e o lançamento inteiro será removido.`
+          pago
+        )} pagos neste registro. Valores de caixinha serão devolvidos e o lançamento inteiro será removido.`
         : item.isParcela
-        ? "\n\nTodo o registro (incluindo outras parcelas) será removido."
-        : "";
+          ? "\n\nTodo o registro (incluindo outras parcelas) será removido."
+          : "";
 
     showAlert({
       title: "Excluir registro",
@@ -337,6 +349,11 @@ export default function APagar() {
       return;
     }
     if (!itemSel) return;
+    if (!podeBaixarParcela(itemSel)) {
+      avisarForaDeOrdem(itemSel);
+      fecharModal();
+      return;
+    }
 
     const valor = itemSel.isParcela
       ? arred(itemSel.falta)
@@ -475,7 +492,9 @@ export default function APagar() {
     (c) => (Number(c.valor) || 0) > 0
   );
 
-  if ((!authPronto || load) && !refreshing) return <Load />;
+  if (!authPronto) return <Load />;
+  if (!financasProntas && !refreshing) return <Load />;
+  if (load && !refreshing) return <Load />;
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
@@ -515,11 +534,14 @@ export default function APagar() {
           const dataRef = item.vencimento || item.data;
           const dataStr = dataRef
             ? new Date(dataRef).toLocaleDateString("pt-BR", {
-                day: "2-digit",
-                month: "2-digit",
-                year: "2-digit",
-              })
+              day: "2-digit",
+              month: "2-digit",
+              year: "2-digit",
+            })
             : "--/--/--";
+
+          const liberada = podeBaixarParcela(item);
+          const proxima = item.isParcela ? proximaParcelaAberta(item) : null;
 
           const meta = item.isParcela
             ? `${item.parcelaNumero}/${item.parcelaTotal} · ${dataStr}`
@@ -527,21 +549,21 @@ export default function APagar() {
 
           const actions = podeEditar
             ? [
-                {
-                  key: "pagar",
-                  icon: "card-outline",
-                  label: "Pagar",
-                  backgroundColor: principal,
-                  onPress: () => abrirPagar(item),
-                },
-                {
-                  key: "excluir",
-                  icon: "trash-outline",
-                  label: "Excluir",
-                  backgroundColor: danger,
-                  onPress: () => pedirExcluir(item),
-                },
-              ]
+              {
+                key: "pagar",
+                icon: liberada ? "card-outline" : "lock-closed-outline",
+                label: liberada ? "Pagar" : "Bloqueada",
+                backgroundColor: liberada ? principal : muted,
+                onPress: () => abrirPagar(item),
+              },
+              {
+                key: "excluir",
+                icon: "trash-outline",
+                label: "Excluir",
+                backgroundColor: danger,
+                onPress: () => pedirExcluir(item),
+              },
+            ]
             : [];
 
           return (
@@ -576,7 +598,7 @@ export default function APagar() {
           >
             <Pressable
               style={[styles.modalCard, { backgroundColor: card }]}
-              onPress={() => {}}
+              onPress={() => { }}
             >
               <Text style={[styles.modalTitle, { color: text }]}>
                 {itemSel?.isParcela ? "Pagar parcela" : "Registrar pagamento"}

@@ -7,11 +7,13 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
+  Alert,
 } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import changeNavigationBarColor from "react-native-navigation-bar-color";
 import Ionicons from "react-native-vector-icons/Ionicons";
+import SpInAppUpdates, { IAUUpdateKind } from "sp-react-native-in-app-updates";
 
 import AppAlert from "./src/componentes/AppAlert";
 import AuthProvider, { AuthContext } from "./src/context/AuthContext";
@@ -21,6 +23,42 @@ import ThemeProvider, { useAppTheme } from "./src/context/ThemeContext";
 import Rotas from "./src/rotas";
 import Login from "./src/pages/Login";
 import { PRINCIPAL } from "./src/theme";
+
+// Hook simples para verificar atualização no Android via Play Store
+function useVerificarAtualizacao() {
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+
+    try {
+      const inAppUpdates = new SpInAppUpdates(false);
+
+      inAppUpdates
+        .checkNeedsUpdate()
+        .then((result) => {
+          if (result?.shouldUpdate) {
+            Alert.alert(
+              "Nova atualização disponível",
+              "Existe uma nova versão do Tesouraria Igrejas disponível com melhorias. Deseja atualizar agora?",
+              [
+                { text: "Depois", style: "cancel" },
+                {
+                  text: "Atualizar",
+                  onPress: () => {
+                    inAppUpdates.startUpdate({
+                      updateType: IAUUpdateKind.FLEXIBLE,
+                    });
+                  },
+                },
+              ]
+            );
+          }
+        })
+        .catch(() => {
+          // Ignora erros em dev / ambiente sem Play Store
+        });
+    } catch (e) {}
+  }, []);
+}
 
 function TelaCarregamento({ colors }) {
   return (
@@ -124,6 +162,9 @@ function AppNavigator() {
     useContext(AppContext);
   const { tema, ready } = useAppTheme();
   const { colors } = tema;
+
+  // Chama a verificação de atualização assim que o AppNavigator estiver ativo
+  useVerificarAtualizacao();
 
   useEffect(() => {
     if (Platform.OS !== "android") return;

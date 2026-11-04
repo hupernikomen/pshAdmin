@@ -6,7 +6,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  Alert,
   Image,
   Platform,
   PermissionsAndroid,
@@ -24,6 +23,7 @@ import { collection, addDoc } from "firebase/firestore";
 import Load from "../componentes/Load";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { useAuth } from "../context/AuthContext";
+import { useAppAlert } from "../context/AlertContext";
 import { MINISTERIOS } from "../constants/ministerios";
 
 function parseNumero(txt) {
@@ -54,7 +54,12 @@ function inicioDoDia(d) {
   return x;
 }
 
-/** Data do lançamento é estritamente depois de hoje */
+function maisUmMes(d) {
+  const x = new Date(d);
+  x.setMonth(x.getMonth() + 1);
+  return x;
+}
+
 function isDataFutura(d) {
   const hoje = inicioDoDia(new Date());
   const dia = inicioDoDia(d || new Date());
@@ -133,37 +138,16 @@ function montarParcelas({
 
 const TIPOS_ENTRADA = [
   { id: "Dízimo", exemplo: "" },
-  {
-    id: "Oferta",
-    exemplo: "Oferta de culto, oferta alçada, etc.",
-  },
-  {
-    id: "Campanhas",
-    exemplo: "Campanha de construção, arrecadações, etc.",
-  },
-  {
-    id: "Outros",
-    exemplo: "Doações, vendas, etc.",
-  },
+  { id: "Oferta", exemplo: "Oferta de culto, oferta alçada, etc." },
+  { id: "Campanhas", exemplo: "Campanha de construção, arrecadações, etc." },
+  { id: "Outros", exemplo: "Doações, vendas, etc." },
 ];
 
 const TIPOS_SAIDA = [
-  {
-    id: "Fixa",
-    exemplo: "Energia, internet, aluguel, prebenda, etc.",
-  },
-  {
-    id: "Avulsa",
-    exemplo: "Manutenção, material de limpeza, serviços, etc.",
-  },
-  {
-    id: "Parcelada",
-    exemplo: "Compras no cartão ou acordadas.",
-  },
-  {
-    id: "Sem Prazo",
-    exemplo: "Conta a pagar sem data definida, provisão futura.",
-  },
+  { id: "Fixa", exemplo: "Energia, internet, aluguel, prebenda, etc." },
+  { id: "Avulsa", exemplo: "Manutenção, material de limpeza, serviços, etc." },
+  { id: "Parcelada", exemplo: "Compras no cartão ou acordadas." },
+  { id: "Sem Prazo", exemplo: "Conta a pagar sem data definida, provisão futura." },
 ];
 
 export default function Registro() {
@@ -185,6 +169,7 @@ export default function Registro() {
     igrejaAtiva,
   } = useContext(AppContext);
 
+  const { showAlert } = useAppAlert();
   const { uid } = useAuth();
 
   const principal = colors.principal || colors.primary;
@@ -199,7 +184,11 @@ export default function Registro() {
   const [tipoMovimento, setTipoMovimento] = useState(null);
   const [tipo, setTipo] = useState(null);
   const [data, setData] = useState(new Date());
+  const [dataPrimeiraParcela, setDataPrimeiraParcela] = useState(() =>
+    maisUmMes(new Date())
+  );
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showDatePrimeira, setShowDatePrimeira] = useState(false);
   const [descricao, setDescricao] = useState("");
   const [valorTotal, setValorTotal] = useState("");
   const [observacao, setObservacao] = useState("");
@@ -211,24 +200,33 @@ export default function Registro() {
   const [modalMinisterio, setModalMinisterio] = useState(false);
   const [modalTipo, setModalTipo] = useState(false);
 
-  const listaTipos =
-    tipoMovimento === "entrada" ? TIPOS_ENTRADA : TIPOS_SAIDA;
-
+  const listaTipos = tipoMovimento === "entrada" ? TIPOS_ENTRADA : TIPOS_SAIDA;
   const igrejaId = getIgrejaId?.() || igrejaAtiva?.id || null;
+
+  const temCaixinhaComSaldo = (caixinhas || []).some(
+    (c) => (Number(c.valor) || 0) > 0
+  );
+
   const mostrarOrigemSaida =
-    tipoMovimento === "saida" && tipo !== "Sem Prazo";
+    tipoMovimento === "saida" && tipo !== "Sem Prazo" && temCaixinhaComSaldo;
 
   useEffect(() => {
-    if (tipoMovimento !== "saida") {
+    const tem = (caixinhas || []).some((c) => (Number(c.valor) || 0) > 0);
+    if (tipoMovimento !== "saida" || !tem) {
       setOrigemPagamento("geral");
       setCaixinhaId(null);
+    }
+    if (tipoMovimento !== "saida") {
       setMinisterio("");
     }
-  }, [tipoMovimento]);
+  }, [tipoMovimento, caixinhas]);
 
   function escolherTipo(t) {
     setTipo(t);
-    if (t === "Parcelada" && !qtdParcelas) setQtdParcelas("2");
+    if (t === "Parcelada") {
+      if (!qtdParcelas) setQtdParcelas("2");
+      setDataPrimeiraParcela(maisUmMes(data));
+    }
     if (t === "Sem Prazo") {
       setOrigemPagamento("geral");
       setCaixinhaId(null);
@@ -240,13 +238,9 @@ export default function Registro() {
     setReciboUri(null);
   }
 
-  /** Na criação: quanto já entra como pago/recebido */
   function valorPagoNaCriacao(total) {
-    // Parcelada / Sem Prazo: sempre pendente na criação
     if (tipo === "Parcelada" || tipo === "Sem Prazo") return 0;
-    // Data futura: não dá baixa — vai para A receber / A pagar
     if (isDataFutura(data)) return 0;
-    // Hoje ou passado: considera quitado na criação
     return total;
   }
 
@@ -267,10 +261,10 @@ export default function Registro() {
           PermissionsAndroid.PERMISSIONS.CAMERA
         );
         if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-          Alert.alert(
-            "Permissão negada",
-            "Precisamos da câmera para continuar."
-          );
+          showAlert({
+            title: "Permissão negada",
+            message: "Precisamos da câmera para continuar.",
+          });
           return;
         }
       }
@@ -284,7 +278,7 @@ export default function Registro() {
       if (result.didCancel || result.errorCode) return;
       if (result.assets?.length > 0) setReciboUri(result.assets[0].uri);
     } catch (error) {
-      Alert.alert("Erro", "Não foi possível abrir a câmera.");
+      showAlert({ title: "Erro", message: "Não foi possível abrir a câmera." });
     }
   }
 
@@ -300,7 +294,7 @@ export default function Registro() {
       if (result.didCancel || result.errorCode) return;
       if (result.assets?.length > 0) setReciboUri(result.assets[0].uri);
     } catch (error) {
-      Alert.alert("Erro", "Não foi possível abrir a galeria.");
+      showAlert({ title: "Erro", message: "Não foi possível abrir a galeria." });
     }
   }
 
@@ -310,30 +304,30 @@ export default function Registro() {
 
     if (origemPagamento === "geral") {
       if (valorPagoAgora > (Number(saldoDisponivel) || 0) + 0.001) {
-        Alert.alert(
-          "Saldo insuficiente",
-          `Caixa livre disponível: R$ ${formatoMoeda.format(
+        showAlert({
+          title: "Saldo insuficiente",
+          message: `Caixa livre disponível: R$ ${formatoMoeda.format(
             saldoDisponivel || 0
-          )}`
-        );
+          )}`,
+        });
         return false;
       }
       return true;
     }
     if (!caixinhaId) {
-      Alert.alert("Atenção", "Selecione a caixinha de origem.");
+      showAlert({ title: "Atenção", message: "Selecione a caixinha de origem." });
       return false;
     }
     const cx = (caixinhas || []).find((c) => c.id === caixinhaId);
     if (!cx) {
-      Alert.alert("Atenção", "Caixinha não encontrada.");
+      showAlert({ title: "Atenção", message: "Caixinha não encontrada." });
       return false;
     }
     if (valorPagoAgora > (Number(cx.valor) || 0) + 0.001) {
-      Alert.alert(
-        "Saldo insuficiente",
-        `"${cx.nome}" tem R$ ${formatoMoeda.format(cx.valor || 0)}`
-      );
+      showAlert({
+        title: "Saldo insuficiente",
+        message: `"${cx.nome}" tem R$ ${formatoMoeda.format(cx.valor || 0)}`,
+      });
       return false;
     }
     return true;
@@ -348,26 +342,26 @@ export default function Registro() {
 
   async function salvar() {
     if (!uid) {
-      Alert.alert("Atenção", "Faça login novamente.");
+      showAlert({ title: "Atenção", message: "Faça login novamente." });
       return;
     }
     if (!igrejaId) {
-      Alert.alert("Atenção", "Nenhuma igreja selecionada.");
+      showAlert({ title: "Atenção", message: "Nenhuma igreja selecionada." });
       return;
     }
     if (podeEditarFinanceiro && !podeEditarFinanceiro()) {
-      Alert.alert(
-        "Sem permissão",
-        "Seu perfil é somente leitura nesta igreja."
-      );
+      showAlert({
+        title: "Sem permissão",
+        message: "Seu perfil é somente leitura nesta igreja.",
+      });
       return;
     }
     if (!tipoMovimento) {
-      Alert.alert("Atenção", "Selecione Entrada ou Saída.");
+      showAlert({ title: "Atenção", message: "Selecione Entrada ou Saída." });
       return;
     }
     if (!tipo || !descricao || !valorTotal) {
-      Alert.alert("Atenção", "Preencha os campos obrigatórios.");
+      showAlert({ title: "Atenção", message: "Preencha os campos obrigatórios." });
       return;
     }
 
@@ -375,7 +369,7 @@ export default function Registro() {
     const valor = parseNumero(valorTotal);
 
     if (!(valor > 0)) {
-      Alert.alert("Atenção", "Informe o valor total.");
+      showAlert({ title: "Atenção", message: "Informe o valor total." });
       return;
     }
 
@@ -384,7 +378,17 @@ export default function Registro() {
     if (tipo === "Parcelada") {
       const qtd = parseInt(qtdParcelas, 10) || 1;
       if (qtd < 1) {
-        Alert.alert("Atenção", "Informe a quantidade de parcelas.");
+        showAlert({
+          title: "Atenção",
+          message: "Informe a quantidade de parcelas.",
+        });
+        return;
+      }
+      if (!dataPrimeiraParcela) {
+        showAlert({
+          title: "Atenção",
+          message: "Informe a data da primeira parcela.",
+        });
         return;
       }
       if (!validarOrigemSaida(parcial)) return;
@@ -394,7 +398,7 @@ export default function Registro() {
         const montado = montarParcelas({
           valorTotal: valor,
           qtd,
-          dataBase: data,
+          dataBase: dataPrimeiraParcela,
           valorPagoAgora: parcial,
           origemPagamento,
           caixinhaId,
@@ -407,6 +411,7 @@ export default function Registro() {
           tipoMovimento: "saida",
           tipo: "Parcelada",
           data: data.getTime(),
+          dataPrimeiraParcela: dataPrimeiraParcela.getTime(),
           descricao: descricao.trim(),
           valorTotal: valor,
           observacao: observacao.trim(),
@@ -431,13 +436,17 @@ export default function Registro() {
           ResumoFinanceiro(),
           CarregarCaixinhas?.(),
         ]);
+
         setAviso({
           titulo: "Sucesso",
           mensagem: "Compra parcelada registrada!",
         });
         navigation.goBack();
       } catch (e) {
-        Alert.alert("Erro", e.message || "Não foi possível salvar");
+        showAlert({
+          title: "Erro",
+          message: e.message || "Não foi possível salvar",
+        });
       } finally {
         setLoad(false);
       }
@@ -462,10 +471,9 @@ export default function Registro() {
           valorPagoTotal: 0,
           quantidadeParcelas: 1,
           status: "aberta",
-          origemPagamento: origemPagamento || "geral",
-          caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
-          caixinhaNome:
-            origemPagamento === "caixinha" ? caixinhaSel?.nome || null : null,
+          origemPagamento: "geral",
+          caixinhaId: null,
+          caixinhaNome: null,
           ministerio: ministerio || null,
           reciboUrl: reciboUri ? await salvarImagemLocal(reciboUri) : null,
           reg: Date.now(),
@@ -477,13 +485,14 @@ export default function Registro() {
           ResumoFinanceiro(),
           CarregarCaixinhas?.(),
         ]);
-        setAviso({
-          titulo: "Sucesso",
-          mensagem: "Conta sem prazo registrada.",
-        });
+
+        setAviso({ titulo: "Sucesso", mensagem: "Conta sem prazo registrada." });
         navigation.goBack();
       } catch (e) {
-        Alert.alert("Erro", e.message || "Não foi possível salvar");
+        showAlert({
+          title: "Erro",
+          message: e.message || "Não foi possível salvar",
+        });
       } finally {
         setLoad(false);
       }
@@ -510,13 +519,7 @@ export default function Registro() {
       if (tipoMovimento === "entrada") {
         base.valoresRecebidos =
           parcial > 0
-            ? [
-                {
-                  valor: parcial,
-                  data: data.getTime(),
-                  id: Date.now().toString(),
-                },
-              ]
+            ? [{ valor: parcial, data: data.getTime(), id: Date.now().toString() }]
             : [];
         base.valorRecebidoTotal = parcial;
       } else {
@@ -553,10 +556,14 @@ export default function Registro() {
         ResumoFinanceiro(),
         CarregarCaixinhas?.(),
       ]);
+
       setAviso({ titulo: "Sucesso", mensagem: "Registro salvo!" });
       navigation.goBack();
     } catch (e) {
-      Alert.alert("Erro", e.message || "Não foi possível salvar");
+      showAlert({
+        title: "Erro",
+        message: e.message || "Não foi possível salvar",
+      });
     } finally {
       setLoad(false);
     }
@@ -617,93 +624,106 @@ export default function Registro() {
           })}
         </View>
 
-        {mostrarOrigemSaida && (
-          <View style={styles.section}>
-            <View style={[styles.segment, { backgroundColor: card }]}>
-              {[
-                { id: "geral", label: "Caixa livre" },
-                { id: "caixinha", label: "Caixinha" },
-              ].map((opt) => {
-                const ativo = origemPagamento === opt.id;
-                return (
-                  <TouchableOpacity
-                    key={opt.id}
-                    style={[
-                      styles.segmentBtn,
-                      ativo && { backgroundColor: principal },
-                    ]}
-                    onPress={() => {
-                      setOrigemPagamento(opt.id);
-                      if (opt.id === "geral") setCaixinhaId(null);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.segmentText,
-                        { color: muted },
-                        ativo && { color: "#fff" },
-                      ]}
-                    >
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {origemPagamento === "geral" ? (
-              <Text style={[styles.hint, { color: muted }]}>
-                Disponível: R$ {formatoMoeda.format(saldoDisponivel || 0)}
-              </Text>
-            ) : caixinhasComSaldo.length === 0 ? (
-              <Text style={[styles.empty, { color: muted }]}>
-                Nenhuma caixinha com saldo
-              </Text>
-            ) : (
-              caixinhasComSaldo.map((cx) => {
-                const ativo = caixinhaId === cx.id;
-                return (
-                  <TouchableOpacity
-                    key={cx.id}
-                    style={[
-                      styles.selectCard,
-                      {
-                        backgroundColor: card,
-                        borderColor: ativo ? principal : "transparent",
-                      },
-                    ]}
-                    onPress={() => setCaixinhaId(cx.id)}
-                  >
-                    <View
-                      style={[styles.selectIcon, { backgroundColor: surface }]}
-                    >
-                      <Ionicons
-                        name="wallet-outline"
-                        size={16}
-                        color={ativo ? principal : muted}
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.selectTitle, { color: text }]}>
-                        {cx.nome}
-                      </Text>
-                      <Text style={[styles.selectSub, { color: muted }]}>
-                        R$ {formatoMoeda.format(cx.valor || 0)}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })
-            )}
-          </View>
-        )}
-
         {tipoMovimento && (
           <>
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, { color: muted }]}>Dados</Text>
+            {mostrarOrigemSaida && (
+              <View style={styles.section}>
+                <View style={[styles.segment, { backgroundColor: card }]}>
+                  {[
+                    { id: "geral", label: "Caixa livre" },
+                    { id: "caixinha", label: "Caixinha" },
+                  ].map((opt) => {
+                    const ativo = origemPagamento === opt.id;
+                    return (
+                      <TouchableOpacity
+                        key={opt.id}
+                        style={[
+                          styles.segmentBtn,
+                          ativo && { backgroundColor: principal },
+                        ]}
+                        onPress={() => {
+                          setOrigemPagamento(opt.id);
+                          if (opt.id === "geral") setCaixinhaId(null);
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.segmentText,
+                            { color: muted },
+                            ativo && { color: "#fff" },
+                          ]}
+                        >
+                          {opt.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
 
+                {origemPagamento === "geral" ? null : caixinhasComSaldo.length ===
+                  0 ? (
+                  <Text style={[styles.empty, { color: muted }]}>
+                    Nenhuma caixinha com saldo
+                  </Text>
+                ) : (
+                  caixinhasComSaldo.map((cx) => {
+                    const ativo = caixinhaId === cx.id;
+                    return (
+                      <TouchableOpacity
+                        key={cx.id}
+                        style={[
+                          styles.selectCard,
+                          {
+                            backgroundColor: card,
+                            borderColor: ativo ? principal : "transparent",
+                          },
+                        ]}
+                        onPress={() => setCaixinhaId(cx.id)}
+                      >
+                        <View
+                          style={[styles.selectIcon, { backgroundColor: surface }]}
+                        >
+                          <Ionicons
+                            name="wallet-outline"
+                            size={16}
+                            color={ativo ? principal : muted}
+                          />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.selectTitle, { color: text }]}>
+                            {cx.nome}
+                          </Text>
+                          <Text style={[styles.selectSub, { color: muted }]}>
+                            R$ {formatoMoeda.format(cx.valor || 0)}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })
+                )}
+              </View>
+            )}
+
+            <View style={styles.section}>
+
+              <Text style={[styles.sectionTitle, { color: muted }]}>Dados</Text>
               <TouchableOpacity
+                style={[styles.field, { backgroundColor: card, marginBottom: 24 }]}
+                onPress={() => setModalTipo(true)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.fieldLabel, { color: muted }]}>Tipo</Text>
+                <View style={styles.fieldRow}>
+                  <Text
+                    style={[styles.fieldValue, { color: tipo ? text : muted }]}
+                  >
+                    {tipo || "Selecione o tipo"}
+                  </Text>
+                  <Ionicons name="chevron-down" size={18} color={muted} />
+                </View>
+              </TouchableOpacity>
+
+              {tipo !== "Parcelada" && ( <TouchableOpacity
                 style={[styles.field, { backgroundColor: card }]}
                 onPress={() => setShowDatePicker(true)}
               >
@@ -711,7 +731,8 @@ export default function Registro() {
                 <Text style={[styles.fieldValue, { color: text }]}>
                   {data.toLocaleDateString("pt-BR")}
                 </Text>
-              </TouchableOpacity>
+              </TouchableOpacity> )}
+
 
               {showDatePicker && (
                 <DateTimePicker
@@ -720,29 +741,13 @@ export default function Registro() {
                   display="default"
                   onChange={(e, selected) => {
                     setShowDatePicker(false);
-                    if (selected) setData(selected);
+                    if (selected) {
+                      setData(selected);
+                      setDataPrimeiraParcela(maisUmMes(selected));
+                    }
                   }}
                 />
               )}
-
-              <TouchableOpacity
-                style={[styles.field, { backgroundColor: card }]}
-                onPress={() => setModalTipo(true)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.fieldLabel, { color: muted }]}>Tipo</Text>
-                <View style={styles.fieldRow}>
-                  <Text
-                    style={[
-                      styles.fieldValue,
-                      { color: tipo ? text : muted },
-                    ]}
-                  >
-                    {tipo || "Selecione o tipo"}
-                  </Text>
-                  <Ionicons name="chevron-down" size={18} color={muted} />
-                </View>
-              </TouchableOpacity>
 
               {tipoMovimento === "saida" && (
                 <TouchableOpacity
@@ -809,6 +814,31 @@ export default function Registro() {
                       placeholderTextColor={placeholder}
                     />
                   </View>
+
+                  <TouchableOpacity
+                    style={[styles.field, { backgroundColor: card }]}
+                    onPress={() => setShowDatePrimeira(true)}
+                  >
+                    <Text style={[styles.fieldLabel, { color: muted }]}>
+                      Data primeira parcela
+                    </Text>
+                    <Text style={[styles.fieldValue, { color: text }]}>
+                      {dataPrimeiraParcela.toLocaleDateString("pt-BR")}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {showDatePrimeira && (
+                    <DateTimePicker
+                      value={dataPrimeiraParcela}
+                      mode="date"
+                      display="default"
+                      onChange={(e, selected) => {
+                        setShowDatePrimeira(false);
+                        if (selected) setDataPrimeiraParcela(selected);
+                      }}
+                    />
+                  )}
+
                   {previewParcela > 0 && (
                     <Text style={[styles.hint, { color: muted }]}>
                       {qtdNum}x de R$ {formatoMoeda.format(previewParcela)}
@@ -825,68 +855,35 @@ export default function Registro() {
 
                   {reciboUri ? (
                     <View style={styles.reciboSelecionado}>
-                      <Image
-                        source={{ uri: reciboUri }}
-                        style={styles.preview}
-                      />
+                      <Image source={{ uri: reciboUri }} style={styles.preview} />
                       <View style={styles.reciboAcoes}>
                         <TouchableOpacity
-                          style={[
-                            styles.reciboAcaoBtn,
-                            { backgroundColor: surface },
-                          ]}
+                          style={[styles.reciboAcaoBtn, { backgroundColor: surface }]}
                           onPress={tirarFoto}
                           activeOpacity={0.8}
                         >
-                          <Ionicons
-                            name="camera-outline"
-                            size={18}
-                            color={text}
-                          />
-                          <Text
-                            style={[styles.reciboAcaoText, { color: text }]}
-                          >
+                          <Ionicons name="camera-outline" size={18} color={text} />
+                          <Text style={[styles.reciboAcaoText, { color: text }]}>
                             Câmera
                           </Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                          style={[
-                            styles.reciboAcaoBtn,
-                            { backgroundColor: surface },
-                          ]}
+                          style={[styles.reciboAcaoBtn, { backgroundColor: surface }]}
                           onPress={escolherDaGaleria}
                           activeOpacity={0.8}
                         >
-                          <Ionicons
-                            name="images-outline"
-                            size={18}
-                            color={text}
-                          />
-                          <Text
-                            style={[styles.reciboAcaoText, { color: text }]}
-                          >
+                          <Ionicons name="images-outline" size={18} color={text} />
+                          <Text style={[styles.reciboAcaoText, { color: text }]}>
                             Galeria
                           </Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                          style={[
-                            styles.reciboAcaoBtn,
-                            { backgroundColor: surface },
-                          ]}
+                          style={[styles.reciboAcaoBtn, { backgroundColor: surface }]}
                           onPress={removerRecibo}
                           activeOpacity={0.8}
                         >
-                          <Ionicons
-                            name="trash-outline"
-                            size={18}
-                            color="#C62828"
-                          />
-                          <Text
-                            style={[
-                              styles.reciboAcaoText,
-                              { color: "#C62828" },
-                            ]}
-                          >
+                          <Ionicons name="trash-outline" size={18} color="#C62828" />
+                          <Text style={[styles.reciboAcaoText, { color: "#C62828" }]}>
                             Remover
                           </Text>
                         </TouchableOpacity>
@@ -895,40 +892,22 @@ export default function Registro() {
                   ) : (
                     <View style={styles.reciboVazio}>
                       <TouchableOpacity
-                        style={[
-                          styles.reciboOpcao,
-                          { backgroundColor: surface },
-                        ]}
+                        style={[styles.reciboOpcao, { backgroundColor: surface }]}
                         onPress={tirarFoto}
                         activeOpacity={0.8}
                       >
-                        <Ionicons
-                          name="camera-outline"
-                          size={22}
-                          color={muted}
-                        />
-                        <Text
-                          style={[styles.reciboOpcaoText, { color: muted }]}
-                        >
+                        <Ionicons name="camera-outline" size={22} color={muted} />
+                        <Text style={[styles.reciboOpcaoText, { color: muted }]}>
                           Câmera
                         </Text>
                       </TouchableOpacity>
                       <TouchableOpacity
-                        style={[
-                          styles.reciboOpcao,
-                          { backgroundColor: surface },
-                        ]}
+                        style={[styles.reciboOpcao, { backgroundColor: surface }]}
                         onPress={escolherDaGaleria}
                         activeOpacity={0.8}
                       >
-                        <Ionicons
-                          name="images-outline"
-                          size={22}
-                          color={muted}
-                        />
-                        <Text
-                          style={[styles.reciboOpcaoText, { color: muted }]}
-                        >
+                        <Ionicons name="images-outline" size={22} color={muted} />
+                        <Text style={[styles.reciboOpcaoText, { color: muted }]}>
                           Galeria
                         </Text>
                       </TouchableOpacity>
@@ -937,12 +916,7 @@ export default function Registro() {
                 </View>
               )}
 
-              <View
-                style={[
-                  styles.field,
-                  { minHeight: 88, backgroundColor: card },
-                ]}
-              >
+              <View style={[styles.field, { minHeight: 88, backgroundColor: card }]}>
                 <Text style={[styles.fieldLabel, { color: muted }]}>
                   Observação
                 </Text>
@@ -974,16 +948,12 @@ export default function Registro() {
         animationType="fade"
         onRequestClose={() => setModalTipo(false)}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setModalTipo(false)}
-        >
+        <Pressable style={styles.modalOverlay} onPress={() => setModalTipo(false)}>
           <Pressable
             style={[styles.modalCard, { backgroundColor: card }]}
             onPress={() => {}}
           >
             <Text style={[styles.modalTitle, { color: text }]}>Tipo</Text>
-
             <ScrollView
               style={styles.modalList}
               contentContainerStyle={styles.modalListContent}
@@ -1040,7 +1010,6 @@ export default function Registro() {
             onPress={() => {}}
           >
             <Text style={[styles.modalTitle, { color: text }]}>Ministério</Text>
-
             <ScrollView
               style={styles.modalList}
               contentContainerStyle={styles.modalListContent}
@@ -1061,9 +1030,7 @@ export default function Registro() {
                   setModalMinisterio(false);
                 }}
               >
-                <Text style={[styles.modalItemText, { color: muted }]}>
-                  Nenhum
-                </Text>
+                <Text style={[styles.modalItemText, { color: muted }]}>Nenhum</Text>
                 {!ministerio && (
                   <Ionicons name="checkmark" size={18} color={principal} />
                 )}
@@ -1087,9 +1054,7 @@ export default function Registro() {
                       setModalMinisterio(false);
                     }}
                   >
-                    <Text style={[styles.modalItemText, { color: text }]}>
-                      {m}
-                    </Text>
+                    <Text style={[styles.modalItemText, { color: text }]}>{m}</Text>
                     {ativo && (
                       <Ionicons name="checkmark" size={18} color={principal} />
                     )}
@@ -1106,10 +1071,7 @@ export default function Registro() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 14 },
-  content: {
-    paddingTop: 12,
-    paddingBottom: 120,
-  },
+  content: { paddingTop: 12, paddingBottom: 120 },
   segment: {
     flexDirection: "row",
     borderRadius: 16,
@@ -1122,10 +1084,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
   },
-  segmentText: {
-    fontSize: 13,
-    fontFamily: "Roboto-Medium",
-  },
+  segmentText: { fontSize: 13, fontFamily: "Roboto-Medium" },
   section: { marginBottom: 18 },
   sectionTitle: {
     fontSize: 13,
@@ -1149,57 +1108,31 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 10,
   },
-  selectTitle: {
-    fontSize: 14,
-    fontFamily: "Roboto-Medium",
-  },
-  selectSub: {
-    fontSize: 12,
-    fontFamily: "Roboto-Regular",
-    marginTop: 2,
-  },
+  selectTitle: { fontSize: 14, fontFamily: "Roboto-Medium" },
+  selectSub: { fontSize: 12, fontFamily: "Roboto-Regular", marginTop: 2 },
   hint: {
     fontSize: 13,
     fontFamily: "Roboto-Regular",
     marginTop: 4,
     marginBottom: 8,
   },
-  empty: {
-    fontSize: 13,
-    fontFamily: "Roboto-Regular",
-  },
+  empty: { fontSize: 13, fontFamily: "Roboto-Regular" },
   field: {
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
     marginBottom: 10,
   },
-  fieldLabel: {
-    fontSize: 11,
-    fontFamily: "Roboto-Regular",
-    marginBottom: 4,
-  },
+  fieldLabel: { fontSize: 11, fontFamily: "Roboto-Regular", marginBottom: 4 },
   fieldRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
   },
-  fieldValue: {
-    fontSize: 15,
-    fontFamily: "Roboto-Medium",
-    flex: 1,
-  },
-  fieldInput: {
-    fontSize: 15,
-    fontFamily: "Roboto-Regular",
-    padding: 0,
-  },
-  reciboVazio: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 4,
-  },
+  fieldValue: { fontSize: 15, fontFamily: "Roboto-Medium", flex: 1 },
+  fieldInput: { fontSize: 15, fontFamily: "Roboto-Regular", padding: 0 },
+  reciboVazio: { flexDirection: "row", gap: 10, marginTop: 4 },
   reciboOpcao: {
     flex: 1,
     height: 64,
@@ -1208,26 +1141,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 4,
   },
-  reciboOpcaoText: {
-    fontSize: 12,
-    fontFamily: "Roboto-Regular",
-  },
+  reciboOpcaoText: { fontSize: 12, fontFamily: "Roboto-Regular" },
   reciboSelecionado: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     marginTop: 4,
   },
-  preview: {
-    width: 56,
-    height: 72,
-    borderRadius: 8,
-    backgroundColor: "#eee",
-  },
-  reciboAcoes: {
-    flex: 1,
-    gap: 6,
-  },
+  preview: { width: 56, height: 72, borderRadius: 8, backgroundColor: "#eee" },
+  reciboAcoes: { flex: 1, gap: 6 },
   reciboAcaoBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -1236,10 +1158,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 10,
   },
-  reciboAcaoText: {
-    fontSize: 13,
-    fontFamily: "Roboto-Medium",
-  },
+  reciboAcaoText: { fontSize: 13, fontFamily: "Roboto-Medium" },
   saveBtn: {
     height: 52,
     borderRadius: 16,
@@ -1247,11 +1166,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 6,
   },
-  saveText: {
-    color: "#fff",
-    fontSize: 16,
-    fontFamily: "Roboto-Bold",
-  },
+  saveText: { color: "#fff", fontSize: 16, fontFamily: "Roboto-Bold" },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.55)",
@@ -1266,17 +1181,9 @@ const styles = StyleSheet.create({
     padding: 16,
     maxHeight: "80%",
   },
-  modalTitle: {
-    fontSize: 17,
-    fontFamily: "Roboto-Bold",
-    marginBottom: 8,
-  },
-  modalList: {
-    maxHeight: 360,
-  },
-  modalListContent: {
-    paddingBottom: 4,
-  },
+  modalTitle: { fontSize: 17, fontFamily: "Roboto-Bold", marginBottom: 8 },
+  modalList: { maxHeight: 360 },
+  modalListContent: { paddingBottom: 4 },
   modalItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -1285,14 +1192,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     gap: 12,
   },
-  modalItemLeft: {
-    flex: 1,
-    paddingRight: 8,
-  },
-  modalItemText: {
-    fontSize: 15,
-    fontFamily: "Roboto-Medium",
-  },
+  modalItemLeft: { flex: 1, paddingRight: 8 },
+  modalItemText: { fontSize: 15, fontFamily: "Roboto-Medium" },
   modalItemExemplo: {
     marginTop: 3,
     fontSize: 12,
