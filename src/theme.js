@@ -12,7 +12,7 @@ export const TemaClaro = {
   colors: {
     ...DefaultTheme.colors,
     primary: PRINCIPAL,
-    background: "#F8FAFC",
+    background: "#f6f6f6ff",
     card: "#FFFFFF",
     text: "#132245ff", // Escuro mais definido para alto contraste
     border: "#E2E8F0",
@@ -33,7 +33,7 @@ export const TemaEscuro = {
   colors: {
     ...DarkTheme.colors,
     primary: PRINCIPAL_DARK,
-    background: "#121212",
+    background: "#101010",
     card: "#1e1e1e",
     text: "#b4b4b4ff",
     border: "#333333",

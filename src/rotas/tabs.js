@@ -14,18 +14,19 @@ export default function Tabs() {
 
   return (
     <Tab.Navigator
-      initialRouteName='Home'
+      initialRouteName="Home"
       tabBar={(props) => <TabBar {...props} />}
       screenOptions={{
+        headerStyle: {
+          backgroundColor: colors.background,
+        },
         headerTitleStyle: {
           fontFamily: 'Roboto-Bold',
           color: colors.text,
           fontSize: 18,
         },
+        headerTintColor: colors.text,
         headerShadowVisible: false,
-        sceneStyle: {
-          backgroundColor: colors.background,
-        },
       }}
     >
       <Tab.Screen
@@ -33,6 +34,7 @@ export default function Tabs() {
         component={Home}
         options={{
           tabBarIcon: 'pie-chart-outline',
+          headerShown: false,
         }}
       />
       <Tab.Screen

@@ -4,7 +4,6 @@ import {
   Text,
   FlatList,
   StyleSheet,
-  TouchableOpacity,
   RefreshControl,
 } from "react-native";
 import { useTheme } from "@react-navigation/native";
@@ -12,6 +11,7 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../context/AppContext";
 import Load from "../componentes/Load";
 import SwipeCard from "../componentes/SwipeCard";
+import SeletorMesAno from "../componentes/SeletorMesAno";
 import { arred, dataDoItem } from "../utils/financeiro";
 
 const MESES = [
@@ -27,21 +27,6 @@ const MESES = [
   "Outubro",
   "Novembro",
   "Dezembro",
-];
-
-const MESES_CURTO = [
-  "Jan",
-  "Fev",
-  "Mar",
-  "Abr",
-  "Mai",
-  "Jun",
-  "Jul",
-  "Ago",
-  "Set",
-  "Out",
-  "Nov",
-  "Dez",
 ];
 
 function isDizimo(item) {
@@ -158,63 +143,22 @@ export default function Dizimos() {
           />
         }
         ListHeaderComponent={
-          <View style={styles.header}>
-            <View style={styles.anoRow}>
-              <TouchableOpacity
-                onPress={() => setAno((a) => a - 1)}
-                style={[styles.anoBtn, { backgroundColor: card }]}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="chevron-back" size={20} color={text} />
-              </TouchableOpacity>
-              <Text style={[styles.anoText, { color: text }]}>{ano}</Text>
-              <TouchableOpacity
-                onPress={() => setAno((a) => a + 1)}
-                style={[styles.anoBtn, { backgroundColor: card }]}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="chevron-forward" size={20} color={text} />
-              </TouchableOpacity>
-            </View>
+          <View style={[styles.block, { backgroundColor: card }]}>
+            <SeletorMesAno
+              mes={mes}
+              ano={ano}
+              onChangeMes={setMes}
+              onChangeAno={setAno}
+            />
 
-            <View style={styles.mesesGrid}>
-              {MESES_CURTO.map((label, idx) => {
-                const ativo = mes === idx;
-                return (
-                  <TouchableOpacity
-                    key={label}
-                    style={[
-                      styles.mesChip,
-                      { backgroundColor: card },
-                      ativo && { backgroundColor: principal },
-                    ]}
-                    onPress={() => setMes(idx)}
-                    activeOpacity={0.8}
-                  >
-                    <Text
-                      style={[
-                        styles.mesText,
-                        { color: text },
-                        ativo && { color: "#fff" },
-                      ]}
-                    >
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <View style={[styles.totalCard, { backgroundColor: card }]}>
+            <View style={[styles.totalWrap, { borderTopColor: colors.border || (dark ? "#333" : "#ececec") }]}>
               <Text style={[styles.totalLabel, { color: muted }]}>
                 {MESES[mes]} {ano}
               </Text>
               <Text style={[styles.totalValue, { color: text }]}>
                 R$ {formatoMoeda.format(totalMes)}
               </Text>
-              <Text style={[styles.totalQtd, { color: muted }]}>
-                {linhas.length} {linhas.length === 1 ? "registro" : "registros"}
-              </Text>
+     
             </View>
           </View>
         }
@@ -258,45 +202,20 @@ const styles = StyleSheet.create({
   header: {
     marginBottom: 8,
   },
-  anoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-  },
-  anoBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  anoText: {
-    fontSize: 17,
-    fontFamily: "Roboto-Bold",
-    minWidth: 64,
-    textAlign: "center",
-  },
-  mesesGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 14,
-  },
-  mesChip: {
-    width: "22%",
-    paddingVertical: 9,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  mesText: {
-    fontSize: 12,
-    fontFamily: "Roboto-Medium",
-  },
   totalCard: {
     borderRadius: 18,
     padding: 16,
     marginBottom: 6,
+  },
+  block: {
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 8,
+  },
+  totalWrap: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   totalLabel: {
     fontSize: 13,
@@ -304,7 +223,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   totalValue: {
-    fontSize: 22,
+    fontSize: 20,
     fontFamily: "Roboto-Bold",
     letterSpacing: -0.4,
   },

@@ -11,13 +11,14 @@ import {
   Pressable,
 } from "react-native";
 import { useNavigation, useTheme } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
 import { useAppAlert } from "../context/AlertContext";
 import Load from "../componentes/Load";
 import Saldo from "../componentes/Saldo";
-import Menu from "../componentes/Menu"
+import Menu from "../componentes/Menu";
 import SwipeCard from "../componentes/SwipeCard";
 import { useAppTheme } from "../context/ThemeContext";
 import {
@@ -96,12 +97,6 @@ function inicioMediaDizimos(createdAt) {
   return new Date(d.getFullYear(), d.getMonth() + 1, 1, 0, 0, 0, 0);
 }
 
-/**
- * Horizonte da projeção em meses.
- * - Sem compromissos futuros datados → 1 mês
- * - Com parcelas / a receber / a pagar futuros → até o mês mais distante
- * - Futura sem vencimento não estende o horizonte sozinha
- */
 function mesesHorizonteProjecao(lista) {
   const agora = new Date();
   const agoraTs = agora.getTime();
@@ -111,11 +106,8 @@ function mesesHorizonteProjecao(lista) {
     if (item?.tipoMovimento === "entrada") {
       const falta = valorAReceberItem(item);
       if (!(falta > 0.001)) continue;
-
       const ts = dataDoItem(item);
-      if (ts && ts > agoraTs) {
-        maxTs = Math.max(maxTs, ts);
-      }
+      if (ts && ts > agoraTs) maxTs = Math.max(maxTs, ts);
       continue;
     }
 
@@ -137,7 +129,6 @@ function mesesHorizonteProjecao(lista) {
           !p.pagoEm);
 
       if (!aberta) continue;
-
       const ts = Number(p.vencimento || p.data || 0);
       if (ts) {
         maxTs = Math.max(maxTs, ts);
@@ -146,13 +137,10 @@ function mesesHorizonteProjecao(lista) {
     }
 
     if (pegouParcela) continue;
-
     if (item.tipo === "Sem Prazo" && !item.vencimento) continue;
 
     const ts = Number(item.vencimento || item.data || dataDoItem(item) || 0);
-    if (ts && ts > agoraTs) {
-      maxTs = Math.max(maxTs, ts);
-    }
+    if (ts && ts > agoraTs) maxTs = Math.max(maxTs, ts);
   }
 
   if (!maxTs) return 1;
@@ -163,6 +151,83 @@ function mesesHorizonteProjecao(lista) {
     (fim.getMonth() - agora.getMonth());
 
   return Math.max(1, meses);
+}
+
+function HomeTopo({
+  foto,
+  nome,
+  igrejaNome,
+  principal,
+  text,
+  ocultarValores,
+  toggleOcultarValores,
+  isDark,
+  toggleLightDark,
+  onPressAvatar,
+  paddingTop,
+}) {
+  return (
+    <View style={[styles.topo, { paddingTop }]}>
+      <TouchableOpacity
+        onPress={onPressAvatar}
+        style={styles.topoLeft}
+        activeOpacity={0.8}
+      >
+        {foto ? (
+          <Image source={{ uri: foto }} style={styles.avatar} />
+        ) : (
+          <View
+            style={[
+              styles.avatar,
+              styles.avatarFallback,
+              { backgroundColor: principal },
+            ]}
+          >
+            <Ionicons name="person" size={16} color="#fff" />
+          </View>
+        )}
+
+        <View style={styles.topoTextos}>
+          <Text style={[styles.topoOla, { color: text }]} numberOfLines={1}>
+            Olá, {String(nome || "").trim().split(" ")[0] || "Conta"}
+          </Text>
+          {!!igrejaNome && (
+            <Text style={[styles.topoIgreja, { color: text }]} numberOfLines={1}>
+              {igrejaNome}
+            </Text>
+          )}
+        </View>
+      </TouchableOpacity>
+
+      <View style={styles.topoRight}>
+        <TouchableOpacity
+          onPress={() => toggleOcultarValores?.()}
+          style={styles.topoBtn}
+          activeOpacity={0.7}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons
+            name={ocultarValores ? "eye-off-outline" : "eye-outline"}
+            size={22}
+            color={text}
+          />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={toggleLightDark}
+          style={styles.topoBtn}
+          activeOpacity={0.7}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons
+            name={isDark ? "sunny-outline" : "moon-outline"}
+            size={22}
+            color={text}
+          />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 }
 
 export default function Home() {
@@ -190,17 +255,18 @@ export default function Home() {
 
   const { showAlert } = useAppAlert();
   const { isDark, toggleLightDark } = useAppTheme();
-
   const { user, logout } = useAuth();
   const { colors, dark } = useTheme();
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
+
   const [refreshing, setRefreshing] = useState(false);
   const [menuAberto, setMenuAberto] = useState(false);
   const [modalIgrejas, setModalIgrejas] = useState(false);
+  const [cardAbertoId, setCardAbertoId] = useState(null);
 
   const foto = user?.photoURL || null;
   const nome = user?.displayName || "Conta";
-  const isAdmin = igrejaAtiva?.papel === "admin";
   const variasIgrejas = (igrejasDoUsuario || []).length > 1;
   const semIgreja = !igrejaAtiva?.id;
 
@@ -208,105 +274,11 @@ export default function Home() {
   const text = colors.text;
   const muted = colors.muted || (dark ? "#9aa0a6" : "#888");
   const card = colors.card;
-  const border = colors.border || (dark ? "#333" : "#eee");
   const bg = colors.background;
 
-  const [cardAbertoId, setCardAbertoId] = useState(null);
-
-
   useEffect(() => {
-    navigation.setOptions({
-      headerLeft: () => (
-        <TouchableOpacity
-          onPress={() => setMenuAberto(true)}
-          style={{ padding: 2 }}
-          activeOpacity={0.8}
-        >
-          {foto ? (
-            <Image source={{ uri: foto }} style={styles.avatar} />
-          ) : (
-            <View
-              style={[
-                styles.avatar,
-                styles.avatarFallback,
-                { backgroundColor: principal },
-              ]}
-            >
-              <Ionicons name="person" size={16} color="#fff" />
-            </View>
-          )}
-        </TouchableOpacity>
-      ),
-      headerTitle: () => (
-        <View style={{ justifyContent: "center" }}>
-          <Text
-            style={{
-              fontSize: 18,
-              fontFamily: "Roboto-Bold",
-              color: text,
-            }}
-            numberOfLines={1}
-          >
-            Olá, {nome.trim().split(" ")[0]}
-          </Text>
-          <Text style={{
-            fontSize: 12,
-            fontFamily: "Roboto-Light",
-            color: text,
-          }}>{igrejaAtiva?.nome}</Text>
-        </View>
-      ),
-      headerRight: () => (
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            marginRight: 14,
-            gap: 10,
-          }}
-        >
-          <TouchableOpacity
-            onPress={() => toggleOcultarValores?.()}
-            style={{ padding: 8 }}
-            activeOpacity={0.7}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons
-              name={ocultarValores ? "eye-off-outline" : "eye-outline"}
-              size={22}
-              color={text}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={toggleLightDark}
-            style={{ padding: 8 }}
-            activeOpacity={0.7}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons
-              name={isDark ? "sunny-outline" : "moon-outline"}
-              size={22}
-              color={text}
-            />
-          </TouchableOpacity>
-        </View>
-      ),
-    });
-  }, [
-    navigation,
-    foto,
-    nome,
-    igrejaAtiva?.nome,
-    principal,
-    isDark,
-    text,
-    muted,
-    semIgreja,
-    toggleLightDark,
-    ocultarValores,
-    toggleOcultarValores,
-  ]);
+    navigation.setOptions({ headerShown: false });
+  }, [navigation]);
 
   const onRefresh = async () => {
     if (semIgreja) {
@@ -376,10 +348,8 @@ export default function Home() {
   const caixaGeral = Number(saldoDisponivel) || 0;
   const emCaixinhas = Number(totalReservado) || 0;
   const qtdCaixinhas = (caixinhas || []).length;
-
   const saldoAnterior = arred(saldoAtual - entradasMesAtual + saidasMesAtual);
 
-  // Totais oficiais vêm do Context (mesma regra do utils/financeiro)
   const aReceberTotal = arred(Number(totalAReceber) || 0);
   const despesasFuturas = arred(Number(totalAPagar) || 0);
   const projecaoFutura = arred(
@@ -462,22 +432,20 @@ export default function Home() {
 
       mediaDizimosFechados = totalDizimosFechados / mesesFechados;
     }
-  } else {
-    if (mesAtual >= 1) {
-      let total = 0;
-      lista
-        .filter((i) => {
-          if (i.tipoMovimento !== "entrada") return false;
-          const t = String(i.tipo || "").toLowerCase();
-          return t.includes("dizimo") || t.includes("dízimo");
-        })
-        .forEach((i) => {
-          for (let m = 0; m < mesAtual; m++) {
-            total += entradasNoMes(i, m, anoAtual, limiteHoje);
-          }
-        });
-      mediaDizimosFechados = total / mesAtual;
-    }
+  } else if (mesAtual >= 1) {
+    let total = 0;
+    lista
+      .filter((i) => {
+        if (i.tipoMovimento !== "entrada") return false;
+        const t = String(i.tipo || "").toLowerCase();
+        return t.includes("dizimo") || t.includes("dízimo");
+      })
+      .forEach((i) => {
+        for (let m = 0; m < mesAtual; m++) {
+          total += entradasNoMes(i, m, anoAtual, limiteHoje);
+        }
+      });
+    mediaDizimosFechados = total / mesAtual;
   }
 
   const resumoItens = useMemo(
@@ -515,7 +483,7 @@ export default function Home() {
       {
         id: "4",
         label: "Média de dízimos",
-        sub: `Parcial do mês: R$ ${formatoMoeda.format(totalDizimosMes)}`,
+        sub: `Média geral`,
         value: `R$ ${formatoMoeda.format(mediaDizimosFechados)}`,
         icon: "stats-chart-outline",
         tint: dark ? "#3D2E1A" : "#FFF3E0",
@@ -532,30 +500,46 @@ export default function Home() {
     ]
   );
 
-  // Aguarda a carga do Context; evita segundo fetch no mount
+  const topoProps = {
+    foto,
+    nome,
+    igrejaNome: igrejaAtiva?.nome,
+    principal,
+    text,
+    ocultarValores,
+    toggleOcultarValores,
+    isDark,
+    toggleLightDark,
+    onPressAvatar: () => setMenuAberto(true),
+    paddingTop: Math.max(insets.top, 8) + 14,
+  };
+
   if (!semIgreja && !financasProntas && !refreshing) return <Load />;
   if (load && !refreshing && !semIgreja) return <Load />;
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
       {semIgreja ? (
-        <View style={styles.emptyContainer}>
-          <View style={[styles.emptyIcon, { backgroundColor: card }]}>
-            <Ionicons name="business-outline" size={28} color={muted} />
+        <View style={{ flex: 1 }}>
+          <HomeTopo {...topoProps} />
+          <View style={styles.emptyContainer}>
+            <View style={[styles.emptyIcon, { backgroundColor: card }]}>
+              <Ionicons name="business-outline" size={28} color={muted} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: text }]}>
+              Nenhuma igreja criada
+            </Text>
+            <Text style={[styles.emptyText, { color: muted }]}>
+              Para começar a usar o App, crie uma igreja.
+            </Text>
+            <TouchableOpacity
+              style={[styles.emptyBtn, { backgroundColor: principal }]}
+              onPress={() => navigation.navigate("Configuracoes")}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.emptyBtnText}>Criar Igreja</Text>
+            </TouchableOpacity>
           </View>
-          <Text style={[styles.emptyTitle, { color: text }]}>
-            Nenhuma igreja criada
-          </Text>
-          <Text style={[styles.emptyText, { color: muted }]}>
-            Para começar a usar o App, crie uma igreja.
-          </Text>
-          <TouchableOpacity
-            style={[styles.emptyBtn, { backgroundColor: principal }]}
-            onPress={() => navigation.navigate("Configuracoes")}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.emptyBtnText}>Criar Igreja</Text>
-          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -572,15 +556,18 @@ export default function Home() {
             />
           }
           ListHeaderComponent={
-            <Saldo
-              caixaGeral={caixaGeral}
-              saldoAtual={saldoAtual}
-              saldoAnterior={saldoAnterior}
-              projecaoFutura={projecaoFutura}
-              projecaoMeses={projecaoMeses}
-              qtdCaixinhas={qtdCaixinhas}
-              emCaixinhas={emCaixinhas}
-            />
+            <View>
+              <HomeTopo {...topoProps} />
+              <Saldo
+                caixaGeral={caixaGeral}
+                saldoAtual={saldoAtual}
+                saldoAnterior={saldoAnterior}
+                projecaoFutura={projecaoFutura}
+                projecaoMeses={projecaoMeses}
+                qtdCaixinhas={qtdCaixinhas}
+                emCaixinhas={emCaixinhas}
+              />
+            </View>
           }
           renderItem={({ item }) => (
             <SwipeCard
@@ -602,13 +589,13 @@ export default function Home() {
               actions={
                 item.route
                   ? [
-                    {
-                      key: "go",
-                      icon: "arrow-forward",
-                      backgroundColor: principal,
-                      onPress: () => navigation.navigate(item.route),
-                    },
-                  ]
+                      {
+                        key: "go",
+                        icon: "arrow-forward",
+                        backgroundColor: principal,
+                        onPress: () => navigation.navigate(item.route),
+                      },
+                    ]
                   : []
               }
               onPress={
@@ -646,14 +633,12 @@ export default function Home() {
         >
           <Pressable
             style={[styles.sheetCard, { backgroundColor: card }]}
-            onPress={() => { }}
+            onPress={() => {}}
           >
             <View style={[styles.sheetHandle, { backgroundColor: text }]} />
-
             <Text style={[styles.modalIgrejaTitulo, { color: text }]}>
               Suas igrejas
             </Text>
-
             {(igrejasDoUsuario || []).map((ig) => {
               const ativa = ig.igrejaId === igrejaAtiva?.id;
               return (
@@ -699,11 +684,46 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 14,
   },
+  topo: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+    paddingBottom: 14,
+  },
+  topoLeft: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minWidth: 0,
+    marginRight: 10,
+  },
+  topoTextos: {
+    flex: 1,
+    minWidth: 0,
+  },
+  topoOla: {
+    fontSize: 18,
+    fontFamily: "Roboto-Bold",
+  },
+  topoIgreja: {
+    fontSize: 12,
+    fontFamily: "Roboto-Light",
+    marginTop: 1,
+  },
+  topoRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  topoBtn: {
+    padding: 8,
+  },
   avatar: {
     width: 40,
     height: 40,
-    borderRadius: 25,
-    marginHorizontal: 14,
+    borderRadius: 20,
   },
   avatarFallback: {
     alignItems: "center",
@@ -749,52 +769,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Roboto-Bold",
   },
-  menuOverlay: {
-    flex: 1,
-    alignItems: "flex-start",
-    paddingTop: 28,
-    paddingLeft: 4,
-  },
-  menuCard: {
-    width: 260,
-    borderRadius: 16,
-    padding: 12,
-    elevation: 6,
-  },
-  menuUser: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    marginBottom: 8,
-  },
-  menuAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 25,
-  },
-  menuNome: {
-    fontSize: 14,
-    fontFamily: "Roboto-Medium",
-  },
-  menuIgreja: {
-    fontSize: 12,
-    fontFamily: "Roboto-Light",
-    marginTop: 2,
-    textTransform: "capitalize",
-  },
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-  },
-  menuItemText: {
-    fontSize: 14,
-    fontFamily: "Roboto-Medium",
-  },
   modalIgrejaTitulo: {
     fontSize: 15,
     fontFamily: "Roboto-Bold",
@@ -829,7 +803,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 22,
     paddingHorizontal: 16,
     paddingTop: 10,
-    paddingBottom: 48, // espaço da barra de navegação do sistema
+    paddingBottom: 48,
     maxHeight: "70%",
   },
   sheetHandle: {

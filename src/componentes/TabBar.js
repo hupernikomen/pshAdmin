@@ -27,7 +27,7 @@ export default function TabbarPersonalizada({
   const principal = colors.principal || colors.primary;
   const card = colors.card;
   const iconInativo = colors.muted || (dark ? "#9aa0a6" : "#777");
-  const border = dark ? "#3233348b" : "#eeebeb7d";
+  const border = dark ? "#292929" : "#f1f1f1ff";
 
   // Inicializa a posição correta centralizada na aba ativa desde o início
   const slideX = useRef(
@@ -64,7 +64,7 @@ export default function TabbarPersonalizada({
     <Animated.View style={styles.container}>
       <View style={[styles.content, {
         backgroundColor: card,
-        borderWidth: 5,
+        borderWidth: 4,
         borderColor: border,
       }]}>
         <Animated.View

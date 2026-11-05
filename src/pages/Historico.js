@@ -21,7 +21,7 @@ import Load from "../componentes/Load";
 import SwipeCard from "../componentes/SwipeCard";
 import { podeEditarRegistro } from "../utils/registroEdit";
 
-const LIMITES = [5, 30, 100, 150];
+const LIMITES = [5, 30, 90];
 
 function normalizarUri(uri) {
   if (!uri) return null;
@@ -348,7 +348,7 @@ export default function Historico() {
           limite === 5 && linhas.length > 5 ? (
             <View style={styles.footerAviso}>
               <Text style={[styles.footerAvisoText, { color: text }]}>
-                Exibindo apenas os 5 registros mais recentes. Selecione 30, 100 ou 150 acima para ver mais dados.
+                Selecione 30 ou 90 acima para ver mais dados.
               </Text>
             </View>
           ) : null

@@ -25,12 +25,14 @@ export default function Rotas() {
     <View style={{ flex: 1, backgroundColor: colors.background, paddingBottom: insets.bottom }}>
       <Stack.Navigator
         screenOptions={{
+                  headerStyle: {
+          backgroundColor: colors.background,
+        },
           headerTitleStyle: {
             fontFamily: 'Roboto-Bold',
             color: colors.text,
             fontSize: 18,
           },
-          headerShadowVisible: false,
           contentStyle: {
             backgroundColor: colors.background,
           },

@@ -545,7 +545,7 @@ export default function Configuracoes() {
         <View style={styles.rowSwitch}>
           <View style={styles.switchTextWrap}>
             <Text style={[styles.rowLabel, { color: colors.text }]}>
-              Ocultar nomes no relatório
+              Ocultar nomes de dizimistas e ofertantes no relatório
             </Text>
             
           </View>
@@ -554,7 +554,7 @@ export default function Configuracoes() {
             onValueChange={(v) => setOcultarNomesDoadores?.(v)}
             trackColor={{
               false: dark ? "#555" : "#ccc",
-              true: principal + "99",
+              true: '#555',
             }}
             thumbColor={ocultarNomesDoadores ? principal : "#f4f3f4"}
           />
@@ -623,11 +623,7 @@ export default function Configuracoes() {
                   </Text>
                 )}
               </TouchableOpacity>
-              <Text style={[styles.deleteHint, { color: muted }]}>
-                Os dados não são apagados agora. Após 30 dias da confirmação,
-                igreja, registros, caixinhas e membros serão removidos
-                automaticamente.
-              </Text>
+      
             </>
           )}
         </View>

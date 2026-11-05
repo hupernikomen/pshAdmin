@@ -32,7 +32,6 @@ export default function SwipeCard({
 }) {
   const { colors, dark } = useTheme();
   const { ocultarValores } = useContext(AppContext);
-  const valorExibido = ocultarValores ? "R$ ***" : value;
 
   const muted = colors.muted || "#888";
   const text = colors.text || "#1f2933";
@@ -109,7 +108,7 @@ export default function SwipeCard({
   ).current;
 
   // Cor de fundo do "container interno" que simula o fundo escuro/caixa onde os botões moram
-  const backgroundContainer = dark ? "#1a1a1a" : "#eaeef2";
+  const backgroundContainer = dark ? "#292929" : "#eaeef2";
 
   return (
     <View style={styles.wrap}>
@@ -151,7 +150,6 @@ export default function SwipeCard({
         </View>
       )}
 
-      {/* Card principal que desliza por cima */}
       <Animated.View
         style={[
           styles.card,

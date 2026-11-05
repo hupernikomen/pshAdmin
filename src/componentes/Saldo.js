@@ -9,6 +9,7 @@ import { calcularSaldoFinalProjecao } from "../pages/ProjecaoGastos";
 import ValorOculto from "./ValorOculto";
 
 const ABAS = ["saldo", "projecao", "caixinhas"];
+const CARD_HEIGHT = 145;
 
 export default function Saldo({
   saldoAtual,
@@ -88,7 +89,11 @@ export default function Saldo({
         {ABAS.map((aba) => {
           const ativo = abaAtiva === aba;
           const label =
-            aba === "saldo" ? "Saldo" : aba === "projecao" ? "Projeção" : "Caixinhas";
+            aba === "saldo"
+              ? "Saldo"
+              : aba === "projecao"
+              ? "Projeção"
+              : "Caixinhas";
           return (
             <TouchableOpacity
               key={aba}
@@ -128,6 +133,7 @@ export default function Saldo({
               transform: [{ translateX: slide }],
             }}
           >
+            {/* SALDO */}
             <View style={{ width: largura }}>
               <View style={styles.balanceCard}>
                 <View style={styles.balanceTop}>
@@ -171,7 +177,10 @@ export default function Saldo({
                       Saldo anterior
                     </Text>
                     {ocultarValores ? (
-                      <ValorOculto size="medium" style={{ alignSelf: "flex-end" }} />
+                      <ValorOculto
+                        size="medium"
+                        style={{ alignSelf: "flex-end" }}
+                      />
                     ) : (
                       <Text style={[styles.miniValue, { color: colors.text }]}>
                         {fmt(saldoAnterior)}
@@ -182,8 +191,9 @@ export default function Saldo({
               </View>
             </View>
 
+            {/* PROJEÇÃO */}
             <View style={{ width: largura }}>
-              <View style={[styles.balanceCard, styles.cardFixa]}>
+              <View style={styles.balanceCard}>
                 <View style={styles.balanceTop}>
                   <View>
                     <Text style={[styles.balanceLabel, { color: colors.text }]}>
@@ -202,7 +212,7 @@ export default function Saldo({
                     style={[styles.addBtn, { backgroundColor: colors.principal }]}
                     activeOpacity={0.8}
                   >
-                    <Ionicons name="add" size={22} color="#fff" />
+                    <Ionicons name="chevron-forward" size={22} color="#fff" />
                   </TouchableOpacity>
                 </View>
 
@@ -220,8 +230,9 @@ export default function Saldo({
               </View>
             </View>
 
+            {/* CAIXINHAS */}
             <View style={{ width: largura }}>
-              <View style={[styles.balanceCard, styles.cardFixa]}>
+              <View style={styles.balanceCard}>
                 <View style={styles.balanceTop}>
                   <View>
                     <Text style={[styles.balanceLabel, { color: colors.text }]}>
@@ -287,7 +298,6 @@ const styles = StyleSheet.create({
   tabText: {
     fontSize: 14,
     fontFamily: "Roboto-Regular",
-    opacity: 0.7,
   },
   tabTextActive: {
     fontFamily: "Roboto-Bold",
@@ -302,11 +312,9 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   balanceCard: {
+    height: CARD_HEIGHT,
     padding: 18,
     justifyContent: "space-between",
-  },
-  cardFixa: {
-    height: 140,
   },
   balanceTop: {
     flexDirection: "row",
@@ -316,7 +324,7 @@ const styles = StyleSheet.create({
   balanceMiddle: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginVertical: 12,
+    alignItems: "flex-end",
   },
   addBtn: {
     width: 34,
@@ -330,7 +338,7 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Light",
   },
   balanceValue: {
-    fontSize: 22,
+    fontSize: 20,
     fontFamily: "Roboto-Bold",
     letterSpacing: -1,
     marginTop: 2,

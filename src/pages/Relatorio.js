@@ -16,6 +16,7 @@ import { AppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
 import { useAppAlert } from "../context/AlertContext";
 import Load from "../componentes/Load";
+import SeletorMesAno from "../componentes/SeletorMesAno";
 import { exportarRelatorioPDF } from "../utils/relatorioPdf";
 import { montarComentarioRelatorio } from "../utils/comentarioRelatorioOffline";
 import {
@@ -372,8 +373,6 @@ export default function Relatorio() {
           pixTitular: "",
         };
 
-  // Carga principal fica no AppContext (igrejaAtiva.id)
-
   const intervalo = useMemo(() => {
     if (modoFiltro === "periodo") {
       return {
@@ -416,22 +415,22 @@ export default function Relatorio() {
   }, [dadosFinancas, igrejaAtiva, intervalo]);
 
   const projecao = useMemo(() => {
-  const lista = dadosFinancas || [];
-  const fim = intervalo.fim;
-  let aReceber = 0;
-  let aPagar = 0;
-  lista.forEach((i) => {
-    aReceber += valorAReceberAte(i, fim);
-    aPagar += valorAPagarAte(i, fim);
-  });
-  aReceber = arred(aReceber);
-  aPagar = arred(aPagar);
-  return {
-    aReceber,
-    aPagar,
-    saldoProjetado: arred(resumo.saldoAtual + aReceber - aPagar),
-  };
-}, [dadosFinancas, resumo.saldoAtual, intervalo.fim]);
+    const lista = dadosFinancas || [];
+    const fim = intervalo.fim;
+    let aReceber = 0;
+    let aPagar = 0;
+    lista.forEach((i) => {
+      aReceber += valorAReceberAte(i, fim);
+      aPagar += valorAPagarAte(i, fim);
+    });
+    aReceber = arred(aReceber);
+    aPagar = arred(aPagar);
+    return {
+      aReceber,
+      aPagar,
+      saldoProjetado: arred(resumo.saldoAtual + aReceber - aPagar),
+    };
+  }, [dadosFinancas, resumo.saldoAtual, intervalo.fim]);
 
   const seriesGraficos = useMemo(() => {
     const lista = dadosFinancas || [];
@@ -479,7 +478,7 @@ export default function Relatorio() {
           if (!noMes(ts, slot.ano, slot.mes)) return;
           const v = Number(item.valorRecebidoTotal) || 0;
           receita += v;
-          if (isDizimo(item)) dizimo += v;
+          if (isDizimo(item)) dizimos += v;
           return;
         }
 
@@ -687,51 +686,12 @@ export default function Relatorio() {
           </View>
 
           {modoFiltro === "mes" ? (
-            <>
-              <View style={styles.anoRow}>
-                <TouchableOpacity
-                  style={[styles.anoBtn, { backgroundColor: surface }]}
-                  onPress={() => setAnoSelecionado((a) => a - 1)}
-                >
-                  <Ionicons name="chevron-back" size={18} color={text} />
-                </TouchableOpacity>
-                <Text style={[styles.anoText, { color: text }]}>
-                  {anoSelecionado}
-                </Text>
-                <TouchableOpacity
-                  style={[styles.anoBtn, { backgroundColor: surface }]}
-                  onPress={() => setAnoSelecionado((a) => a + 1)}
-                >
-                  <Ionicons name="chevron-forward" size={18} color={text} />
-                </TouchableOpacity>
-              </View>
-              <View style={styles.mesesGrid}>
-                {MESES.map((nome, index) => {
-                  const ativo = mesSelecionado === index;
-                  return (
-                    <TouchableOpacity
-                      key={nome}
-                      style={[
-                        styles.mesChip,
-                        { backgroundColor: surface },
-                        ativo && { backgroundColor: principal },
-                      ]}
-                      onPress={() => setMesSelecionado(index)}
-                    >
-                      <Text
-                        style={[
-                          styles.mesText,
-                          { color: text },
-                          ativo && { color: "#fff" },
-                        ]}
-                      >
-                        {nome.substring(0, 3)}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </>
+            <SeletorMesAno
+              mes={mesSelecionado}
+              ano={anoSelecionado}
+              onChangeMes={setMesSelecionado}
+              onChangeAno={setAnoSelecionado}
+            />
           ) : (
             <View style={styles.customRow}>
               <TouchableOpacity
@@ -983,41 +943,6 @@ const styles = StyleSheet.create({
   },
   segmentText: {
     fontSize: 13,
-    fontFamily: "Roboto-Medium",
-  },
-  anoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-    gap: 18,
-  },
-  anoBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  anoText: {
-    fontSize: 17,
-    fontFamily: "Roboto-Bold",
-    minWidth: 64,
-    textAlign: "center",
-  },
-  mesesGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  mesChip: {
-    width: "22%",
-    paddingVertical: 9,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  mesText: {
-    fontSize: 12,
     fontFamily: "Roboto-Medium",
   },
   customRow: { flexDirection: "row", gap: 10 },
