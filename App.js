@@ -9,7 +9,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import changeNavigationBarColor from "react-native-navigation-bar-color";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import SpInAppUpdates, { IAUUpdateKind } from "sp-react-native-in-app-updates";
@@ -62,7 +62,7 @@ function TelaSemConexao({ colors, onRetry, carregando }) {
   const card = colors?.card || "#fff";
 
   return (
-    <View style={[stylesOffline.root, { backgroundColor: bg }]}>
+    <SafeAreaView style={[stylesOffline.root, { backgroundColor: bg }]} edges={["top", "bottom"]}>
       <View style={[stylesOffline.iconWrap, { backgroundColor: card }]}>
         <Ionicons name="cloud-offline-outline" size={36} color={muted} />
       </View>
@@ -88,7 +88,7 @@ function TelaSemConexao({ colors, onRetry, carregando }) {
           <Text style={stylesOffline.btnText}>Tentar novamente</Text>
         )}
       </TouchableOpacity>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -142,7 +142,6 @@ function AppNavigator() {
   const { tema, ready } = useAppTheme();
   const { colors } = tema;
 
-  // Chama a verificação de atualização assim que o AppNavigator estiver ativo
   useVerificarAtualizacao();
 
   useEffect(() => {
@@ -159,8 +158,6 @@ function AppNavigator() {
     } catch (e) {}
   }, [tema.dark]);
 
-  // UNIFICAÇÃO DO CARREGAMENTO:
-  // Se o tema/auth não estiverem prontos OU se o usuário estiver logado mas as igrejas ainda estiverem buscando dados, mantém o Load contínuo sem piscar.
   if (!ready || !authPronto || (user && !igrejasProntas)) {
     return <Load />;
   }
@@ -170,9 +167,12 @@ function AppNavigator() {
       <NavigationContainer theme={tema}>
         <StatusBar
           barStyle={tema.dark ? "light-content" : "dark-content"}
-          backgroundColor={colors.background}
+          backgroundColor="transparent"
+          translucent
         />
-        <Login />
+        <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={["top", "bottom"]}>
+          <Login />
+        </SafeAreaView>
         <AppAlert />
       </NavigationContainer>
     );
@@ -183,7 +183,8 @@ function AppNavigator() {
       <NavigationContainer theme={tema}>
         <StatusBar
           barStyle={tema.dark ? "light-content" : "dark-content"}
-          backgroundColor={colors.background}
+          backgroundColor="transparent"
+          translucent
         />
         <TelaSemConexao
           colors={colors}
@@ -198,7 +199,8 @@ function AppNavigator() {
     <NavigationContainer theme={tema}>
       <StatusBar
         barStyle={tema.dark ? "light-content" : "dark-content"}
-        backgroundColor={colors.background}
+        backgroundColor="transparent"
+        translucent
       />
       <Rotas />
       <AppAlert />

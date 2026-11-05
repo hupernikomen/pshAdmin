@@ -109,21 +109,7 @@ export default function Menu({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.menuItemsList}
           >
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                onClose();
-                onOpenProjecao?.();
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.iconBox, { backgroundColor: principal + "15" }]}>
-                <Ionicons name="analytics-outline" size={18} color={text} />
-              </View>
-              <Text style={[styles.menuItemText, { color: text }]}>
-                Projeção de Gastos
-              </Text>
-            </TouchableOpacity>
+
 
             {isAdmin && (
               <TouchableOpacity

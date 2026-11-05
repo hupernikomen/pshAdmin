@@ -3,23 +3,16 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import TabBar from '../componentes/TabBar';
 
 import Home from '../pages/Home';
-import Relatorio from '../pages/Relatorio'
-import Historico from '../pages/Historico'
+import Relatorio from '../pages/Relatorio';
+import Historico from '../pages/Historico';
 import { useTheme } from '@react-navigation/native';
 
 const Tab = createBottomTabNavigator();
 
-
-
-
 export default function Tabs() {
-
-  const {colors} = useTheme()
-
+  const { colors } = useTheme();
 
   return (
-
-
     <Tab.Navigator
       initialRouteName='Home'
       tabBar={(props) => <TabBar {...props} />}
@@ -27,16 +20,14 @@ export default function Tabs() {
         headerTitleStyle: {
           fontFamily: 'Roboto-Bold',
           color: colors.text,
-          fontSize:18,
+          fontSize: 18,
         },
-        headerShadowVisible:false,
+        headerShadowVisible: false,
         sceneStyle: {
           backgroundColor: colors.background,
-
-        }
-
-      }}>
-
+        },
+      }}
+    >
       <Tab.Screen
         name="Home"
         component={Home}
@@ -58,8 +49,6 @@ export default function Tabs() {
           tabBarIcon: 'reader-outline',
         }}
       />
-
-
     </Tab.Navigator>
   );
 }

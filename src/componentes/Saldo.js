@@ -1,215 +1,264 @@
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { View, Text, TouchableOpacity, StyleSheet, Animated } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
+import { useFocusEffect, useNavigation, useTheme } from "@react-navigation/native";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { AppContext } from "../context/AppContext";
-import { useContext, useState } from "react";
-import { useNavigation, useTheme } from "@react-navigation/native";
+import { db } from "../firebaseConnection";
+import { calcularSaldoFinalProjecao } from "../pages/ProjecaoGastos";
 import ValorOculto from "./ValorOculto";
+
+const ABAS = ["saldo", "projecao", "caixinhas"];
 
 export default function Saldo({
   saldoAtual,
   caixaGeral,
   emCaixinhas,
   saldoAnterior,
-  projecaoFutura,
-  projecaoMeses = 1,
   qtdCaixinhas,
 }) {
   const { colors } = useTheme();
-  const { formatoMoeda, ocultarValores } = useContext(AppContext);
+  const {
+    formatoMoeda,
+    ocultarValores,
+    dadosFinancas,
+    saldo,
+    igrejaAtiva,
+    getIgrejaId,
+  } = useContext(AppContext);
   const navigation = useNavigation();
 
-  // Abas: 'saldo', 'caixinhas' ou 'projecao'
   const [abaAtiva, setAbaAtiva] = useState("saldo");
+  const [gastosProj, setGastosProj] = useState([]);
+  const [largura, setLargura] = useState(0);
+
+  const slide = useRef(new Animated.Value(0)).current;
 
   const fmt = (v) => `R$ ${formatoMoeda.format(Number(v) || 0)}`;
 
-  const meses = Math.max(1, Number(projecaoMeses) || 1);
-  const labelProjecao = `Saldo Projetado`;
+  useFocusEffect(
+    useCallback(() => {
+      let ativo = true;
+      const igrejaId = getIgrejaId?.();
+      if (!igrejaId) {
+        setGastosProj([]);
+        return undefined;
+      }
+      (async () => {
+        try {
+          const snap = await getDocs(
+            query(
+              collection(db, "gastosProjetados"),
+              where("igrejaId", "==", igrejaId)
+            )
+          );
+          if (!ativo) return;
+          setGastosProj(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        } catch (e) {
+          if (ativo) setGastosProj([]);
+        }
+      })();
+      return () => {
+        ativo = false;
+      };
+    }, [getIgrejaId, igrejaAtiva?.id, saldo, dadosFinancas])
+  );
+
+  const saldoProjetadoTela = calcularSaldoFinalProjecao({
+    dadosFinancas,
+    saldo,
+    igrejaAtiva,
+    gastos: gastosProj,
+  });
+
+  useEffect(() => {
+    if (!largura) return;
+    const index = ABAS.indexOf(abaAtiva);
+    Animated.spring(slide, {
+      toValue: -index * largura,
+      useNativeDriver: true,
+      friction: 9,
+      tension: 70,
+    }).start();
+  }, [abaAtiva, largura, slide]);
 
   return (
     <View style={styles.container}>
       <View style={styles.tabsContainer}>
-        <TouchableOpacity
-          style={[
-            styles.tabItem,
-            abaAtiva === "saldo" && [styles.tabActive, { backgroundColor: colors.card }],
-          ]}
-          onPress={() => setAbaAtiva("saldo")}
-          activeOpacity={0.8}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              { color: colors.text },
-              abaAtiva === "saldo" && styles.tabTextActive,
-            ]}
-          >
-            Saldo
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.tabItem,
-            abaAtiva === "projecao" && [styles.tabActive, { backgroundColor: colors.card }],
-          ]}
-          onPress={() => setAbaAtiva("projecao")}
-          activeOpacity={0.8}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              { color: colors.text },
-              abaAtiva === "projecao" && styles.tabTextActive,
-            ]}
-          >
-            Projeção
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.tabItem,
-            abaAtiva === "caixinhas" && [styles.tabActive, { backgroundColor: colors.card }],
-          ]}
-          onPress={() => setAbaAtiva("caixinhas")}
-          activeOpacity={0.8}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              { color: colors.text },
-              abaAtiva === "caixinhas" && styles.tabTextActive,
-            ]}
-          >
-            Caixinhas
-          </Text>
-        </TouchableOpacity>
+        {ABAS.map((aba) => {
+          const ativo = abaAtiva === aba;
+          const label =
+            aba === "saldo" ? "Saldo" : aba === "projecao" ? "Projeção" : "Caixinhas";
+          return (
+            <TouchableOpacity
+              key={aba}
+              style={[
+                styles.tabItem,
+                ativo && [styles.tabActive, { backgroundColor: colors.card }],
+              ]}
+              onPress={() => setAbaAtiva(aba)}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: colors.text },
+                  ativo && styles.tabTextActive,
+                ]}
+              >
+                {label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
-      {/* Conteúdo Dinâmico unificado ao bloco das abas */}
-      {abaAtiva === "saldo" ? (
-        <View style={[styles.balanceCard, { backgroundColor: colors.card }]}>
-          <View style={styles.balanceTop}>
-            <View>
-              <Text style={[styles.balanceLabel, { color: colors.text }]}>
-                Saldo atual
-              </Text>
-              {ocultarValores ? (
-                <ValorOculto size="large" style={{ marginVertical: 6 }} />
-              ) : (
-                <Text style={[styles.balanceValue, { color: colors.text }]}>
-                  {fmt(saldoAtual)}
-                </Text>
-              )}
-            </View>
-            <TouchableOpacity
-              onPress={() => navigation.navigate("Registro")}
-              style={[styles.addBtn, { backgroundColor: colors.principal }]}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="add" size={22} color="#fff" />
-            </TouchableOpacity>
-          </View>
+      <View
+        style={[styles.viewport, { backgroundColor: colors.card }]}
+        onLayout={(e) => {
+          const w = e.nativeEvent.layout.width;
+          if (w && w !== largura) setLargura(w);
+        }}
+      >
+        {largura > 0 && (
+          <Animated.View
+            style={{
+              flexDirection: "row",
+              width: largura * ABAS.length,
+              transform: [{ translateX: slide }],
+            }}
+          >
+            <View style={{ width: largura }}>
+              <View style={styles.balanceCard}>
+                <View style={styles.balanceTop}>
+                  <View>
+                    <Text style={[styles.balanceLabel, { color: colors.text }]}>
+                      Saldo atual
+                    </Text>
+                    {ocultarValores ? (
+                      <ValorOculto size="large" style={{ marginVertical: 6 }} />
+                    ) : (
+                      <Text style={[styles.balanceValue, { color: colors.text }]}>
+                        {fmt(saldoAtual)}
+                      </Text>
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate("Registro")}
+                    style={[styles.addBtn, { backgroundColor: colors.principal }]}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="add" size={22} color="#fff" />
+                  </TouchableOpacity>
+                </View>
 
+                <View style={styles.balanceMiddle}>
+                  <View>
+                    <Text style={[styles.miniLabel, { color: colors.text }]}>
+                      Caixa livre
+                    </Text>
+                    {ocultarValores ? (
+                      <ValorOculto size="medium" />
+                    ) : (
+                      <Text style={[styles.miniValue, { color: colors.text }]}>
+                        {fmt(caixaGeral)}
+                      </Text>
+                    )}
+                  </View>
 
-          <View style={styles.balanceMiddle}>
-            <View>
-              <Text style={[styles.miniLabel, { color: colors.text }]}>
-                Caixa livre
-              </Text>
-              {ocultarValores ? (
-                <ValorOculto size="medium" />
-              ) : (
-                <Text style={[styles.miniValue, { color: colors.text }]}>
-                  {fmt(caixaGeral)}
-                </Text>
-              )}
-            </View>
-
-            <View style={{ alignItems: "flex-end" }}>
-              <Text style={[styles.miniLabel, { color: colors.text }]}>
-                Saldo anterior
-              </Text>
-              {ocultarValores ? (
-                <ValorOculto size="medium" style={{ alignSelf: "flex-end" }} />
-              ) : (
-                <Text style={[styles.miniValue, { color: colors.text }]}>
-                  {fmt(saldoAnterior)}
-                </Text>
-              )}
-            </View>
-          </View>
-        </View>
-      ) : abaAtiva === "caixinhas" ? (
-        <View style={[styles.balanceCard, { backgroundColor: colors.card, height: 140, justifyContent: "space-between" }]}>
-          <View style={styles.balanceTop}>
-            <View>
-              <Text style={[styles.balanceLabel, { color: colors.text }]}>
-                Total em Caixinhas
-              </Text>
-              {ocultarValores ? (
-                <ValorOculto size="large" style={{ marginVertical: 6 }} />
-              ) : (
-                <Text style={[styles.balanceValue, { color: colors.text }]}>
-                  {fmt(emCaixinhas)}
-                </Text>
-              )}
-            </View>
-            <TouchableOpacity
-              onPress={() => navigation.navigate("Caixinhas")}
-              style={[styles.addBtn, { backgroundColor: colors.principal }]}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="add" size={22} color="#fff" />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.balanceMiddle}>
-            <View>
-              <Text style={[styles.miniLabel, { color: colors.text }]}>
-                Qtd. Caixinhas
-              </Text>
-              <Text style={[styles.miniValue, { color: colors.text }]}>
-                {qtdCaixinhas || 0} ativas
-              </Text>
+                  <View style={{ alignItems: "flex-end" }}>
+                    <Text style={[styles.miniLabel, { color: colors.text }]}>
+                      Saldo anterior
+                    </Text>
+                    {ocultarValores ? (
+                      <ValorOculto size="medium" style={{ alignSelf: "flex-end" }} />
+                    ) : (
+                      <Text style={[styles.miniValue, { color: colors.text }]}>
+                        {fmt(saldoAnterior)}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              </View>
             </View>
 
+            <View style={{ width: largura }}>
+              <View style={[styles.balanceCard, styles.cardFixa]}>
+                <View style={styles.balanceTop}>
+                  <View>
+                    <Text style={[styles.balanceLabel, { color: colors.text }]}>
+                      Saldo projetado
+                    </Text>
+                    {ocultarValores ? (
+                      <ValorOculto size="large" style={{ marginVertical: 6 }} />
+                    ) : (
+                      <Text style={[styles.balanceValue, { color: colors.text }]}>
+                        {fmt(saldoProjetadoTela)}
+                      </Text>
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate("Projecao")}
+                    style={[styles.addBtn, { backgroundColor: colors.principal }]}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="add" size={22} color="#fff" />
+                  </TouchableOpacity>
+                </View>
 
-          </View>
-        </View>
-      ) : (
-        <View style={[styles.balanceCard, { backgroundColor: colors.card, height: 140, justifyContent: "space-between" }]}>
-          <View style={styles.balanceTop}>
-            <View>
-              <Text style={[styles.balanceLabel, { color: colors.text }]}>
-                {labelProjecao}
-              </Text>
-              {ocultarValores ? (
-                <ValorOculto size="large" style={{ marginVertical: 6 }} />
-              ) : (
-                <Text style={[styles.balanceValue, { color: colors.text }]}>
-                  {fmt(projecaoFutura)}
-                </Text>
-              )}
+                <View style={styles.balanceMiddle}>
+                  <View>
+                    <Text style={[styles.miniLabel, { color: colors.text }]}>
+                      Gastos projetados
+                    </Text>
+                    <Text style={[styles.miniValue, { color: colors.text }]}>
+                      {gastosProj.length}{" "}
+                      {gastosProj.length === 1 ? "lançamento" : "lançamentos"}
+                    </Text>
+                  </View>
+                </View>
+              </View>
             </View>
 
-          </View>
+            <View style={{ width: largura }}>
+              <View style={[styles.balanceCard, styles.cardFixa]}>
+                <View style={styles.balanceTop}>
+                  <View>
+                    <Text style={[styles.balanceLabel, { color: colors.text }]}>
+                      Total em Caixinhas
+                    </Text>
+                    {ocultarValores ? (
+                      <ValorOculto size="large" style={{ marginVertical: 6 }} />
+                    ) : (
+                      <Text style={[styles.balanceValue, { color: colors.text }]}>
+                        {fmt(emCaixinhas)}
+                      </Text>
+                    )}
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate("Caixinhas")}
+                    style={[styles.addBtn, { backgroundColor: colors.principal }]}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="add" size={22} color="#fff" />
+                  </TouchableOpacity>
+                </View>
 
-          <View style={styles.balanceMiddle}>
-            <View>
-              <Text style={[styles.miniLabel, { color: colors.text }]}>
-                Estimativa calculada
-              </Text>
-              <Text style={[styles.miniValue, { color: colors.text }]}>
-                {meses} {meses === 1 ? "mês" : "meses"}
-              </Text>
+                <View style={styles.balanceMiddle}>
+                  <View>
+                    <Text style={[styles.miniLabel, { color: colors.text }]}>
+                      Qtd. Caixinhas
+                    </Text>
+                    <Text style={[styles.miniValue, { color: colors.text }]}>
+                      {qtdCaixinhas || 0} ativas
+                    </Text>
+                  </View>
+                </View>
+              </View>
             </View>
-
-
-          </View>
-        </View>
-      )}
+          </Animated.View>
+        )}
+      </View>
     </View>
   );
 }
@@ -244,14 +293,20 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Bold",
     opacity: 1,
   },
-  balanceCard: {
+  viewport: {
+    overflow: "hidden",
     borderTopLeftRadius: 0,
     borderTopRightRadius: 22,
     borderBottomLeftRadius: 22,
     borderBottomRightRadius: 22,
-    padding: 18,
     zIndex: 1,
+  },
+  balanceCard: {
+    padding: 18,
     justifyContent: "space-between",
+  },
+  cardFixa: {
+    height: 140,
   },
   balanceTop: {
     flexDirection: "row",
@@ -262,12 +317,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     marginVertical: 12,
-  },
-  divider: {
-    height: 1,
-    width: "100%",
-    opacity: 0.2,
-    marginVertical: 4,
   },
   addBtn: {
     width: 34,
@@ -294,14 +343,5 @@ const styles = StyleSheet.create({
   miniValue: {
     fontSize: 14,
     fontFamily: "Roboto-Medium",
-  },
-  caixinhasBtn: {
-    alignItems: "flex-end",
-  },
-  caixinhasTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-    marginBottom: 3,
   },
 });

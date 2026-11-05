@@ -11,7 +11,7 @@ import {
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../context/AppContext";
 import { useTheme } from "@react-navigation/native";
-import ValorOculto from "./ValorOculto"; // Import do novo componente
+import ValorOculto from "./ValorOculto";
 
 const ACTION_WIDTH = 64;
 const OPEN_THRESHOLD = 40;
@@ -30,7 +30,7 @@ export default function SwipeCard({
   hasRecibo = false,
   canEdit = false,
 }) {
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
   const { ocultarValores } = useContext(AppContext);
   const valorExibido = ocultarValores ? "R$ ***" : value;
 
@@ -108,38 +108,50 @@ export default function SwipeCard({
     })
   ).current;
 
+  // Cor de fundo do "container interno" que simula o fundo escuro/caixa onde os botões moram
+  const backgroundContainer = dark ? "#1a1a1a" : "#eaeef2";
+
   return (
     <View style={styles.wrap}>
+      {/* Container de fundo (A "caixa" onde os botões aparecem revelando o fundo) */}
       {qtd > 0 && (
-        <View style={[styles.actionsBehind, { width: maxOpen }]}>
-          {actions.map((a) => (
-            <TouchableOpacity
-              key={a.key || a.icon}
-              style={[
-                styles.actionBtn,
-                { backgroundColor: a.backgroundColor || "#666" },
-              ]}
-              onPress={() => {
-                fechar();
-                a.onPress?.();
-              }}
-              activeOpacity={0.85}
-            >
-              <Ionicons
-                name={a.icon || "ellipsis-horizontal"}
-                size={20}
-                color="#fff"
-              />
-              {!!a.label && (
-                <Text style={styles.actionLabel} numberOfLines={1}>
-                  {a.label}
-                </Text>
-              )}
-            </TouchableOpacity>
-          ))}
+        <View
+          style={[
+            styles.actionsContainer,
+            { width: maxOpen, backgroundColor: backgroundContainer },
+          ]}
+        >
+          <View style={styles.actionsBehind}>
+            {actions.map((a) => (
+              <TouchableOpacity
+                key={a.key || a.icon}
+                style={[
+                  styles.actionBtn,
+                  { backgroundColor: a.backgroundColor || "#666" },
+                ]}
+                onPress={() => {
+                  fechar();
+                  a.onPress?.();
+                }}
+                activeOpacity={0.85}
+              >
+                <Ionicons
+                  name={a.icon || "ellipsis-horizontal"}
+                  size={20}
+                  color="#fff"
+                />
+                {!!a.label && (
+                  <Text style={styles.actionLabel} numberOfLines={1}>
+                    {a.label}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       )}
 
+      {/* Card principal que desliza por cima */}
       <Animated.View
         style={[
           styles.card,
@@ -153,9 +165,6 @@ export default function SwipeCard({
           </View>
 
           <View style={styles.center}>
-           {/* Dentro do componente SwipeCard.js: */}
-
-            {/* Substituir o trecho do valor no titleRow: */}
             <View style={styles.titleRow}>
               <Text style={[styles.title, { color: text }]} numberOfLines={1}>
                 {title}
@@ -169,10 +178,10 @@ export default function SwipeCard({
               )}
             </View>
 
-           <View style={styles.subRow}>
-              <Text 
-                style={[styles.subtitle, { color: text }]} 
-                numberOfLines={2} // Aumente para 3 se quiser mais espaço para a observação
+            <View style={styles.subRow}>
+              <Text
+                style={[styles.subtitle, { color: muted }]}
+                numberOfLines={2}
                 ellipsizeMode="tail"
               >
                 {subtitle}
@@ -207,22 +216,33 @@ const styles = StyleSheet.create({
   wrap: {
     position: "relative",
     marginBottom: 0,
+    overflow: "hidden",
+    borderRadius: 18, // Garante que a "caixa" de fundo respeite o arredondamento do card
   },
-  actionsBehind: {
+  actionsContainer: {
     position: "absolute",
     right: 0,
     top: 0,
     bottom: 0,
-    flexDirection: "row",
-    alignItems: "stretch",
-    overflow: "hidden",
     borderRadius: 18,
+    overflow: "hidden",
+    justifyContent: "center",
+  },
+  actionsBehind: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    height: "100%",
+    paddingHorizontal: 4, // Dá um respiro simulando estar dentro de uma caixa
+    gap: 4,
   },
   actionBtn: {
-    width: ACTION_WIDTH,
+    width: ACTION_WIDTH - 8,
+    height: "82%", // Deixa os botões um pouco menor verticalmente, dando o efeito de "dentro de uma caixa"
+    borderRadius: 12, // Botões com bordas arredondadas individuais
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
   },
   actionLabel: {
     marginTop: 2,

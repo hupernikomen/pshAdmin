@@ -211,8 +211,8 @@ export default function Home() {
   const border = colors.border || (dark ? "#333" : "#eee");
   const bg = colors.background;
 
-  // Carga principal fica no AppContext (igrejaAtiva.id).
-  // Aqui só pull-to-refresh e ações manuais.
+  const [cardAbertoId, setCardAbertoId] = useState(null);
+
 
   useEffect(() => {
     navigation.setOptions({
@@ -253,7 +253,7 @@ export default function Home() {
             fontSize: 12,
             fontFamily: "Roboto-Light",
             color: text,
-          }}>{igrejaAtiva.nome}</Text>
+          }}>{igrejaAtiva?.nome}</Text>
         </View>
       ),
       headerRight: () => (
@@ -584,12 +584,21 @@ export default function Home() {
           }
           renderItem={({ item }) => (
             <SwipeCard
+              key={item.id || item.label}
               icon={item.icon}
               iconColor={item.iconColor}
               tint={item.tint}
               title={item.label}
               subtitle={item.sub}
               value={item.value}
+              open={cardAbertoId === (item.id || item.label)}
+              onOpenChange={(isOpen) => {
+                if (isOpen) {
+                  setCardAbertoId(item.id || item.label);
+                } else if (cardAbertoId === (item.id || item.label)) {
+                  setCardAbertoId(null);
+                }
+              }}
               actions={
                 item.route
                   ? [
@@ -624,62 +633,62 @@ export default function Home() {
         onLogout={handleLogout}
       />
 
-<Modal
-  visible={modalIgrejas}
-  transparent
-  animationType="slide"
-  statusBarTranslucent
-  onRequestClose={() => setModalIgrejas(false)}
->
-  <Pressable
-    style={styles.sheetOverlay}
-    onPress={() => setModalIgrejas(false)}
-  >
-    <Pressable
-      style={[styles.sheetCard, { backgroundColor: card }]}
-      onPress={() => {}}
-    >
-      <View style={[styles.sheetHandle, { backgroundColor: text }]} />
-
-      <Text style={[styles.modalIgrejaTitulo, { color: text }]}>
-        Suas igrejas
-      </Text>
-
-      {(igrejasDoUsuario || []).map((ig) => {
-        const ativa = ig.igrejaId === igrejaAtiva?.id;
-        return (
-          <TouchableOpacity
-            key={ig.igrejaId}
-            style={[
-              styles.igrejaItem,
-              ativa && {
-                backgroundColor: dark ? "#2a2a2a" : "#f4f5f7",
-              },
-            ]}
-            onPress={() => escolherIgreja(ig.igrejaId)}
-            activeOpacity={0.8}
+      <Modal
+        visible={modalIgrejas}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setModalIgrejas(false)}
+      >
+        <Pressable
+          style={styles.sheetOverlay}
+          onPress={() => setModalIgrejas(false)}
+        >
+          <Pressable
+            style={[styles.sheetCard, { backgroundColor: card }]}
+            onPress={() => { }}
           >
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.igrejaItemNome, { color: text }]}>
-                {ig.nome}
-              </Text>
-              <Text style={[styles.igrejaItemPapel, { color: muted }]}>
-                {ig.papel}
-              </Text>
-            </View>
-            {ativa && (
-              <Ionicons
-                name="checkmark-circle"
-                size={20}
-                color={principal}
-              />
-            )}
-          </TouchableOpacity>
-        );
-      })}
-    </Pressable>
-  </Pressable>
-</Modal>
+            <View style={[styles.sheetHandle, { backgroundColor: text }]} />
+
+            <Text style={[styles.modalIgrejaTitulo, { color: text }]}>
+              Suas igrejas
+            </Text>
+
+            {(igrejasDoUsuario || []).map((ig) => {
+              const ativa = ig.igrejaId === igrejaAtiva?.id;
+              return (
+                <TouchableOpacity
+                  key={ig.igrejaId}
+                  style={[
+                    styles.igrejaItem,
+                    ativa && {
+                      backgroundColor: dark ? "#2a2a2a" : "#f4f5f7",
+                    },
+                  ]}
+                  onPress={() => escolherIgreja(ig.igrejaId)}
+                  activeOpacity={0.8}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.igrejaItemNome, { color: text }]}>
+                      {ig.nome}
+                    </Text>
+                    <Text style={[styles.igrejaItemPapel, { color: muted }]}>
+                      {ig.papel}
+                    </Text>
+                  </View>
+                  {ativa && (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={20}
+                      color={principal}
+                    />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -687,7 +696,6 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: {
-    paddingTop: 10,
     gap: 8,
     paddingHorizontal: 14,
   },
@@ -811,24 +819,24 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textTransform: "capitalize",
   },
-sheetOverlay: {
-  flex: 1,
-  backgroundColor: "rgba(0,0,0,0.6)",
-  justifyContent: "flex-end",
-},
-sheetCard: {
-  borderTopLeftRadius: 22,
-  borderTopRightRadius: 22,
-  paddingHorizontal: 16,
-  paddingTop: 10,
-  paddingBottom: 48, // espaço da barra de navegação do sistema
-  maxHeight: "70%",
-},
-sheetHandle: {
-  width: 40,
-  height: 4,
-  borderRadius: 2,
-  alignSelf: "center",
-  marginBottom: 14,
-},
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "flex-end",
+  },
+  sheetCard: {
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 48, // espaço da barra de navegação do sistema
+    maxHeight: "70%",
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 14,
+  },
 });

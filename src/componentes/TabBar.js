@@ -8,8 +8,8 @@ import {
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 
-const TAB_SIZE = 50;
-const PILL_SIZE = 48;
+const TAB_SIZE = 52;
+const PILL_SIZE = 52;
 
 function nomeIcone(nome, focado) {
   if (!nome) return "ellipse-outline";
@@ -27,18 +27,21 @@ export default function TabbarPersonalizada({
   const principal = colors.principal || colors.primary;
   const card = colors.card;
   const iconInativo = colors.muted || (dark ? "#9aa0a6" : "#777");
+  const border = dark ? "#3233348b" : "#eeebeb7d";
 
-  const slideX = useRef(new Animated.Value(state.index * TAB_SIZE)).current;
-  const scales = useRef(
-    state.routes.map((_, i) => new Animated.Value(i === state.index ? 1 : 0))
+  // Inicializa a posição correta centralizada na aba ativa desde o início
+  const slideX = useRef(
+    new Animated.Value(state.index * TAB_SIZE)
   ).current;
 
   const [layouts, setLayouts] = useState({});
 
   useEffect(() => {
     const layout = layouts[state.index];
+    
+    // Calcula a posição exata centralizando a pílula no botão medido
     const toX = layout
-      ? layout.x + layout.width / 2 - PILL_SIZE / 2
+      ? layout.x + (layout.width - PILL_SIZE) / 2
       : state.index * TAB_SIZE + (TAB_SIZE - PILL_SIZE) / 2;
 
     Animated.spring(slideX, {
@@ -47,15 +50,6 @@ export default function TabbarPersonalizada({
       friction: 8,
       tension: 120,
     }).start();
-
-    scales.forEach((anim, i) => {
-      Animated.spring(anim, {
-        toValue: i === state.index ? 1 : 0,
-        useNativeDriver: true,
-        friction: 7,
-        tension: 140,
-      }).start();
-    });
   }, [state.index, layouts]);
 
   function onLayoutTab(index, e) {
@@ -68,10 +62,11 @@ export default function TabbarPersonalizada({
 
   return (
     <Animated.View style={styles.container}>
-      <View style={[styles.content, { 
-        elevation:dark ? 14 : 5,
-        backgroundColor: card, 
-         }]}>
+      <View style={[styles.content, {
+        backgroundColor: card,
+        borderWidth: 5,
+        borderColor: border,
+      }]}>
         <Animated.View
           pointerEvents="none"
           style={[
@@ -131,12 +126,11 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: -10,
     marginBottom: 21,
-    padding: 2,
     borderRadius: 35,
   },
   pill: {
     position: "absolute",
-    left: -1,
+    left: -4, // Ajustado para compensar o padding do content container
     width: PILL_SIZE,
     height: PILL_SIZE,
     borderRadius: PILL_SIZE / 2,

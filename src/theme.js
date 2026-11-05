@@ -14,7 +14,7 @@ export const TemaClaro = {
     primary: PRINCIPAL,
     background: "#F8FAFC",
     card: "#FFFFFF",
-    text: "#0F172A", // Escuro mais definido para alto contraste
+    text: "#132245ff", // Escuro mais definido para alto contraste
     border: "#E2E8F0",
     notification: PRINCIPAL,
 

@@ -1,5 +1,6 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Tabs from "./tabs";
 import Registro from "../pages/Registro";
@@ -17,23 +18,22 @@ import { useTheme } from "@react-navigation/native";
 const Stack = createNativeStackNavigator();
 
 export default function Rotas() {
-
-  const { colors } = useTheme()
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
-    <SafeAreaView style={{ flex: 1 }} edges={["bottom"]}>
+    <View style={{ flex: 1, backgroundColor: colors.background, paddingBottom: insets.bottom }}>
       <Stack.Navigator
         screenOptions={{
           headerTitleStyle: {
             fontFamily: 'Roboto-Bold',
             color: colors.text,
-            fontSize: 18
+            fontSize: 18,
           },
           headerShadowVisible: false,
           contentStyle: {
             backgroundColor: colors.background,
           },
-
         }}
       >
         <Stack.Screen
@@ -86,13 +86,12 @@ export default function Rotas() {
           options={{ animation: "slide_from_left" }}
         />
 
-
         <Stack.Screen
           name="Dizimos"
           component={Dizimos}
           options={{ title: "Dízimos" }}
         />
       </Stack.Navigator>
-    </SafeAreaView>
+    </View>
   );
 }
