@@ -183,7 +183,7 @@ function HomeTopo({
               { backgroundColor: principal },
             ]}
           >
-            <Ionicons name="person" size={16} color="#fff" />
+            <Ionicons name="person" size={20} color="#fff" />
           </View>
         )}
 
@@ -191,11 +191,11 @@ function HomeTopo({
           <Text style={[styles.topoOla, { color: text }]} numberOfLines={1}>
             Olá, {String(nome || "").trim().split(" ")[0] || "Conta"}
           </Text>
-          {!!igrejaNome && (
+          {/* {!!igrejaNome && (
             <Text style={[styles.topoIgreja, { color: text }]} numberOfLines={1}>
               {igrejaNome}
             </Text>
-          )}
+          )} */}
         </View>
       </TouchableOpacity>
 
@@ -695,9 +695,9 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 14,
     minWidth: 0,
-    marginRight: 10,
+    marginRight: 14,
   },
   topoTextos: {
     flex: 1,
@@ -715,15 +715,15 @@ const styles = StyleSheet.create({
   topoRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 14,
   },
   topoBtn: {
     padding: 8,
   },
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
   },
   avatarFallback: {
     alignItems: "center",

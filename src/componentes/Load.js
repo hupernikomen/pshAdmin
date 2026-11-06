@@ -15,7 +15,7 @@ export default function Load() {
     const animation = Animated.loop(
       Animated.timing(translateX, {
         toValue: width,
-        duration: 1200,
+        duration: 1500,
         useNativeDriver: true,
       })
     );
@@ -49,8 +49,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   track: {
-    height: 2,
-    width: "80%",
+    height: 3,
+    width: "90%",
     borderRadius: 2,
     overflow: "hidden",
   },

@@ -147,7 +147,7 @@ function AppNavigator() {
   useEffect(() => {
     if (Platform.OS !== "android") return;
 
-    const barColor = tema.dark ? "#101010" : "#f4f5f7";
+    const barColor = tema.dark ? "#131313" : "#f4f5f7";
     const lightIcons = !tema.dark;
 
     try {

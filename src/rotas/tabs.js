@@ -23,7 +23,7 @@ export default function Tabs() {
         headerTitleStyle: {
           fontFamily: 'Roboto-Bold',
           color: colors.text,
-          fontSize: 18,
+          fontSize: 20,
         },
         headerTintColor: colors.text,
         headerShadowVisible: false,

@@ -8,14 +8,13 @@ import {
   TextInput,
   Image,
   Platform,
-  PermissionsAndroid,
   KeyboardAvoidingView,
   Modal,
   Pressable,
 } from "react-native";
 import { useTheme, useNavigation } from "@react-navigation/native";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { launchCamera, launchImageLibrary } from "react-native-image-picker";
+import { launchImageLibrary } from "react-native-image-picker";
 import RNFS from "react-native-fs";
 import { AppContext } from "../context/AppContext";
 import { db } from "../firebaseConnection";
@@ -180,6 +179,7 @@ export default function Registro() {
   const surface = dark ? "#2a2a2a" : "#f4f5f7";
   const placeholder = muted;
   const separator = dark ? "#3a3a3a" : "#ececec";
+  const danger = colors.negativo || "#C62828";
 
   const [tipoMovimento, setTipoMovimento] = useState(null);
   const [tipo, setTipo] = useState(null);
@@ -234,10 +234,6 @@ export default function Registro() {
     setModalTipo(false);
   }
 
-  function removerRecibo() {
-    setReciboUri(null);
-  }
-
   function valorPagoNaCriacao(total) {
     if (tipo === "Parcelada" || tipo === "Sem Prazo") return 0;
     if (isDataFutura(data)) return 0;
@@ -254,45 +250,17 @@ export default function Registro() {
     return `file://${caminhoFinal}`;
   }
 
-  async function tirarFoto() {
-    try {
-      if (Platform.OS === "android") {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.CAMERA
-        );
-        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-          showAlert({
-            title: "Permissão negada",
-            message: "Precisamos da câmera para continuar.",
-          });
-          return;
-        }
-      }
-      const result = await launchCamera({
-        mediaType: "photo",
-        quality: 0.6,
-        maxWidth: 700,
-        maxHeight: 700,
-        saveToPhotos: false,
-      });
-      if (result.didCancel || result.errorCode) return;
-      if (result.assets?.length > 0) setReciboUri(result.assets[0].uri);
-    } catch (error) {
-      showAlert({ title: "Erro", message: "Não foi possível abrir a câmera." });
-    }
-  }
-
   async function escolherDaGaleria() {
     try {
       const result = await launchImageLibrary({
         mediaType: "photo",
-        quality: 0.6,
-        maxWidth: 700,
-        maxHeight: 700,
+        quality: 0.8,
         selectionLimit: 1,
       });
       if (result.didCancel || result.errorCode) return;
-      if (result.assets?.length > 0) setReciboUri(result.assets[0].uri);
+      const asset = result.assets?.[0];
+      if (!asset?.uri) return;
+      setReciboUri(asset.uri);
     } catch (error) {
       showAlert({ title: "Erro", message: "Não foi possível abrir a galeria." });
     }
@@ -705,7 +673,6 @@ export default function Registro() {
             )}
 
             <View style={styles.section}>
-
               <Text style={[styles.sectionTitle, { color: muted }]}>Dados</Text>
               <TouchableOpacity
                 style={[styles.field, { backgroundColor: card, marginBottom: 24 }]}
@@ -723,16 +690,17 @@ export default function Registro() {
                 </View>
               </TouchableOpacity>
 
-              {tipo !== "Parcelada" && ( <TouchableOpacity
-                style={[styles.field, { backgroundColor: card }]}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Text style={[styles.fieldLabel, { color: muted }]}>Data</Text>
-                <Text style={[styles.fieldValue, { color: text }]}>
-                  {data.toLocaleDateString("pt-BR")}
-                </Text>
-              </TouchableOpacity> )}
-
+              {tipo !== "Parcelada" && (
+                <TouchableOpacity
+                  style={[styles.field, { backgroundColor: card }]}
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <Text style={[styles.fieldLabel, { color: muted }]}>Data</Text>
+                  <Text style={[styles.fieldValue, { color: text }]}>
+                    {data.toLocaleDateString("pt-BR")}
+                  </Text>
+                </TouchableOpacity>
+              )}
 
               {showDatePicker && (
                 <DateTimePicker
@@ -850,69 +818,31 @@ export default function Registro() {
               {tipoMovimento === "saida" && (
                 <View style={[styles.field, { backgroundColor: card }]}>
                   <Text style={[styles.fieldLabel, { color: muted }]}>
-                    Recibo (opcional)
+                    Comprovante / Recibo (opcional)
                   </Text>
-
-                  {reciboUri ? (
-                    <View style={styles.reciboSelecionado}>
-                      <Image source={{ uri: reciboUri }} style={styles.preview} />
-                      <View style={styles.reciboAcoes}>
-                        <TouchableOpacity
-                          style={[styles.reciboAcaoBtn, { backgroundColor: surface }]}
-                          onPress={tirarFoto}
-                          activeOpacity={0.8}
-                        >
-                          <Ionicons name="camera-outline" size={18} color={text} />
-                          <Text style={[styles.reciboAcaoText, { color: text }]}>
-                            Câmera
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.reciboAcaoBtn, { backgroundColor: surface }]}
-                          onPress={escolherDaGaleria}
-                          activeOpacity={0.8}
-                        >
-                          <Ionicons name="images-outline" size={18} color={text} />
-                          <Text style={[styles.reciboAcaoText, { color: text }]}>
-                            Galeria
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.reciboAcaoBtn, { backgroundColor: surface }]}
-                          onPress={removerRecibo}
-                          activeOpacity={0.8}
-                        >
-                          <Ionicons name="trash-outline" size={18} color="#C62828" />
-                          <Text style={[styles.reciboAcaoText, { color: "#C62828" }]}>
-                            Remover
-                          </Text>
-                        </TouchableOpacity>
+                  <View style={styles.reciboContainer}>
+                    {reciboUri ? (
+                      <View style={styles.reciboPreviewRow}>
+                        <Image source={{ uri: reciboUri }} style={styles.reciboMini} />
+                        <View style={{ flex: 1, gap: 4 }}>
+                          <TouchableOpacity onPress={escolherDaGaleria}>
+                            <Text style={[styles.reciboAcaoText, { color: principal }]}>Trocar foto</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => setReciboUri(null)}>
+                            <Text style={[styles.reciboAcaoText, { color: danger }]}>Remover foto</Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
-                    </View>
-                  ) : (
-                    <View style={styles.reciboVazio}>
+                    ) : (
                       <TouchableOpacity
-                        style={[styles.reciboOpcao, { backgroundColor: surface }]}
-                        onPress={tirarFoto}
-                        activeOpacity={0.8}
-                      >
-                        <Ionicons name="camera-outline" size={22} color={muted} />
-                        <Text style={[styles.reciboOpcaoText, { color: muted }]}>
-                          Câmera
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.reciboOpcao, { backgroundColor: surface }]}
+                        style={[styles.uploadBtn, { borderColor: muted }]}
                         onPress={escolherDaGaleria}
-                        activeOpacity={0.8}
                       >
-                        <Ionicons name="images-outline" size={22} color={muted} />
-                        <Text style={[styles.reciboOpcaoText, { color: muted }]}>
-                          Galeria
-                        </Text>
+                        <Ionicons name="camera-outline" size={20} color={principal} />
+                        <Text style={[styles.uploadText, { color: text }]}>Adicionar foto do recibo</Text>
                       </TouchableOpacity>
-                    </View>
-                  )}
+                    )}
+                  </View>
                 </View>
               )}
 
@@ -1132,32 +1062,20 @@ const styles = StyleSheet.create({
   },
   fieldValue: { fontSize: 15, fontFamily: "Roboto-Medium", flex: 1 },
   fieldInput: { fontSize: 15, fontFamily: "Roboto-Regular", padding: 0 },
-  reciboVazio: { flexDirection: "row", gap: 10, marginTop: 4 },
-  reciboOpcao: {
-    flex: 1,
-    height: 64,
+  reciboContainer: { marginTop: 4 },
+  uploadBtn: {
+    height: 48,
     borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-  },
-  reciboOpcaoText: { fontSize: 12, fontFamily: "Roboto-Regular" },
-  reciboSelecionado: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginTop: 4,
-  },
-  preview: { width: 56, height: 72, borderRadius: 8, backgroundColor: "#eee" },
-  reciboAcoes: { flex: 1, gap: 6 },
-  reciboAcaoBtn: {
-    flexDirection: "row",
-    alignItems: "center",
     gap: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 10,
   },
+  uploadText: { fontSize: 14, fontFamily: "Roboto-Medium" },
+  reciboPreviewRow: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 4 },
+  reciboMini: { width: 48, height: 60, borderRadius: 8, backgroundColor: "#eee" },
   reciboAcaoText: { fontSize: 13, fontFamily: "Roboto-Medium" },
   saveBtn: {
     height: 52,

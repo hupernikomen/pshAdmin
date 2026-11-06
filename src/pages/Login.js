@@ -143,7 +143,7 @@ export default function Login() {
               Tesouraria Igrejas
             </Text>
             <Text style={[styles.brandHint, { color: muted }]}>
-              Controle financeiro da igreja
+              Controle financeiro para igrejas
             </Text>
           </View>
 

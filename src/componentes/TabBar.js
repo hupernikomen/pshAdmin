@@ -9,7 +9,7 @@ import {
 import Ionicons from "react-native-vector-icons/Ionicons";
 
 const TAB_SIZE = 52;
-const PILL_SIZE = 52;
+const PILL_SIZE = 50;
 
 function nomeIcone(nome, focado) {
   if (!nome) return "ellipse-outline";
@@ -27,7 +27,7 @@ export default function TabbarPersonalizada({
   const principal = colors.principal || colors.primary;
   const card = colors.card;
   const iconInativo = colors.muted || (dark ? "#9aa0a6" : "#777");
-  const border = dark ? "#292929" : "#f1f1f1ff";
+  const border = dark ? "#222222" : "#eeeeeeff";
 
   // Inicializa a posição correta centralizada na aba ativa desde o início
   const slideX = useRef(

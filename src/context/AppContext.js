@@ -16,15 +16,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AuthContext } from "./AuthContext";
 import { excluirIgrejaDefinitivo } from "../utils/igreja";
 import {
-  DIAS_GRATIS_PDF,
-  PRECO_ANUAL_PDF,
-  MESES_CONTRATO_PDF,
-  TEXTO_PRECO_PDF,
-  PIX_CHAVE,
-  PIX_TITULAR,
-  PIX_CIDADE,
-} from "../constants/assinatura";
-import {
   arred as arredondarMoney,
   calcularSaldoRealizado,
   totaisPendentes,
@@ -36,20 +27,10 @@ const KEY_IGREJA_ATIVA = "@igreja_ativa_id";
 const KEY_OCULTAR_VALORES = "@ocultar_valores";
 const KEY_OCULTAR_NOMES_DOADORES = "@ocultar_nomes_doadores";
 
-const MS_DIA = 24 * 60 * 60 * 1000;
-
 function normalizarEmail(email) {
   return String(email || "")
     .trim()
     .toLowerCase();
-}
-
-function resolverPdfLiberadoAte(dataIgreja) {
-  const pagoOuTrial = Number(dataIgreja?.pdfLiberadoAte) || 0;
-  if (pagoOuTrial > 0) return pagoOuTrial;
-
-  const criado = Number(dataIgreja?.createdAt) || Date.now();
-  return criado + DIAS_GRATIS_PDF * MS_DIA;
 }
 
 function montarIgrejaAtiva(item) {
@@ -62,7 +43,6 @@ function montarIgrejaAtiva(item) {
     createdAt: item.createdAt || null,
     exclusaoAgendadaEm: item.exclusaoAgendadaEm || null,
     exclusaoPrevistaEm: item.exclusaoPrevistaEm || null,
-    pdfLiberadoAte: item.pdfLiberadoAte || null,
   };
 }
 
@@ -107,79 +87,7 @@ export function AppProvider({ children }) {
   }
 
   function podeGerarPdf() {
-    const ate = Number(igrejaAtiva?.pdfLiberadoAte) || 0;
-    if (!ate) return false;
-    return Date.now() <= ate;
-  }
-
-  function getInfoAssinaturaPdf() {
-    const ate = Number(igrejaAtiva?.pdfLiberadoAte) || 0;
-    const agora = Date.now();
-    const ativo = ate > 0 && agora <= ate;
-    const diasRestantes = ativo
-      ? Math.max(0, Math.ceil((ate - agora) / MS_DIA))
-      : 0;
-
-    return {
-      ativo,
-      pdfLiberadoAte: ate || null,
-      diasRestantes,
-      precoAnual: PRECO_ANUAL_PDF,
-      mesesContrato: MESES_CONTRATO_PDF,
-      diasGratis: DIAS_GRATIS_PDF,
-      textoPreco: TEXTO_PRECO_PDF,
-      pixChave: PIX_CHAVE,
-      pixTitular: PIX_TITULAR,
-      pixCidade: PIX_CIDADE,
-    };
-  }
-
-  async function solicitarLiberacaoPdf() {
-    const igrejaId = getIgrejaId();
-    const userId = getUserId();
-    const email = getEmail();
-    if (!igrejaId) throw new Error("Nenhuma igreja ativa.");
-    if (!userId) throw new Error("Faça login novamente.");
-
-    await addDoc(collection(db, "solicitacoesPdf"), {
-      igrejaId,
-      igrejaNome: igrejaAtiva?.nome || "",
-      uid: userId,
-      email: email || null,
-      status: "pendente",
-      createdAt: Date.now(),
-      precoInformado: PRECO_ANUAL_PDF,
-      mesesInformados: MESES_CONTRATO_PDF,
-    });
-  }
-
-  async function liberarPdfIgreja(igrejaId, meses = MESES_CONTRATO_PDF) {
-    if (!igrejaId) throw new Error("igrejaId obrigatório.");
-    const mesesOk = Math.max(1, Number(meses) || MESES_CONTRATO_PDF);
-    const agora = Date.now();
-    const base =
-      Number(igrejaAtiva?.pdfLiberadoAte) > agora
-        ? Number(igrejaAtiva.pdfLiberadoAte)
-        : agora;
-    const novoAte = base + mesesOk * 30 * MS_DIA;
-
-    await updateDoc(doc(db, "igrejas", igrejaId), {
-      pdfLiberadoAte: novoAte,
-      pdfAtualizadoEm: agora,
-    });
-
-    if (igrejaAtiva?.id === igrejaId) {
-      setIgrejaAtiva((prev) =>
-        prev ? { ...prev, pdfLiberadoAte: novoAte } : prev
-      );
-    }
-    setIgrejasDoUsuario((prev) =>
-      prev.map((ig) =>
-        ig.igrejaId === igrejaId ? { ...ig, pdfLiberadoAte: novoAte } : ig
-      )
-    );
-
-    return novoAte;
+    return true;
   }
 
   useEffect(() => {
@@ -371,8 +279,6 @@ export function AppProvider({ children }) {
             continue;
           }
 
-          const pdfLiberadoAte = resolverPdfLiberadoAte(data);
-
           lista.push({
             igrejaId: m.igrejaId,
             nome: data.nome || "Igreja",
@@ -381,7 +287,6 @@ export function AppProvider({ children }) {
             createdAt: data.createdAt || null,
             exclusaoAgendadaEm: exclusaoAgendadaEm || null,
             exclusaoPrevistaEm: exclusaoPrevistaEm || null,
-            pdfLiberadoAte,
           });
         } catch (e) {
           console.log("Erro ao ler igreja:", m.igrejaId, e);
@@ -445,13 +350,11 @@ export function AppProvider({ children }) {
     }
 
     const agora = Date.now();
-    const pdfLiberadoAte = agora + DIAS_GRATIS_PDF * MS_DIA;
 
     const igrejaRef = await addDoc(collection(db, "igrejas"), {
       nome: nomeLimpo,
       createdAt: agora,
       createdBy: userId,
-      pdfLiberadoAte,
     });
 
     const membroRef = await addDoc(collection(db, "membros"), {
@@ -470,7 +373,6 @@ export function AppProvider({ children }) {
       createdAt: agora,
       exclusaoAgendadaEm: null,
       exclusaoPrevistaEm: null,
-      pdfLiberadoAte,
     };
 
     setIgrejasDoUsuario((prev) => [...prev, nova]);
@@ -840,9 +742,6 @@ export function AppProvider({ children }) {
         toggleOcultarNomesDoadores,
         semConexao,
         podeGerarPdf,
-        getInfoAssinaturaPdf,
-        solicitarLiberacaoPdf,
-        liberarPdfIgreja,
       }}
     >
       {children}

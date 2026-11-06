@@ -12,6 +12,7 @@ import Membros from "../pages/Membros";
 import Configuracoes from "../pages/Configuracoes";
 import Dizimos from "../pages/Dizimos";
 import Projecao from "../pages/ProjecaoGastos";
+import ConfirmarRegistroProjecao from "../pages/ConfirmarRegistroProjecao";
 
 import { useTheme } from "@react-navigation/native";
 
@@ -25,14 +26,15 @@ export default function Rotas() {
     <View style={{ flex: 1, backgroundColor: colors.background, paddingBottom: insets.bottom }}>
       <Stack.Navigator
         screenOptions={{
-                  headerStyle: {
-          backgroundColor: colors.background,
-        },
+          headerStyle: {
+            backgroundColor: colors.background,
+          },
           headerTitleStyle: {
             fontFamily: 'Roboto-Bold',
             color: colors.text,
-            fontSize: 18,
+            fontSize: 20,
           },
+          headerShadowVisible:false,
           contentStyle: {
             backgroundColor: colors.background,
           },
@@ -51,10 +53,18 @@ export default function Rotas() {
         />
 
         <Stack.Screen
+          name="ConfirmarRegistroProjecao"
+          component={ConfirmarRegistroProjecao}
+          options={{ title: "Confirmar Registro" }}
+        />
+
+        <Stack.Screen
           name="AReceber"
           component={AReceber}
           options={{ title: "A receber" }}
         />
+
+
 
         <Stack.Screen
           name="Membros"

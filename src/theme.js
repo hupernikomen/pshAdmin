@@ -1,9 +1,9 @@
 import { DefaultTheme, DarkTheme } from "@react-navigation/native";
 
-/** Cor principal — tema claro (Azul Royal vibrante e moderno) */
-export const PRINCIPAL = "#488fe0ff";
+/** Cor principal — tema claro (Tom quente e acolhedor) */
+export const PRINCIPAL = "#D97706"; // Um âmbar/dourado elegante e vivo
 
-/** Cor principal — tema escuro */
+/** Cor principal — tema escuro (mantido intacto) */
 export const PRINCIPAL_DARK = "#488fe0ff";
 
 export const TemaClaro = {
@@ -11,19 +11,19 @@ export const TemaClaro = {
   dark: false,
   colors: {
     ...DefaultTheme.colors,
-    primary: PRINCIPAL,
-    background: "#f6f6f6ff",
-    card: "#FFFFFF",
-    text: "#132245ff", // Escuro mais definido para alto contraste
-    border: "#E2E8F0",
-    notification: PRINCIPAL,
+    primary: "#0284C7", // Azul oceano sóbrio e elegante
+    background: "#F1F3F5", // Cinza neve muito suave
+    card: "#FFFFFF", // Cartões brancos para contraste limpo
+    text: "#1E293B", // Azul escuro carvão para leitura nítida
+    border: "#D1D5DB",
+    notification: "#0284C7",
 
-    principal: PRINCIPAL,
-    neutro: "#F1F5F9",
+    principal: "#0284C7",
+    neutro: "#E5E7EB",
     negativo: "#DC2626",
-    muted: "#64748B", // Muted mais legível
-    entrada: "#16A34A", // Verde vivo
-    saida: "#DC2626", // Vermelho vivo
+    muted: "#6B7280",
+    entrada: "#16A34A",
+    saida: "#DC2626",
   },
 };
 
@@ -33,8 +33,8 @@ export const TemaEscuro = {
   colors: {
     ...DarkTheme.colors,
     primary: PRINCIPAL_DARK,
-    background: "#101010",
-    card: "#1e1e1e",
+    background: "#131313",
+    card: "#1c1c1c",
     text: "#b4b4b4ff",
     border: "#333333",
     notification: PRINCIPAL_DARK,

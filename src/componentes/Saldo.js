@@ -276,7 +276,6 @@ export default function Saldo({
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 14,
   },
   tabsContainer: {
     flexDirection: "row",
