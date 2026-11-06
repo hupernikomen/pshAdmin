@@ -146,7 +146,6 @@ const TIPOS_SAIDA = [
   { id: "Fixa", exemplo: "Energia, internet, aluguel, prebenda, etc." },
   { id: "Avulsa", exemplo: "Manutenção, material de limpeza, serviços, etc." },
   { id: "Parcelada", exemplo: "Compras no cartão ou acordadas." },
-  { id: "Sem Prazo", exemplo: "Conta a pagar sem data definida, provisão futura." },
 ];
 
 export default function Registro() {
@@ -207,8 +206,7 @@ export default function Registro() {
     (c) => (Number(c.valor) || 0) > 0
   );
 
-  const mostrarOrigemSaida =
-    tipoMovimento === "saida" && tipo !== "Sem Prazo" && temCaixinhaComSaldo;
+  const mostrarOrigemSaida = tipoMovimento === "saida" && temCaixinhaComSaldo;
 
   useEffect(() => {
     const tem = (caixinhas || []).some((c) => (Number(c.valor) || 0) > 0);
@@ -227,15 +225,11 @@ export default function Registro() {
       if (!qtdParcelas) setQtdParcelas("2");
       setDataPrimeiraParcela(maisUmMes(data));
     }
-    if (t === "Sem Prazo") {
-      setOrigemPagamento("geral");
-      setCaixinhaId(null);
-    }
     setModalTipo(false);
   }
 
   function valorPagoNaCriacao(total) {
-    if (tipo === "Parcelada" || tipo === "Sem Prazo") return 0;
+    if (tipo === "Parcelada") return 0;
     if (isDataFutura(data)) return 0;
     return total;
   }
@@ -409,52 +403,6 @@ export default function Registro() {
           titulo: "Sucesso",
           mensagem: "Compra parcelada registrada!",
         });
-        navigation.goBack();
-      } catch (e) {
-        showAlert({
-          title: "Erro",
-          message: e.message || "Não foi possível salvar",
-        });
-      } finally {
-        setLoad(false);
-      }
-      return;
-    }
-
-    if (tipoMovimento === "saida" && tipo === "Sem Prazo") {
-      if (!validarOrigemSaida(0)) return;
-
-      setLoad(true);
-      try {
-        await addDoc(collection(db, "registros"), {
-          igrejaId,
-          idUsuario: uid,
-          tipoMovimento: "saida",
-          tipo: "Sem Prazo",
-          data: data.getTime(),
-          descricao: descricao.trim(),
-          valorTotal: valor,
-          observacao: observacao.trim(),
-          valoresPagos: [],
-          valorPagoTotal: 0,
-          quantidadeParcelas: 1,
-          status: "aberta",
-          origemPagamento: "geral",
-          caixinhaId: null,
-          caixinhaNome: null,
-          ministerio: ministerio || null,
-          reciboUrl: reciboUri ? await salvarImagemLocal(reciboUri) : null,
-          reg: Date.now(),
-          createdAt: Date.now(),
-        });
-
-        await Promise.all([
-          HistoricoMovimentos(),
-          ResumoFinanceiro(),
-          CarregarCaixinhas?.(),
-        ]);
-
-        setAviso({ titulo: "Sucesso", mensagem: "Conta sem prazo registrada." });
         navigation.goBack();
       } catch (e) {
         showAlert({

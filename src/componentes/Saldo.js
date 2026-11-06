@@ -251,7 +251,7 @@ export default function Saldo({
                     style={[styles.addBtn, { backgroundColor: colors.principal }]}
                     activeOpacity={0.8}
                   >
-                    <Ionicons name="add" size={22} color="#fff" />
+                    <Ionicons name="chevron-forward" size={22} color="#fff" />
                   </TouchableOpacity>
                 </View>
 
