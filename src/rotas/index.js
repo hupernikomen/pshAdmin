@@ -12,7 +12,6 @@ import Membros from "../pages/Membros";
 import Configuracoes from "../pages/Configuracoes";
 import Dizimos from "../pages/Dizimos";
 import Projecao from "../pages/ProjecaoGastos";
-import ConfirmarRegistroProjecao from "../pages/ConfirmarRegistroProjecao";
 
 import { useTheme } from "@react-navigation/native";
 
@@ -52,11 +51,6 @@ export default function Rotas() {
           options={{ title: "Projeção de Gastos" }}
         />
 
-        <Stack.Screen
-          name="ConfirmarRegistroProjecao"
-          component={ConfirmarRegistroProjecao}
-          options={{ title: "Confirmar Registro" }}
-        />
 
         <Stack.Screen
           name="AReceber"

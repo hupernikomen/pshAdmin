@@ -100,6 +100,15 @@ function podeBaixarParcela(item) {
   return Number(proxima.numero) === Number(item.parcelaNumero);
 }
 
+/** Verifica se o registro já teve alguma prestação/pagamento efetuado. */
+function temPrestacaoPaga(item) {
+  const pagoTotal = Number(item.valorPagoTotal) || 0;
+  if (pagoTotal > 0) return true;
+
+  const parcelas = Array.isArray(item.parcelas) ? item.parcelas : [];
+  return parcelas.some((p) => p.status === "paga" || p.status === "quitada" || !!p.pagoEm);
+}
+
 export default function APagar() {
   const {
     dadosFinancas,
@@ -250,6 +259,15 @@ export default function APagar() {
       showAlert({
         title: "Somente leitura",
         message: "Seu perfil não permite excluir.",
+      });
+      return;
+    }
+
+    // Segurança extra: impede exclusão se houver prestação paga
+    if (temPrestacaoPaga(item)) {
+      showAlert({
+        title: "Ação não permitida",
+        message: "Este registro possui prestações pagas e não pode mais ser excluído.",
       });
       return;
     }
@@ -541,30 +559,33 @@ export default function APagar() {
             : "--/--/--";
 
           const liberada = podeBaixarParcela(item);
-          const proxima = item.isParcela ? proximaParcelaAberta(item) : null;
+          const jaTemPagamento = temPrestacaoPaga(item);
 
           const meta = item.isParcela
             ? `${item.parcelaNumero}/${item.parcelaTotal} · ${dataStr}`
             : `${item.tipo || "Saída"} · ${dataStr}`;
 
-          const actions = podeEditar
-            ? [
-              {
-                key: "pagar",
-                icon: liberada ? "card-outline" : "lock-closed-outline",
-                label: liberada ? "Pagar" : "Bloqueada",
-                backgroundColor: liberada ? principal : muted,
-                onPress: () => abrirPagar(item),
-              },
-              {
+          // Constrói a lista de ações: se já houver pagamento efetuado, omite o botão de excluir
+          const actions = [];
+          if (podeEditar) {
+            actions.push({
+              key: "pagar",
+              icon: liberada ? "card-outline" : "lock-closed-outline",
+              label: liberada ? "Pagar" : "Bloqueada",
+              backgroundColor: liberada ? principal : muted,
+              onPress: () => abrirPagar(item),
+            });
+
+            if (!jaTemPagamento) {
+              actions.push({
                 key: "excluir",
                 icon: "trash-outline",
                 label: "Excluir",
                 backgroundColor: danger,
                 onPress: () => pedirExcluir(item),
-              },
-            ]
-            : [];
+              });
+            }
+          }
 
           return (
             <SwipeCard

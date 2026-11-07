@@ -92,8 +92,8 @@ export default function Saldo({
             aba === "saldo"
               ? "Saldo"
               : aba === "projecao"
-              ? "Projeção"
-              : "Caixinhas";
+                ? "Projeção"
+                : "Caixinhas";
           return (
             <TouchableOpacity
               key={aba}
@@ -276,6 +276,7 @@ export default function Saldo({
 
 const styles = StyleSheet.create({
   container: {
+    marginBottom: 14
   },
   tabsContainer: {
     flexDirection: "row",

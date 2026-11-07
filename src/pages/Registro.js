@@ -12,7 +12,7 @@ import {
   Modal,
   Pressable,
 } from "react-native";
-import { useTheme, useNavigation } from "@react-navigation/native";
+import { useTheme, useNavigation, useRoute } from "@react-navigation/native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { launchImageLibrary } from "react-native-image-picker";
 import RNFS from "react-native-fs";
@@ -151,6 +151,8 @@ const TIPOS_SAIDA = [
 export default function Registro() {
   const { colors, dark } = useTheme();
   const navigation = useNavigation();
+  const route = useRoute();
+
   const {
     setAviso,
     load,
@@ -198,6 +200,20 @@ export default function Registro() {
   const [ministerio, setMinisterio] = useState("");
   const [modalMinisterio, setModalMinisterio] = useState(false);
   const [modalTipo, setModalTipo] = useState(false);
+
+  // Preenche automaticamente os dados se vier da Projeção de Gastos (mantendo o valor em branco)
+  useEffect(() => {
+    const gasto = route.params?.preencherGasto;
+    if (gasto) {
+      setTipoMovimento(gasto.tipoMovimento || "saida");
+      setTipo(gasto.tipo || "Avulsa");
+      setDescricao(gasto.descricao || "");
+      setMinisterio(gasto.ministerio || "");
+      setObservacao(gasto.observacao || "");
+      if (gasto.quantidadeParcelas) setQtdParcelas(gasto.quantidadeParcelas);
+      if (gasto.data) setData(new Date(gasto.data));
+    }
+  }, [route.params]);
 
   const listaTipos = tipoMovimento === "entrada" ? TIPOS_ENTRADA : TIPOS_SAIDA;
   const igrejaId = getIgrejaId?.() || igrejaAtiva?.id || null;

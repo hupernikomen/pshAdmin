@@ -45,10 +45,6 @@ const TIPOS_SAIDA = [
   { id: "Fixa", exemplo: "Energia, internet, aluguel, prebenda, etc." },
   { id: "Avulsa", exemplo: "Manutenção, material de limpeza, serviços, etc." },
   { id: "Parcelada", exemplo: "Compras no cartão ou acordadas." },
-  {
-    id: "Sem Prazo",
-    exemplo: "Conta a pagar sem data definida, provisão futura.",
-  },
 ];
 
 function parseNumero(txt) {
@@ -305,26 +301,15 @@ function marcarPai(porItem, parentId, child) {
 
 function expandirParaSimulacao(lista) {
   const mensais = [];
-  const semPrazo = [];
   (lista || []).forEach((g) => {
     const parentId = g.id;
     const valorTotal = arred(Number(g.valor) || 0);
-    if (g.tipo === "Sem Prazo") {
-      semPrazo.push({
-        id: parentId,
-        parentId,
-        valor: valorTotal,
-        descricao: g.descricao || "Gasto",
-        data: Number(g.data) || 0,
-      });
-      return;
-    }
     if (g.tipo === "Parcelada") {
       const n = Math.max(1, parseInt(g.quantidadeParcelas, 10) || 1);
       const base = arred(valorTotal / n);
       const inicio = Number(g.dataPrimeiraParcela || g.data) || Date.now();
       for (let i = 1; i <= n; i++) {
-        const valor = i === n ? arred(valorTotal - base * (n - 1)) : base;
+        const valor = i === n ? arred(total - base * (n - 1)) : base;
         const venc = new Date(inicio);
         venc.setMonth(venc.getMonth() + (i - 1));
         mensais.push({
@@ -345,7 +330,7 @@ function expandirParaSimulacao(lista) {
       descricao: g.descricao || "Gasto",
     });
   });
-  return { mensais, semPrazo };
+  return { mensais };
 }
 
 export function montarIndicadoresProjecao({ dadosFinancas, saldo, igrejaAtiva }) {
@@ -394,10 +379,10 @@ export function simularViabilidade({
     });
   }
 
-  const { mensais, semPrazo } = expandirParaSimulacao(todos);
+  const { mensais } = expandirParaSimulacao(todos);
   const porItem = {};
 
-  if (!mensais.length && !semPrazo.length) {
+  if (!mensais.length) {
     return {
       ok: true,
       saldoFinal: arred(saldoProjetadoInicial),
@@ -410,86 +395,59 @@ export function simularViabilidade({
   let okGeral = true;
   let motivo = "";
 
-  semPrazo.sort((a, b) => (a.data || 0) - (b.data || 0));
-  for (const g of semPrazo) {
-    const valor = arred(g.valor);
-    const saldoAntes = saldo;
-    if (saldo + 0.001 < valor) {
-      okGeral = false;
-      if (!motivo) {
-        motivo = `Sem saldo para "${g.descricao}" sem prazo (R$ ${valor
-          .toFixed(2)
-          .replace(".", ",")}). Disponível: R$ ${saldo
-          .toFixed(2)
-          .replace(".", ",")}.`;
-      }
-      const child = { ok: false, saldoAntes, saldoApos: saldoAntes };
-      porItem[g.id] = child;
-      marcarPai(porItem, g.parentId, child);
-      continue;
-    }
-    saldo = arred(saldo - valor);
-    const child = { ok: true, saldoAntes, saldoApos: saldo };
-    porItem[g.id] = child;
-    marcarPai(porItem, g.parentId, child);
-  }
-
-  if (mensais.length) {
-    mensais.sort((a, b) => (a.data || 0) - (b.data || 0));
-    const ultima = new Date(mensais[mensais.length - 1].data);
-    const meses =
-      ultima.getFullYear() < anoIni
-        ? []
-        : mesesEntre(
-            anoIni,
-            mesIni,
-            ultima.getFullYear(),
-            ultima.getFullYear() === anoIni
-              ? Math.max(mesIni, ultima.getMonth())
-              : ultima.getMonth()
-          );
-
-    const porMes = {};
-    mensais.forEach((g) => {
-      const k = chaveMes(g.data);
-      if (!porMes[k]) porMes[k] = [];
-      porMes[k].push(g);
-    });
-
-    const listaMeses = meses.length
-      ? meses
-      : [{ key: chaveMes(Date.now()), ano: anoIni, mes: mesIni }];
-
-    for (const m of listaMeses) {
-      saldo = arred(
-        saldo + (Number(mediaDizimos) || 0) - (Number(mediaContaFixa) || 0)
+  mensais.sort((a, b) => (a.data || 0) - (b.data || 0));
+  const ultima = new Date(mensais[mensais.length - 1].data);
+  const meses =
+    ultima.getFullYear() < anoIni
+      ? []
+      : mesesEntre(
+        anoIni,
+        mesIni,
+        ultima.getFullYear(),
+        ultima.getFullYear() === anoIni
+          ? Math.max(mesIni, ultima.getMonth())
+          : ultima.getMonth()
       );
-      const listaMes = porMes[m.key] || [];
-      listaMes.sort((a, b) => (a.data || 0) - (b.data || 0));
-      for (const g of listaMes) {
-        const valor = arred(g.valor);
-        const saldoAntes = saldo;
-        if (saldo + 0.001 < valor) {
-          okGeral = false;
-          if (!motivo) {
-            motivo = `Sem saldo em ${String(m.mes + 1).padStart(2, "0")}/${
-              m.ano
+
+  const porMes = {};
+  mensais.forEach((g) => {
+    const k = chaveMes(g.data);
+    if (!porMes[k]) porMes[k] = [];
+    porMes[k].push(g);
+  });
+
+  const listaMeses = meses.length
+    ? meses
+    : [{ key: chaveMes(Date.now()), ano: anoIni, mes: mesIni }];
+
+  for (const m of listaMeses) {
+    saldo = arred(
+      saldo + (Number(mediaDizimos) || 0) - (Number(mediaContaFixa) || 0)
+    );
+    const listaMes = porMes[m.key] || [];
+    listaMes.sort((a, b) => (a.data || 0) - (b.data || 0));
+    for (const g of listaMes) {
+      const valor = arred(g.valor);
+      const saldoAntes = saldo;
+      if (saldo + 0.001 < valor) {
+        okGeral = false;
+        if (!motivo) {
+          motivo = `Sem saldo em ${String(m.mes + 1).padStart(2, "0")}/${m.ano
             } para "${g.descricao}" (R$ ${valor
               .toFixed(2)
               .replace(".", ",")}). Disponível: R$ ${saldo
-              .toFixed(2)
-              .replace(".", ",")}.`;
-          }
-          const child = { ok: false, saldoAntes, saldoApos: saldoAntes };
-          porItem[g.id] = child;
-          marcarPai(porItem, g.parentId, child);
-          continue;
+                .toFixed(2)
+                .replace(".", ",")}.`;
         }
-        saldo = arred(saldo - valor);
-        const child = { ok: true, saldoAntes, saldoApos: saldo };
+        const child = { ok: false, saldoAntes, saldoApos: saldoAntes };
         porItem[g.id] = child;
         marcarPai(porItem, g.parentId, child);
+        continue;
       }
+      saldo = arred(saldo - valor);
+      const child = { ok: true, saldoAntes, saldoApos: saldo };
+      porItem[g.id] = child;
+      marcarPai(porItem, g.parentId, child);
     }
   }
 
@@ -785,7 +743,17 @@ export default function ProjecaoGastos() {
       return;
     }
     setOpenId(null);
-    navigation.navigate("ConfirmarRegistroProjecao", { item });
+    navigation.navigate("Registro", {
+      preencherGasto: {
+        tipoMovimento: "saida",
+        tipo: item.tipo || "Avulsa",
+        descricao: item.descricao || "",
+        ministerio: item.ministerio || "",
+        observacao: item.observacao || "",
+        quantidadeParcelas: item.quantidadeParcelas ? String(item.quantidadeParcelas) : "1",
+        data: item.data ? new Date(item.data) : new Date(),
+      },
+    });
   }
 
   function excluir(item) {
@@ -890,21 +858,21 @@ export default function ProjecaoGastos() {
               actions={
                 podeEditar
                   ? [
-                      {
-                        key: "go",
-                        icon: "checkmark-outline",
-                        label: "Registrar",
-                        backgroundColor: principal,
-                        onPress: () => pedirRegistrar(item),
-                      },
-                      {
-                        key: "del",
-                        icon: "trash-outline",
-                        label: "Excluir",
-                        backgroundColor: danger,
-                        onPress: () => excluir(item),
-                      },
-                    ]
+                    {
+                      key: "go",
+                      icon: "checkmark-outline",
+                      label: "Registrar",
+                      backgroundColor: principal,
+                      onPress: () => pedirRegistrar(item),
+                    },
+                    {
+                      key: "del",
+                      icon: "trash-outline",
+                      label: "Excluir",
+                      backgroundColor: danger,
+                      onPress: () => excluir(item),
+                    },
+                  ]
                   : []
               }
             />
@@ -921,7 +889,8 @@ export default function ProjecaoGastos() {
       >
         <KeyboardAvoidingView
           style={styles.modalOverlay}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 40 : 0}
         >
           <Pressable
             style={StyleSheet.absoluteFill}
@@ -931,6 +900,7 @@ export default function ProjecaoGastos() {
             <ScrollView
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 40 }}
             >
               <Text style={[styles.modalTitle, { color: text }]}>
                 Novo gasto projetado
@@ -1134,7 +1104,7 @@ export default function ProjecaoGastos() {
         >
           <Pressable
             style={[styles.pickerCard, { backgroundColor: card }]}
-            onPress={() => {}}
+            onPress={() => { }}
           >
             <Text style={[styles.modalTitle, { color: text }]}>Tipo</Text>
             {TIPOS_SAIDA.map((item, index) => {
@@ -1183,7 +1153,7 @@ export default function ProjecaoGastos() {
         >
           <Pressable
             style={[styles.pickerCard, { backgroundColor: card }]}
-            onPress={() => {}}
+            onPress={() => { }}
           >
             <Text style={[styles.modalTitle, { color: text }]}>Ministério</Text>
             <ScrollView style={{ maxHeight: 360 }}>
