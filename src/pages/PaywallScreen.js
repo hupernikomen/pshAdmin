@@ -179,7 +179,7 @@ export default function PaywallScreen({ route }) {
               <Ionicons name={lockConfig.icon || "sparkles"} size={32} color={lockColor} />
             </View>
             <Text style={[styles.title, { color: text }]}>
-              {jaEhPremium ? "Sua Igreja é Premium! ✨" : "Desbloqueie o App Completo"}
+              {jaEhPremium ? "Sua Igreja é Premium!" : "Desbloqueie o App Completo"}
             </Text>
             <Text style={[styles.subtitle, { color: muted }]}>
               {jaEhPremium
@@ -191,7 +191,6 @@ export default function PaywallScreen({ route }) {
           {jaEhPremium ? (
             <View style={styles.premiumAtivoContainer}>
               <View style={[styles.statusBoxAtivo, { borderColor: principal, backgroundColor: principal + "10" }]}>
-                <Ionicons name="shield-checkmark" size={28} color={principal} />
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.statusAtivoTitulo, { color: text }]}>Plano Ativo</Text>
                   <Text style={[styles.statusAtivoDescricao, { color: muted }]}>

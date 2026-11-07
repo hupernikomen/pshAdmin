@@ -1,3 +1,4 @@
+// src/utils/relatorioPdf.js
 import { Platform } from "react-native";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import RNFS from "react-native-fs";
@@ -483,10 +484,11 @@ export async function exportarRelatorioPDF({
     const colWidthDesc = colLeftW - (6 * colWidthVal);
 
     ensureLeft(16);
+    // Cabeçalho pequeno (tamanho 6.5)
     page.drawText(safe("Total Dízimos"), {
       x: xLeft,
       y: yLeft,
-      size: 7,
+      size: 6.5,
       font: fontBold,
       color: C.muted,
       maxWidth: colWidthDesc - 4,
@@ -523,21 +525,22 @@ export async function exportarRelatorioPDF({
     page.drawText(safe(""), {
       x: xLeft,
       y: yLeft,
-      size: 7.5,
+      size: 8,
       font,
       color: C.ink,
       maxWidth: colWidthDesc - 4,
     });
 
+    // Conteúdo interno ajustado para tamanho 8
     listaMesesDizimos.forEach((kMes, idx) => {
       const v = mapaDizimosMes[kMes] || 0;
       const valTxt = v > 0 ? `+ ${valSemCifrao(formatoMoeda, v)}` : "-";
       const posX = xLeft + colWidthDesc + idx * colWidthVal;
-      const vw = fontMedium.widthOfTextAtSize(valTxt, 6);
+      const vw = fontMedium.widthOfTextAtSize(valTxt, 8);
       page.drawText(valTxt, {
         x: posX + colWidthVal - vw,
         y: yLeft,
-        size: 6,
+        size: 8,
         font: fontMedium,
         color: C.black,
       });
@@ -557,7 +560,7 @@ export async function exportarRelatorioPDF({
 
   listaTipo(
     "Despesas fixas",
-    [["Despesas Fixas Calculadas", totalDespesasFixas]],
+    [["Total de despesas fixas calculadas", totalDespesasFixas]],
     "neg"
   );
 
@@ -656,10 +659,11 @@ export async function exportarRelatorioPDF({
       const colWidthDesc = colLeftW - (3 * colWidthVal + colWidthMais);
 
       ensureLeft(16);
+      // Cabeçalho pequeno (tamanho 7)
       page.drawText(safe("Descrição"), {
         x: xLeft,
         y: yLeft,
-        size: 7.5,
+        size: 7,
         font: fontBold,
         color: C.muted,
       });
@@ -683,11 +687,11 @@ export async function exportarRelatorioPDF({
       });
 
       const posMaisX = xLeft + colWidthDesc + 3 * colWidthVal;
-      const wMaisTxt = fontBold.widthOfTextAtSize("Mais", 7.5);
+      const wMaisTxt = fontBold.widthOfTextAtSize("Mais", 7);
       page.drawText("Mais", {
         x: posMaisX + colWidthMais - wMaisTxt,
         y: yLeft,
-        size: 7.5,
+        size: 7,
         font: fontBold,
         color: C.muted,
       });
@@ -702,6 +706,7 @@ export async function exportarRelatorioPDF({
       });
       yLeft -= 12;
 
+      // Conteúdo interno ajustado para tamanho 8
       descricoes.forEach((desc) => {
         ensureLeft(14);
         let nomeLimpo = safe(desc);
@@ -720,11 +725,11 @@ export async function exportarRelatorioPDF({
           const v = mapaDescricaoMes[desc].meses[kMes] || 0;
           const valTxt = v > 0 ? `- ${valSemCifrao(formatoMoeda, v)}` : "-";
           const posX = xLeft + colWidthDesc + idx * colWidthVal;
-          const vw = fontMedium.widthOfTextAtSize(valTxt, 6.5);
+          const vw = fontMedium.widthOfTextAtSize(valTxt, 8);
           page.drawText(valTxt, {
             x: posX + colWidthVal - vw,
             y: yLeft,
-            size: 6.5,
+            size: 8,
             font: fontMedium,
             color: C.black,
           });
@@ -732,11 +737,11 @@ export async function exportarRelatorioPDF({
 
         const maisObj = mapaDescricaoMes[desc];
         const maisTxt = maisObj.maisQtd > 0 ? `+${maisObj.maisQtd} (- ${valSemCifrao(formatoMoeda, maisObj.maisValor)})` : "-";
-        const vwMais = fontMedium.widthOfTextAtSize(maisTxt, 6);
+        const vwMais = fontMedium.widthOfTextAtSize(maisTxt, 8);
         page.drawText(maisTxt, {
           x: posMaisX + colWidthMais - vwMais,
           y: yLeft,
-          size: 6,
+          size: 8,
           font: fontMedium,
           color: C.black,
         });
@@ -851,7 +856,6 @@ export async function exportarRelatorioPDF({
   const base64 = await pdfDoc.saveAsBase64();
   if (!base64) throw new Error("Falha ao gerar o conteúdo do PDF.");
 
-  // Tratamento personalizado do nome do arquivo no formato: RF_NomeDaIgreja_Mes-Ano
   const igrejaSanitizada = String(nomeIgreja || "Igreja")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")

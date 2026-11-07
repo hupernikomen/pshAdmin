@@ -6,12 +6,11 @@ import { useFocusEffect, useNavigation, useTheme } from "@react-navigation/nativ
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { AppContext } from "../context/AppContext";
 import { db } from "../firebaseConnection";
-import { calcularSaldoFinalProjecao } from "../pages/ProjecaoGastos";
 import ValorOculto from "./ValorOculto";
 import { verificarStatusAssinatura } from "../utils/assinatura";
 import { PLAN_CONFIG } from "../constants/appConfig";
 
-const ABAS = ["saldo", "projecao", "caixinhas"];
+const ABAS = ["saldo", "caixinhas"];
 const CARD_HEIGHT = 145;
 
 export default function Saldo({
@@ -25,7 +24,7 @@ export default function Saldo({
   const {
     formatoMoeda,
     ocultarValores,
-    toggleOcultarValores, // <-- Função para alternar o estado do olho
+    toggleOcultarValores,
     dadosFinancas,
     saldo,
     igrejaAtiva,
@@ -34,7 +33,6 @@ export default function Saldo({
   const navigation = useNavigation();
 
   const [abaAtiva, setAbaAtiva] = useState("saldo");
-  const [gastosProj, setGastosProj] = useState([]);
   const [largura, setLargura] = useState(0);
 
   const slide = useRef(new Animated.Value(0)).current;
@@ -46,41 +44,6 @@ export default function Saldo({
 
   const statusAssinatura = verificarStatusAssinatura(igrejaAtiva);
   const isCaixinhasBloqueado = !statusAssinatura.isPremium;
-
-  useFocusEffect(
-    useCallback(() => {
-      let ativo = true;
-      const igrejaId = getIgrejaId?.();
-      if (!igrejaId) {
-        setGastosProj([]);
-        return undefined;
-      }
-      (async () => {
-        try {
-          const snap = await getDocs(
-            query(
-              collection(db, "gastosProjetados"),
-              where("igrejaId", "==", igrejaId)
-            )
-          );
-          if (!ativo) return;
-          setGastosProj(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-        } catch (e) {
-          if (ativo) setGastosProj([]);
-        }
-      })();
-      return () => {
-        ativo = false;
-      };
-    }, [getIgrejaId, igrejaAtiva?.id, saldo, dadosFinancas])
-  );
-
-  const saldoProjetadoTela = calcularSaldoFinalProjecao({
-    dadosFinancas,
-    saldo,
-    igrejaAtiva,
-    gastos: gastosProj,
-  });
 
   useEffect(() => {
     if (!largura) return;
@@ -101,12 +64,7 @@ export default function Saldo({
           const isCaixinhaAba = aba === "caixinhas";
           const mostrarBloqueio = isCaixinhaAba && isCaixinhasBloqueado;
 
-          const label =
-            aba === "saldo"
-              ? "Saldo"
-              : aba === "projecao"
-                ? "Projeção"
-                : "Caixinhas";
+          const label = aba === "saldo" ? "Saldo" : "Caixinhas";
 
           return (
             <TouchableOpacity
@@ -116,10 +74,6 @@ export default function Saldo({
                 ativo && [styles.tabActive, { backgroundColor: colors.card }],
               ]}
               onPress={() => {
-                if (isCaixinhaAba && isCaixinhasBloqueado) {
-                  navigation.navigate("Paywall");
-                  return;
-                }
                 setAbaAtiva(aba);
               }}
               activeOpacity={0.8}
@@ -167,7 +121,6 @@ export default function Saldo({
               <View style={styles.balanceCard}>
                 <View style={styles.balanceTop}>
                   <View>
-                    {/* Linha do título com o ícone de olho pequeno ao lado */}
                     <View style={styles.labelWithEye}>
                       <Text style={[styles.balanceLabel, { color: colors.text }]}>
                         Saldo atual
@@ -230,45 +183,6 @@ export default function Saldo({
                         {fmt(saldoAnterior)}
                       </Text>
                     )}
-                  </View>
-                </View>
-              </View>
-            </View>
-
-            {/* PROJEÇÃO */}
-            <View style={{ width: largura }}>
-              <View style={styles.balanceCard}>
-                <View style={styles.balanceTop}>
-                  <View>
-                    <Text style={[styles.balanceLabel, { color: colors.text }]}>
-                      Saldo projetado
-                    </Text>
-                    {ocultarValores ? (
-                      <ValorOculto size="large" style={{ marginVertical: 6 }} />
-                    ) : (
-                      <Text style={[styles.balanceValue, { color: colors.text }]}>
-                        {fmt(saldoProjetadoTela)}
-                      </Text>
-                    )}
-                  </View>
-                  <TouchableOpacity
-                    onPress={() => navigation.navigate("Projecao")}
-                    style={[styles.addBtn, { backgroundColor: colors.principal }]}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="chevron-forward" size={22} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.balanceMiddle}>
-                  <View>
-                    <Text style={[styles.miniLabel, { color: colors.text }]}>
-                      Gastos projetados
-                    </Text>
-                    <Text style={[styles.miniValue, { color: colors.text }]}>
-                      {gastosProj.length}{" "}
-                      {gastosProj.length === 1 ? "lançamento" : "lançamentos"}
-                    </Text>
                   </View>
                 </View>
               </View>

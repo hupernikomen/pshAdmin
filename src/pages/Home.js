@@ -1,28 +1,17 @@
 // src/screens/Home.js
 import { useContext, useEffect, useMemo, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  RefreshControl,
-  TouchableOpacity,
-  Image,
-  Modal,
-  Pressable,
-} from "react-native";
+import { View, StyleSheet, FlatList, RefreshControl } from "react-native";
 import { useNavigation, useTheme } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
 import { useAppAlert } from "../context/AlertContext";
 import Load from "../componentes/Load";
 import Saldo from "../componentes/Saldo";
-import Menu from "../componentes/Menu";
 import SwipeCard from "../componentes/SwipeCard";
+import HomeTopo from "../componentes/HomeTopo";
+import HomeEmptyState from "../componentes/HomeEmptyState";
 import { useAppTheme } from "../context/ThemeContext";
-import { PLAN_CONFIG } from "../constants/appConfig";
 import {
   arred,
   fimDoDiaTs,
@@ -31,6 +20,7 @@ import {
   valorAPagarItem,
 } from "../utils/financeiro";
 
+// (Mantidas as funções auxiliares: noMes, entradasNoMes, saidasNoMes, inicioMediaDizimos, mesesHorizonteProjecao)
 function noMes(ts, mes, ano) {
   if (!ts) return false;
   const d = new Date(ts);
@@ -141,7 +131,7 @@ function mesesHorizonteProjecao(lista) {
     if (pegouParcela) continue;
     if (item.tipo === "Sem Prazo" && !item.vencimento) continue;
 
-    const ts = Number(item.vencimento || item.data || dataDoItem(item) || 0);
+    const ts = Number(p.vencimento || p.data || dataDoItem(item) || 0);
     if (ts && ts > agoraTs) maxTs = Math.max(maxTs, ts);
   }
 
@@ -155,85 +145,6 @@ function mesesHorizonteProjecao(lista) {
   return Math.max(1, meses);
 }
 
-function HomeTopo({
-  foto,
-  nome,
-  igrejaNome,
-  principal,
-  text,
-  isDark,
-  toggleLightDark,
-  onPressAvatar,
-  onPressPaywall,
-  paddingTop,
-}) {
-  const lockConfig = PLAN_CONFIG.PREMIUM_LOCK || {};
-  const lockColor = isDark ? lockConfig.colorDark : lockConfig.colorLight;
-
-  return (
-    <View style={[styles.topo, { paddingTop }]}>
-      <TouchableOpacity
-        onPress={onPressAvatar}
-        style={styles.topoLeft}
-        activeOpacity={0.8}
-      >
-        {foto ? (
-          <Image source={{ uri: foto }} style={styles.avatar} />
-        ) : (
-          <View
-            style={[
-              styles.avatar,
-              styles.avatarFallback,
-              { backgroundColor: principal },
-            ]}
-          >
-            <Ionicons name="person" size={20} color="#fff" />
-          </View>
-        )}
-
-        <View style={styles.topoTextos}>
-          <Text style={[styles.topoOla, { color: text }]} numberOfLines={1}>
-            Olá, {String(nome || "").trim().split(" ")[0] || "Conta"}
-          </Text>
-        </View>
-      </TouchableOpacity>
-
-      <View style={styles.topoRight}>
-
-        {/* Botão de Tema Claro/Escuro */}
-        <TouchableOpacity
-          onPress={toggleLightDark}
-          style={styles.topoBtn}
-          activeOpacity={0.7}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons
-            name={isDark ? "sunny-outline" : "moon-outline"}
-            size={22}
-            color={text}
-          />
-        </TouchableOpacity>
-
-        {/* Botão de Atalho para o Paywall */}
-        <TouchableOpacity
-          onPress={onPressPaywall}
-          style={styles.topoBtn}
-          activeOpacity={0.7}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons
-            name={lockConfig.icon || "sparkles"}
-            size={20}
-            color={lockColor}
-          />
-        </TouchableOpacity>
-
-
-      </View>
-    </View>
-  );
-}
-
 export default function Home() {
   const {
     saldo,
@@ -245,55 +156,36 @@ export default function Home() {
     caixinhas,
     dadosFinancas,
     load,
-    setLoad,
     financasProntas,
     HistoricoMovimentos,
     CarregarCaixinhas,
     formatoMoeda,
     igrejaAtiva,
-    igrejasDoUsuario,
-    selecionarIgreja,
   } = useContext(AppContext);
 
-  const { showAlert } = useAppAlert();
   const { isDark, toggleLightDark } = useAppTheme();
   const { user, logout } = useAuth();
+  const { showAlert } = useAppAlert();
   const { colors, dark } = useTheme();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
 
   const [refreshing, setRefreshing] = useState(false);
-  const [menuAberto, setMenuAberto] = useState(false);
-  const [modalIgrejas, setModalIgrejas] = useState(false);
   const [cardAbertoId, setCardAbertoId] = useState(null);
 
   const foto = user?.photoURL || null;
   const nome = user?.displayName || "Conta";
-  const variasIgrejas = (igrejasDoUsuario || []).length > 1;
   const semIgreja = !igrejaAtiva?.id;
 
   const principal = colors.principal || colors.primary;
-  const text = colors.text;
   const muted = colors.muted || (dark ? "#9aa0a6" : "#888");
-  const card = colors.card;
   const bg = colors.background;
 
   useEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
-  const onRefresh = async () => {
-    if (semIgreja) {
-      setRefreshing(false);
-      return;
-    }
-    setRefreshing(true);
-    await Promise.all([HistoricoMovimentos(), CarregarCaixinhas?.()]);
-    setRefreshing(false);
-  };
-
   async function handleLogout() {
-    setMenuAberto(false);
     try {
       await logout();
     } catch (e) {
@@ -304,31 +196,15 @@ export default function Home() {
     }
   }
 
-  function abrirMembros() {
-    setMenuAberto(false);
-    navigation.navigate("Membros");
-  }
-
-  function abrirConfiguracoes() {
-    setMenuAberto(false);
-    navigation.navigate("Configuracoes");
-  }
-
-  function abrirProjecao() {
-    setMenuAberto(false);
-    navigation.navigate("Projecao");
-  }
-
-  function abrirTrocarIgreja() {
-    setMenuAberto(false);
-    setModalIgrejas(true);
-  }
-
-  async function escolherIgreja(igrejaId) {
-    setModalIgrejas(false);
-    if (igrejaId === igrejaAtiva?.id) return;
-    await selecionarIgreja(igrejaId);
-  }
+  const onRefresh = async () => {
+    if (semIgreja) {
+      setRefreshing(false);
+      return;
+    }
+    setRefreshing(true);
+    await Promise.all([HistoricoMovimentos(), CarregarCaixinhas?.()]);
+    setRefreshing(false);
+  };
 
   const lista = dadosFinancas || [];
   const agora = new Date();
@@ -458,8 +334,8 @@ export default function Home() {
         sub: "Valores em aberto",
         value: `R$ ${formatoMoeda.format(aReceberTotal)}`,
         icon: "arrow-down-outline",
-        tint: dark ? "#1B3D2F" : "#E8F5E9",
-        iconColor: dark ? "#81C784" : "#2E7D32",
+        tint: dark ? "#11221c" : "#F0FDF4",
+        iconColor: "#10B981",
         route: "AReceber",
       },
       {
@@ -468,8 +344,8 @@ export default function Home() {
         sub: "Despesas pendentes",
         value: `R$ ${formatoMoeda.format(despesasFuturas)}`,
         icon: "arrow-up-outline",
-        tint: dark ? "#3D1B1B" : "#FFEBEE",
-        iconColor: dark ? "#E57373" : "#C62828",
+        tint: dark ? "#2A1515" : "#FEF2F2",
+        iconColor: "#EF4444",
         route: "APagar",
       },
       {
@@ -478,8 +354,8 @@ export default function Home() {
         sub: "Arrecadado neste mês",
         value: `R$ ${formatoMoeda.format(totalDizimosMes)}`,
         icon: "hand-left-outline",
-        tint: dark ? "#1A2A3D" : "#E3F2FD",
-        iconColor: dark ? "#64B5F6" : "#1565C0",
+        tint: dark ? "#111C2E" : "#EFF6FF",
+        iconColor: "#3B82F6",
         route: "Dizimos",
       },
       {
@@ -488,8 +364,8 @@ export default function Home() {
         sub: `Média geral`,
         value: `R$ ${formatoMoeda.format(mediaDizimosFechados)}`,
         icon: "stats-chart-outline",
-        tint: dark ? "#3D2E1A" : "#FFF3E0",
-        iconColor: dark ? "#FFB74D" : "#EF6C00",
+        tint: dark ? "#2B1D11" : "#FFF7ED",
+        iconColor: "#F59E0B",
       },
     ],
     [
@@ -505,14 +381,13 @@ export default function Home() {
   const topoProps = {
     foto,
     nome,
-    igrejaNome: igrejaAtiva?.nome,
     principal,
-    text,
+    text: colors.text,
     isDark,
     toggleLightDark,
-    onPressAvatar: () => setMenuAberto(true),
+    onPressAvatar: () => navigation.navigate("Menu"),
     onPressPaywall: () => navigation.navigate("Paywall"),
-    paddingTop: Math.max(insets.top, 8) + 14,
+    paddingTop: Math.max(insets.top, 8) + 10,
   };
 
   if (!semIgreja && !financasProntas && !refreshing) return <Load />;
@@ -521,27 +396,14 @@ export default function Home() {
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
       {semIgreja ? (
-        <View style={{ flex: 1 }}>
-          <HomeTopo {...topoProps} />
-          <View style={styles.emptyContainer}>
-            <View style={[styles.emptyIcon, { backgroundColor: card }]}>
-              <Ionicons name="business-outline" size={28} color={muted} />
-            </View>
-            <Text style={[styles.emptyTitle, { color: text }]}>
-              Nenhuma igreja criada
-            </Text>
-            <Text style={[styles.emptyText, { color: muted }]}>
-              Para começar a usar o App, crie uma igreja.
-            </Text>
-            <TouchableOpacity
-              style={[styles.emptyBtn, { backgroundColor: principal }]}
-              onPress={() => navigation.navigate("Configuracoes")}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.emptyBtnText}>Criar Igreja</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        <HomeEmptyState
+          principal={principal}
+          text={colors.text}
+          muted={muted}
+          onPressCriar={() => navigation.navigate("Configuracoes")}
+          onPressSair={handleLogout}
+          paddingTop={insets.top + 30}
+        />
       ) : (
         <FlatList
           data={resumoItens}
@@ -590,13 +452,13 @@ export default function Home() {
               actions={
                 item.route
                   ? [
-                    {
-                      key: "go",
-                      icon: "arrow-forward",
-                      backgroundColor: principal,
-                      onPress: () => navigation.navigate(item.route),
-                    },
-                  ]
+                      {
+                        key: "go",
+                        icon: "arrow-forward",
+                        backgroundColor: principal,
+                        onPress: () => navigation.navigate(item.route),
+                      },
+                    ]
                   : []
               }
               onPress={
@@ -607,74 +469,6 @@ export default function Home() {
           ListFooterComponent={<View style={{ height: 100 }} />}
         />
       )}
-
-      <Menu
-        visible={menuAberto}
-        onClose={() => setMenuAberto(false)}
-        user={user}
-        igrejaAtiva={igrejaAtiva}
-        variasIgrejas={variasIgrejas}
-        onOpenProjecao={abrirProjecao}
-        onOpenMembros={abrirMembros}
-        onOpenConfiguracoes={abrirConfiguracoes}
-        onOpenTrocarIgreja={abrirTrocarIgreja}
-        onLogout={handleLogout}
-      />
-
-      <Modal
-        visible={modalIgrejas}
-        transparent
-        animationType="slide"
-        statusBarTranslucent
-        onRequestClose={() => setModalIgrejas(false)}
-      >
-        <Pressable
-          style={styles.sheetOverlay}
-          onPress={() => setModalIgrejas(false)}
-        >
-          <Pressable
-            style={[styles.sheetCard, { backgroundColor: card }]}
-            onPress={() => { }}
-          >
-            <View style={[styles.sheetHandle, { backgroundColor: text }]} />
-            <Text style={[styles.modalIgrejaTitulo, { color: text }]}>
-              Suas igrejas
-            </Text>
-            {(igrejasDoUsuario || []).map((ig) => {
-              const ativa = ig.igrejaId === igrejaAtiva?.id;
-              return (
-                <TouchableOpacity
-                  key={ig.igrejaId}
-                  style={[
-                    styles.igrejaItem,
-                    ativa && {
-                      backgroundColor: dark ? "#2a2a2a" : "#f4f5f7",
-                    },
-                  ]}
-                  onPress={() => escolherIgreja(ig.igrejaId)}
-                  activeOpacity={0.8}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.igrejaItemNome, { color: text }]}>
-                      {ig.nome}
-                    </Text>
-                    <Text style={[styles.igrejaItemPapel, { color: muted }]}>
-                      {ig.papel}
-                    </Text>
-                  </View>
-                  {ativa && (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={20}
-                      color={principal}
-                    />
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </Pressable>
-        </Pressable>
-      </Modal>
     </View>
   );
 }
@@ -682,136 +476,7 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: {
-    gap: 8,
-    paddingHorizontal: 14,
-  },
-  topo: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
-    paddingBottom: 14,
-  },
-  topoLeft: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    minWidth: 0,
-    marginRight: 14,
-  },
-  topoTextos: {
-    flex: 1,
-    minWidth: 0,
-  },
-  topoOla: {
-    fontSize: 16,
-    fontFamily: "Roboto-Bold",
-  },
-  topoIgreja: {
-    fontSize: 12,
-    fontFamily: "Roboto-Light",
-    marginTop: 1,
-  },
-  topoRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  topoBtn: {
-    padding: 8,
-  },
-  avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 25,
-  },
-  avatarFallback: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-    paddingBottom: 80,
-  },
-  emptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emptyTitle: {
-    fontSize: 17,
-    fontFamily: "Roboto-Medium",
-    textAlign: "center",
-    marginBottom: 8,
-    marginTop: 12,
-  },
-  emptyText: {
-    fontSize: 14,
-    fontFamily: "Roboto-Regular",
-    textAlign: "center",
-    lineHeight: 20,
-    marginBottom: 24,
-  },
-  emptyBtn: {
-    height: 48,
-    paddingHorizontal: 24,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emptyBtnText: {
-    color: "#fff",
-    fontSize: 15,
-    fontFamily: "Roboto-Bold",
-  },
-  modalIgrejaTitulo: {
-    fontSize: 15,
-    fontFamily: "Roboto-Bold",
-    marginBottom: 10,
-    paddingHorizontal: 4,
-  },
-  igrejaItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    marginBottom: 4,
-  },
-  igrejaItemNome: {
-    fontSize: 14,
-    fontFamily: "Roboto-Medium",
-  },
-  igrejaItemPapel: {
-    fontSize: 12,
-    fontFamily: "Roboto-Regular",
-    marginTop: 2,
-    textTransform: "capitalize",
-  },
-  sheetOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "flex-end",
-  },
-  sheetCard: {
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
+    gap: 10,
     paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 48,
-    maxHeight: "70%",
-  },
-  sheetHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    alignSelf: "center",
-    marginBottom: 14,
   },
 });

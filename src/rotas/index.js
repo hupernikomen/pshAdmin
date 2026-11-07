@@ -1,6 +1,8 @@
+// src/routes/index.js
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTheme } from "@react-navigation/native";
 
 import Tabs from "./tabs";
 import Registro from "../pages/Registro";
@@ -12,9 +14,9 @@ import Membros from "../pages/Membros";
 import Configuracoes from "../pages/Configuracoes";
 import Dizimos from "../pages/Dizimos";
 import Projecao from "../pages/ProjecaoGastos";
-import PaywallScreen from "../pages/PaywallScreen"
-
-import { useTheme } from "@react-navigation/native";
+import PaywallScreen from "../pages/PaywallScreen";
+import Menu from "../pages/Menu";
+import TrocarIgreja from "../pages/TrocarIgreja"
 
 const Stack = createNativeStackNavigator();
 
@@ -34,7 +36,7 @@ export default function Rotas() {
             color: colors.text,
             fontSize: 20,
           },
-          headerShadowVisible:false,
+          headerShadowVisible: false,
           contentStyle: {
             backgroundColor: colors.background,
           },
@@ -51,20 +53,24 @@ export default function Rotas() {
           component={Projecao}
           options={{ title: "Projeção de Gastos" }}
         />
+        
         <Stack.Screen
           name="Paywall"
           component={PaywallScreen}
           options={{ title: "Planos" }}
         />
 
+        <Stack.Screen
+          name="Menu"
+          component={Menu}
+          options={{ headerShown: false }}
+        />
 
         <Stack.Screen
           name="AReceber"
           component={AReceber}
           options={{ title: "A receber" }}
         />
-
-
 
         <Stack.Screen
           name="Membros"
@@ -102,6 +108,12 @@ export default function Rotas() {
           name="Dizimos"
           component={Dizimos}
           options={{ title: "Dízimos" }}
+        />
+
+        <Stack.Screen
+          name="TrocarIgreja"
+          component={TrocarIgreja}
+          options={{ title: "Trocar Igreja" }}
         />
       </Stack.Navigator>
     </View>
