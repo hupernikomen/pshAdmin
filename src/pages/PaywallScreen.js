@@ -9,20 +9,21 @@ import {
   Image,
   ScrollView,
 } from "react-native";
-import { useTheme } from "@react-navigation/native";
+import { useTheme, useNavigation } from "@react-navigation/native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebaseConnection";
 import { PLAN_CONFIG } from "../constants/appConfig";
 import { gerarPagamentoPix, verificarStatusPagamento } from "../services/mercadoPagoService";
 import { useAppAlert } from "../context/AlertContext";
-import { calcularDataExpiracao } from "../utils/assinatura";
+import { calcularDataExpiracao, verificarStatusAssinatura } from "../utils/assinatura";
 import { AppContext } from "../context/AppContext";
 
-export default function PaywallScreen({ navigation, route }) {
+export default function PaywallScreen({ route }) {
   const { showAlert } = useAppAlert();
   const { igrejaAtiva, atualizarIgrejaLocal } = useContext(AppContext) || {};
   const { colors, dark } = useTheme();
+  const navigation = useNavigation();
 
   const [loading, setLoading] = useState(false);
   const [dadosPix, setDadosPix] = useState(null);
@@ -42,6 +43,26 @@ export default function PaywallScreen({ navigation, route }) {
 
   const lockConfig = PLAN_CONFIG.PREMIUM_LOCK || {};
   const lockColor = dark ? lockConfig.colorDark : lockConfig.colorLight;
+
+  // Configura o título da página no header do React Navigation
+  useEffect(() => {
+    navigation.setOptions({
+      headerShown: true, // Garante que o header apareça se desejar exibir o título nativo
+      title: "Premium",
+      headerTintColor: text,
+      headerStyle: {
+        backgroundColor: card,
+      },
+    });
+  }, [navigation, text, card]);
+
+  // Valida se o plano atual da igreja está ativo
+  const statusAssinatura = verificarStatusAssinatura(igrejaAtiva);
+  const jaEhPremium = statusAssinatura.isPremium;
+
+  const dataExpiracaoFormatada = igrejaAtiva?.dataExpiracaoPremium
+    ? new Date(Number(igrejaAtiva.dataExpiracaoPremium)).toLocaleDateString("pt-BR")
+    : null;
 
   const valorTotalMensal12Meses = PLAN_CONFIG.PRECO_MES * 12;
   const economiaAnual = valorTotalMensal12Meses - PLAN_CONFIG.PRECO_ANUAL;
@@ -100,7 +121,6 @@ export default function PaywallScreen({ navigation, route }) {
             console.log("Erro ao salvar assinatura no Firestore:", e);
           }
 
-          // Atualiza o contexto local instantaneamente para liberar as travas
           if (typeof atualizarIgrejaLocal === "function") {
             atualizarIgrejaLocal({
               isPremium: true,
@@ -158,13 +178,39 @@ export default function PaywallScreen({ navigation, route }) {
             <View style={[styles.iconHeaderBox, { backgroundColor: lockColor + "15" }]}>
               <Ionicons name={lockConfig.icon || "sparkles"} size={32} color={lockColor} />
             </View>
-            <Text style={[styles.title, { color: text }]}>Desbloqueie o App Completo</Text>
+            <Text style={[styles.title, { color: text }]}>
+              {jaEhPremium ? "Sua Igreja é Premium! ✨" : "Desbloqueie o App Completo"}
+            </Text>
             <Text style={[styles.subtitle, { color: muted }]}>
-              Libere relatórios em PDF ilimitados, criação de caixinhas e todas as funções avançadas para a sua igreja.
+              {jaEhPremium
+                ? `Parabéns! Todos os recursos avançados, caixinhas e relatórios ilimitados estão ativos para ${nomeIgreja}.`
+                : "Libere relatórios em PDF ilimitados, criação de caixinhas e todas as funções avançadas para a sua igreja."}
             </Text>
           </View>
 
-          {!dadosPix ? (
+          {jaEhPremium ? (
+            <View style={styles.premiumAtivoContainer}>
+              <View style={[styles.statusBoxAtivo, { borderColor: principal, backgroundColor: principal + "10" }]}>
+                <Ionicons name="shield-checkmark" size={28} color={principal} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.statusAtivoTitulo, { color: text }]}>Plano Ativo</Text>
+                  <Text style={[styles.statusAtivoDescricao, { color: muted }]}>
+                    {dataExpiracaoFormatada
+                      ? `Válido até ${dataExpiracaoFormatada}`
+                      : "Acesso vitalício ou por período ativo"}
+                  </Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.voltarBtn, { backgroundColor: principal }]}
+                onPress={() => navigation.goBack()}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.voltarBtnText}>Voltar ao Início</Text>
+              </TouchableOpacity>
+            </View>
+          ) : !dadosPix ? (
             <View style={styles.planosContainer}>
               <TouchableOpacity
                 style={[styles.cardPlano, { borderColor: border, backgroundColor: dark ? "#252525" : "#fcfcfc" }]}
@@ -266,6 +312,12 @@ const styles = StyleSheet.create({
   iconHeaderBox: { width: 64, height: 64, borderRadius: 20, alignItems: "center", justifyContent: "center", marginBottom: 14 },
   title: { fontSize: 20, fontFamily: "Roboto-Bold", textAlign: "center", marginBottom: 6 },
   subtitle: { fontSize: 13, fontFamily: "Roboto-Regular", textAlign: "center", lineHeight: 18, paddingHorizontal: 8 },
+  premiumAtivoContainer: { width: "100%", alignItems: "center", gap: 16, marginTop: 8 },
+  statusBoxAtivo: { flexDirection: "row", alignItems: "center", gap: 14, width: "100%", borderWidth: 1, borderRadius: 14, padding: 16 },
+  statusAtivoTitulo: { fontSize: 15, fontFamily: "Roboto-Bold" },
+  statusAtivoDescricao: { fontSize: 12, fontFamily: "Roboto-Regular", marginTop: 2 },
+  voltarBtn: { height: 50, width: "100%", borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  voltarBtnText: { color: "#fff", fontSize: 15, fontFamily: "Roboto-Bold" },
   planosContainer: { width: "100%", gap: 12 },
   cardPlano: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderRadius: 14, padding: 16 },
   cardDestaque: { borderWidth: 1.5 },
@@ -280,7 +332,7 @@ const styles = StyleSheet.create({
   loadingText: { marginTop: 8, fontFamily: "Roboto-Regular", fontSize: 13 },
   pixContainer: { alignItems: "center", width: "100%", paddingTop: 4 },
   pixInstrucao: { fontSize: 13, fontFamily: "Roboto-Regular", textAlign: "center", marginBottom: 16, lineHeight: 18 },
-  qrCodeWrapper: { padding: 12, borderRadius: 14, borderWidth: 1, backgroundColor: "#fff", marginBottom: 16 },
+  qrCodeWrapper: { padding: 12, borderRadius: 14, borderStyle: "solid", borderWidth: 1, backgroundColor: "#fff", marginBottom: 16 },
   qrCodeImage: { width: 180, height: 180, resizeMode: "contain" },
   pdfBtn: { marginTop: 4, height: 50, width: "100%", borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 16 },
   pdfBtnText: { color: "#fff", fontSize: 15, fontFamily: "Roboto-Bold" },
