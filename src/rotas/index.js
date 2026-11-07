@@ -12,6 +12,7 @@ import Membros from "../pages/Membros";
 import Configuracoes from "../pages/Configuracoes";
 import Dizimos from "../pages/Dizimos";
 import Projecao from "../pages/ProjecaoGastos";
+import PaywallScreen from "../pages/PaywallScreen"
 
 import { useTheme } from "@react-navigation/native";
 
@@ -49,6 +50,11 @@ export default function Rotas() {
           name="Projecao"
           component={Projecao}
           options={{ title: "Projeção de Gastos" }}
+        />
+        <Stack.Screen
+          name="Paywall"
+          component={PaywallScreen}
+          options={{ title: "Planos" }}
         />
 
 

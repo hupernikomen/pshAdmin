@@ -23,6 +23,7 @@ export default function Menu({
   onOpenMembros,
   onOpenConfiguracoes,
   onOpenTrocarIgreja,
+  onOpenPaywall, // <-- Prop nova adicionada para abrir o Paywall
   onLogout,
 }) {
   const { colors, dark } = useTheme();
@@ -109,8 +110,6 @@ export default function Menu({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.menuItemsList}
           >
-
-
             {isAdmin && (
               <TouchableOpacity
                 style={styles.menuItem}
@@ -128,6 +127,23 @@ export default function Menu({
                 </Text>
               </TouchableOpacity>
             )}
+
+            {/* BOTÃO TEMPORÁRIO PARA TESTAR O PAYWALL/PIX */}
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                onClose();
+                onOpenPaywall?.();
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.iconBox, { backgroundColor: "#10b98115" }]}>
+                <Ionicons name="card-outline" size={18} color="#10b981" />
+              </View>
+              <Text style={[styles.menuItemText, { color: text }]}>
+                Testar Tela de Pagamento (Pix)
+              </Text>
+            </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.menuItem}
@@ -200,7 +216,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
-    paddingVertical:14,
+    paddingVertical: 14,
     elevation: 20,
   },
   dragIndicatorBox: {
@@ -238,7 +254,7 @@ const styles = StyleSheet.create({
   },
   userTexts: {
     flex: 1,
-    marginLeft:7
+    marginLeft: 7,
   },
   menuNome: {
     fontSize: 15,
@@ -259,14 +275,14 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   menuItemsList: {
-    paddingVertical: 8, // Espaçamento mais compacto
-    gap: 2,             // Reduz a distância entre os itens da lista
+    paddingVertical: 8,
+    gap: 2,
   },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingVertical: 8,  // Altura interna compacta
+    paddingVertical: 8,
     paddingHorizontal: 8,
     borderRadius: 10,
   },

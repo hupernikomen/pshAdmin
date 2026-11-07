@@ -1,3 +1,4 @@
+// src/componentes/Saldo.js
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Animated } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
@@ -7,6 +8,8 @@ import { AppContext } from "../context/AppContext";
 import { db } from "../firebaseConnection";
 import { calcularSaldoFinalProjecao } from "../pages/ProjecaoGastos";
 import ValorOculto from "./ValorOculto";
+import { verificarStatusAssinatura } from "../utils/assinatura";
+import { PLAN_CONFIG } from "../constants/appConfig";
 
 const ABAS = ["saldo", "projecao", "caixinhas"];
 const CARD_HEIGHT = 145;
@@ -18,10 +21,11 @@ export default function Saldo({
   saldoAnterior,
   qtdCaixinhas,
 }) {
-  const { colors } = useTheme();
+  const { colors, dark } = useTheme();
   const {
     formatoMoeda,
     ocultarValores,
+    toggleOcultarValores, // <-- Função para alternar o estado do olho
     dadosFinancas,
     saldo,
     igrejaAtiva,
@@ -36,6 +40,12 @@ export default function Saldo({
   const slide = useRef(new Animated.Value(0)).current;
 
   const fmt = (v) => `R$ ${formatoMoeda.format(Number(v) || 0)}`;
+
+  const lockConfig = PLAN_CONFIG.PREMIUM_LOCK || {};
+  const lockColor = dark ? lockConfig.colorDark : lockConfig.colorLight;
+
+  const statusAssinatura = verificarStatusAssinatura(igrejaAtiva);
+  const isCaixinhasBloqueado = !statusAssinatura.isPremium;
 
   useFocusEffect(
     useCallback(() => {
@@ -88,12 +98,16 @@ export default function Saldo({
       <View style={styles.tabsContainer}>
         {ABAS.map((aba) => {
           const ativo = abaAtiva === aba;
+          const isCaixinhaAba = aba === "caixinhas";
+          const mostrarBloqueio = isCaixinhaAba && isCaixinhasBloqueado;
+
           const label =
             aba === "saldo"
               ? "Saldo"
               : aba === "projecao"
                 ? "Projeção"
                 : "Caixinhas";
+
           return (
             <TouchableOpacity
               key={aba}
@@ -101,18 +115,33 @@ export default function Saldo({
                 styles.tabItem,
                 ativo && [styles.tabActive, { backgroundColor: colors.card }],
               ]}
-              onPress={() => setAbaAtiva(aba)}
+              onPress={() => {
+                if (isCaixinhaAba && isCaixinhasBloqueado) {
+                  navigation.navigate("Paywall");
+                  return;
+                }
+                setAbaAtiva(aba);
+              }}
               activeOpacity={0.8}
             >
-              <Text
-                style={[
-                  styles.tabText,
-                  { color: colors.text },
-                  ativo && styles.tabTextActive,
-                ]}
-              >
-                {label}
-              </Text>
+              <View style={styles.tabHeaderContent}>
+                {mostrarBloqueio && (
+                  <Ionicons
+                    name={lockConfig.icon || "star"}
+                    size={lockConfig.size || 11}
+                    color={lockColor}
+                  />
+                )}
+                <Text
+                  style={[
+                    styles.tabText,
+                    { color: colors.text },
+                    ativo && styles.tabTextActive,
+                  ]}
+                >
+                  {label}
+                </Text>
+              </View>
             </TouchableOpacity>
           );
         })}
@@ -138,9 +167,24 @@ export default function Saldo({
               <View style={styles.balanceCard}>
                 <View style={styles.balanceTop}>
                   <View>
-                    <Text style={[styles.balanceLabel, { color: colors.text }]}>
-                      Saldo atual
-                    </Text>
+                    {/* Linha do título com o ícone de olho pequeno ao lado */}
+                    <View style={styles.labelWithEye}>
+                      <Text style={[styles.balanceLabel, { color: colors.text }]}>
+                        Saldo atual
+                      </Text>
+                      <TouchableOpacity
+                        onPress={toggleOcultarValores}
+                        activeOpacity={0.7}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <Ionicons
+                          name={ocultarValores ? "eye-off-outline" : "eye-outline"}
+                          size={16}
+                          color={colors.muted || (dark ? "#9aa0a6" : "#888")}
+                        />
+                      </TouchableOpacity>
+                    </View>
+
                     {ocultarValores ? (
                       <ValorOculto size="large" style={{ marginVertical: 6 }} />
                     ) : (
@@ -247,11 +291,24 @@ export default function Saldo({
                     )}
                   </View>
                   <TouchableOpacity
-                    onPress={() => navigation.navigate("Caixinhas")}
-                    style={[styles.addBtn, { backgroundColor: colors.principal }]}
+                    onPress={() => {
+                      if (isCaixinhasBloqueado) {
+                        navigation.navigate("Paywall");
+                        return;
+                      }
+                      navigation.navigate("Caixinhas");
+                    }}
+                    style={[
+                      styles.addBtn,
+                      { backgroundColor: isCaixinhasBloqueado ? lockColor : colors.principal },
+                    ]}
                     activeOpacity={0.8}
                   >
-                    <Ionicons name="chevron-forward" size={22} color="#fff" />
+                    <Ionicons
+                      name={isCaixinhasBloqueado ? (lockConfig.icon || "star") : "chevron-forward"}
+                      size={isCaixinhasBloqueado ? (lockConfig.size || 14) : 22}
+                      color="#fff"
+                    />
                   </TouchableOpacity>
                 </View>
 
@@ -276,7 +333,7 @@ export default function Saldo({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 14
+    marginBottom: 14,
   },
   tabsContainer: {
     flexDirection: "row",
@@ -290,6 +347,11 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     backgroundColor: "transparent",
+  },
+  tabHeaderContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   tabActive: {
     shadowColor: "transparent",
@@ -332,6 +394,11 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
+  },
+  labelWithEye: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   balanceLabel: {
     fontSize: 12,

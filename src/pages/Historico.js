@@ -20,8 +20,14 @@ import { useAppAlert } from "../context/AlertContext";
 import Load from "../componentes/Load";
 import SwipeCard from "../componentes/SwipeCard";
 import { podeEditarRegistro } from "../utils/registroEdit";
+import { verificarStatusAssinatura } from "../utils/assinatura";
+import { PLAN_CONFIG } from "../constants/appConfig"; // <-- IMPORTAÇÃO AQUI
 
-const LIMITES = [5, 30, 90];
+const LIMITES = [
+  { n: 7, label: "Últimos 7", premium: false },
+  { n: 30, label: "Últimos 30", premium: true },
+  { n: 90, label: "Últimos 90", premium: true },
+];
 
 function normalizarUri(uri) {
   if (!uri) return null;
@@ -226,6 +232,7 @@ export default function Historico() {
     HistoricoMovimentos,
     formatoMoeda,
     podeEditarFinanceiro,
+    igrejaAtiva,
   } = useContext(AppContext);
 
   const { showAlert } = useAppAlert();
@@ -234,7 +241,7 @@ export default function Historico() {
   const navigation = useNavigation();
   const [refreshing, setRefreshing] = useState(false);
   const [fotoSelecionada, setFotoSelecionada] = useState(null);
-  const [limite, setLimite] = useState(5); // Iniciando em 5
+  const [limite, setLimite] = useState(7);
   const [abertoId, setAbertoId] = useState(null);
 
   const principal = colors.principal || colors.primary;
@@ -243,6 +250,13 @@ export default function Historico() {
   const card = colors.card;
   const bg = colors.background;
   const border = colors.border;
+
+  // Usa as configurações centralizadas da constante
+  const lockConfig = PLAN_CONFIG.PREMIUM_LOCK || {};
+  const lockColor = dark ? lockConfig.colorDark : lockConfig.colorLight;
+
+  // Verifica se a igreja ativa tem plano Premium ativo
+  const statusAssinatura = verificarStatusAssinatura(igrejaAtiva);
 
   const onRefresh = async () => {
     if (!uid) return;
@@ -315,44 +329,54 @@ export default function Historico() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.filtroRow}
             >
-              {LIMITES.map((n) => {
-                const ativo = limite === n;
+              {LIMITES.map((itemFiltro) => {
+                const ativo = limite === itemFiltro.n;
+                const isBloqueado = itemFiltro.premium && !statusAssinatura.isPremium;
+
                 return (
                   <TouchableOpacity
-                    key={n}
+                    key={itemFiltro.n}
                     style={[
                       styles.filtroChip,
                       { backgroundColor: card, borderColor: border },
                       ativo && { backgroundColor: principal, borderColor: principal },
+                      isBloqueado && !ativo && { borderColor: lockColor + "60" },
                     ]}
-                    onPress={() => setLimite(n)}
+                    onPress={() => {
+                      if (isBloqueado) {
+                        navigation.navigate("Paywall");
+                        return;
+                      }
+                      setLimite(itemFiltro.n);
+                    }}
                     activeOpacity={0.8}
                   >
-                    <Text
-                      style={[
-                        styles.filtroChipText,
-                        { color: text },
-                        ativo && { color: "#fff", fontFamily: "Roboto-Bold" },
-                      ]}
-                    >
-                      Últimos {n}
-                    </Text>
+                    <View style={styles.chipContent}>
+                      {isBloqueado && (
+                        <Ionicons
+                          name={lockConfig.icon || "star"}
+                          size={lockConfig.size || 12}
+                          color={ativo ? "#fff" : lockColor}
+                        />
+                      )}
+                      <Text
+                        style={[
+                          styles.filtroChipText,
+                          { color: text },
+                          ativo && { color: "#fff", fontFamily: "Roboto-Bold" },
+                          isBloqueado && !ativo && { fontFamily: "Roboto-Medium" },
+                        ]}
+                      >
+                        {itemFiltro.label}
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
           </View>
         }
-        // AVISO NO RODAPÉ: Só exibe se o limite atual for 7 e houver mais dados para mostrar
-        ListFooterComponent={
-          limite === 5 && linhas.length > 5 ? (
-            <View style={styles.footerAviso}>
-              <Text style={[styles.footerAvisoText, { color: text }]}>
-                Selecione 30 ou 90 acima para ver mais dados.
-              </Text>
-            </View>
-          ) : null
-        }
+       
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -495,6 +519,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
   },
+  chipContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
   filtroChipText: {
     fontSize: 12,
     fontFamily: "Roboto-Medium",
@@ -510,7 +539,7 @@ const styles = StyleSheet.create({
   },
   footerAvisoText: {
     fontSize: 13,
-    fontFamily: "Roboto-Light",
+    fontFamily: "Roboto-Regular",
     textAlign: "center",
     flex: 1,
   },

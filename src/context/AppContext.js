@@ -1,3 +1,4 @@
+// src/context/AppContext.js
 import React, { createContext, useEffect, useState, useContext } from "react";
 import { db } from "../firebaseConnection";
 import {
@@ -33,16 +34,18 @@ function normalizarEmail(email) {
     .toLowerCase();
 }
 
-function montarIgrejaAtiva(item) {
+function montarIgrejaAtiva(item, dadosFirestore = {}) {
   if (!item) return null;
   return {
     id: item.igrejaId,
-    nome: item.nome,
+    nome: dadosFirestore.nome || item.nome,
     papel: item.papel,
     membroId: item.membroId,
-    createdAt: item.createdAt || null,
-    exclusaoAgendadaEm: item.exclusaoAgendadaEm || null,
-    exclusaoPrevistaEm: item.exclusaoPrevistaEm || null,
+    createdAt: dadosFirestore.createdAt || item.createdAt || null,
+    exclusaoAgendadaEm: dadosFirestore.exclusaoAgendadaEm || item.exclusaoAgendadaEm || null,
+    exclusaoPrevistaEm: dadosFirestore.exclusaoPrevistaEm || item.exclusaoPrevistaEm || null,
+    isPremium: dadosFirestore.isPremium ?? item.isPremium ?? false, // <-- Captura o status Premium
+    dataExpiracaoPremium: dadosFirestore.dataExpiracaoPremium ?? item.dataExpiracaoPremium ?? null, // <-- Captura a expiração
   };
 }
 
@@ -88,6 +91,14 @@ export function AppProvider({ children }) {
 
   function podeGerarPdf() {
     return true;
+  }
+
+  // Função para atualizar o estado local da igreja imediatamente após o pagamento
+  function atualizarIgrejaLocal(dadosAtualizados) {
+    setIgrejaAtiva((prev) => ({
+      ...prev,
+      ...dadosAtualizados,
+    }));
   }
 
   useEffect(() => {
@@ -287,6 +298,8 @@ export function AppProvider({ children }) {
             createdAt: data.createdAt || null,
             exclusaoAgendadaEm: exclusaoAgendadaEm || null,
             exclusaoPrevistaEm: exclusaoPrevistaEm || null,
+            isPremium: data.isPremium || false,
+            dataExpiracaoPremium: data.dataExpiracaoPremium || null,
           });
         } catch (e) {
           console.log("Erro ao ler igreja:", m.igrejaId, e);
@@ -304,7 +317,7 @@ export function AppProvider({ children }) {
         (salva && lista.find((i) => i.igrejaId === salva)) || lista[0] || null;
 
       if (escolhida) {
-        setIgrejaAtiva(montarIgrejaAtiva(escolhida));
+        setIgrejaAtiva(montarIgrejaAtiva(escolhida, escolhida));
       } else {
         setIgrejaAtiva(null);
         try {
@@ -329,7 +342,18 @@ export function AppProvider({ children }) {
     const item = igrejasDoUsuario.find((i) => i.igrejaId === igrejaId);
     if (!item) return;
 
-    setIgrejaAtiva(montarIgrejaAtiva(item));
+    // Busca detalhada direto do Firestore para garantir dados atualizados (como isPremium)
+    try {
+      const snap = await getDoc(doc(db, "igrejas", igrejaId));
+      if (snap.exists()) {
+        const dados = snap.data();
+        setIgrejaAtiva(montarIgrejaAtiva(item, dados));
+      } else {
+        setIgrejaAtiva(montarIgrejaAtiva(item));
+      }
+    } catch (e) {
+      setIgrejaAtiva(montarIgrejaAtiva(item));
+    }
 
     try {
       await AsyncStorage.setItem(KEY_IGREJA_ATIVA, igrejaId);
@@ -355,6 +379,8 @@ export function AppProvider({ children }) {
       nome: nomeLimpo,
       createdAt: agora,
       createdBy: userId,
+      isPremium: false,
+      dataExpiracaoPremium: null,
     });
 
     const membroRef = await addDoc(collection(db, "membros"), {
@@ -373,10 +399,12 @@ export function AppProvider({ children }) {
       createdAt: agora,
       exclusaoAgendadaEm: null,
       exclusaoPrevistaEm: null,
+      isPremium: false,
+      dataExpiracaoPremium: null,
     };
 
     setIgrejasDoUsuario((prev) => [...prev, nova]);
-    setIgrejaAtiva(montarIgrejaAtiva(nova));
+    setIgrejaAtiva(montarIgrejaAtiva(nova, nova));
     await AsyncStorage.setItem(KEY_IGREJA_ATIVA, igrejaRef.id);
 
     return igrejaRef.id;
@@ -742,6 +770,7 @@ export function AppProvider({ children }) {
         toggleOcultarNomesDoadores,
         semConexao,
         podeGerarPdf,
+        atualizarIgrejaLocal, // <-- Função exportada para uso no PaywallScreen
       }}
     >
       {children}

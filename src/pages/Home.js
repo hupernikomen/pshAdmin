@@ -1,3 +1,4 @@
+// src/screens/Home.js
 import { useContext, useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -21,6 +22,7 @@ import Saldo from "../componentes/Saldo";
 import Menu from "../componentes/Menu";
 import SwipeCard from "../componentes/SwipeCard";
 import { useAppTheme } from "../context/ThemeContext";
+import { PLAN_CONFIG } from "../constants/appConfig";
 import {
   arred,
   fimDoDiaTs,
@@ -159,13 +161,15 @@ function HomeTopo({
   igrejaNome,
   principal,
   text,
-  ocultarValores,
-  toggleOcultarValores,
   isDark,
   toggleLightDark,
   onPressAvatar,
+  onPressPaywall,
   paddingTop,
 }) {
+  const lockConfig = PLAN_CONFIG.PREMIUM_LOCK || {};
+  const lockColor = isDark ? lockConfig.colorDark : lockConfig.colorLight;
+
   return (
     <View style={[styles.topo, { paddingTop }]}>
       <TouchableOpacity
@@ -191,28 +195,12 @@ function HomeTopo({
           <Text style={[styles.topoOla, { color: text }]} numberOfLines={1}>
             Olá, {String(nome || "").trim().split(" ")[0] || "Conta"}
           </Text>
-          {/* {!!igrejaNome && (
-            <Text style={[styles.topoIgreja, { color: text }]} numberOfLines={1}>
-              {igrejaNome}
-            </Text>
-          )} */}
         </View>
       </TouchableOpacity>
 
       <View style={styles.topoRight}>
-        <TouchableOpacity
-          onPress={() => toggleOcultarValores?.()}
-          style={styles.topoBtn}
-          activeOpacity={0.7}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons
-            name={ocultarValores ? "eye-off-outline" : "eye-outline"}
-            size={22}
-            color={text}
-          />
-        </TouchableOpacity>
 
+        {/* Botão de Tema Claro/Escuro */}
         <TouchableOpacity
           onPress={toggleLightDark}
           style={styles.topoBtn}
@@ -225,6 +213,22 @@ function HomeTopo({
             color={text}
           />
         </TouchableOpacity>
+
+        {/* Botão de Atalho para o Paywall */}
+        <TouchableOpacity
+          onPress={onPressPaywall}
+          style={styles.topoBtn}
+          activeOpacity={0.7}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons
+            name={lockConfig.icon || "sparkles"}
+            size={20}
+            color={lockColor}
+          />
+        </TouchableOpacity>
+
+
       </View>
     </View>
   );
@@ -249,8 +253,6 @@ export default function Home() {
     igrejaAtiva,
     igrejasDoUsuario,
     selecionarIgreja,
-    ocultarValores,
-    toggleOcultarValores,
   } = useContext(AppContext);
 
   const { showAlert } = useAppAlert();
@@ -506,11 +508,10 @@ export default function Home() {
     igrejaNome: igrejaAtiva?.nome,
     principal,
     text,
-    ocultarValores,
-    toggleOcultarValores,
     isDark,
     toggleLightDark,
     onPressAvatar: () => setMenuAberto(true),
+    onPressPaywall: () => navigation.navigate("Paywall"),
     paddingTop: Math.max(insets.top, 8) + 14,
   };
 
@@ -589,13 +590,13 @@ export default function Home() {
               actions={
                 item.route
                   ? [
-                      {
-                        key: "go",
-                        icon: "arrow-forward",
-                        backgroundColor: principal,
-                        onPress: () => navigation.navigate(item.route),
-                      },
-                    ]
+                    {
+                      key: "go",
+                      icon: "arrow-forward",
+                      backgroundColor: principal,
+                      onPress: () => navigation.navigate(item.route),
+                    },
+                  ]
                   : []
               }
               onPress={
@@ -633,7 +634,7 @@ export default function Home() {
         >
           <Pressable
             style={[styles.sheetCard, { backgroundColor: card }]}
-            onPress={() => {}}
+            onPress={() => { }}
           >
             <View style={[styles.sheetHandle, { backgroundColor: text }]} />
             <Text style={[styles.modalIgrejaTitulo, { color: text }]}>
@@ -704,7 +705,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   topoOla: {
-    fontSize: 18,
+    fontSize: 16,
     fontFamily: "Roboto-Bold",
   },
   topoIgreja: {
@@ -715,14 +716,14 @@ const styles = StyleSheet.create({
   topoRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 8,
   },
   topoBtn: {
     padding: 8,
   },
   avatar: {
-    width: 50,
-    height: 50,
+    width: 46,
+    height: 46,
     borderRadius: 25,
   },
   avatarFallback: {

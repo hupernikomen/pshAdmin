@@ -16,6 +16,7 @@ import Load from "../componentes/Load";
 import SeletorMesAno from "../componentes/SeletorMesAno";
 import { exportarRelatorioPDF } from "../utils/relatorioPdf";
 import { montarComentarioRelatorio } from "../utils/comentarioRelatorioOffline";
+import { verificarStatusAssinatura } from "../utils/assinatura";
 import {
   arred,
   fimDoDiaTs,
@@ -306,7 +307,7 @@ function noMes(ts, ano, mes) {
   return d.getFullYear() === ano && d.getMonth() === mes;
 }
 
-export default function Relatorio() {
+export default function Relatorio({ navigation }) {
   const {
     dadosFinancas,
     financasProntas,
@@ -329,6 +330,9 @@ export default function Relatorio() {
   const card = colors.card;
   const bg = colors.background;
   const border = colors.border || (dark ? "#333" : "#ececec");
+
+  // Verifica se a assinatura está ativa
+  const statusAssinatura = verificarStatusAssinatura(igrejaAtiva);
 
   const intervalo = useMemo(() => {
     return {
@@ -505,7 +509,12 @@ export default function Relatorio() {
     return `${MESES[mesSelecionado]} de ${anoSelecionado}`;
   }, [mesSelecionado, anoSelecionado]);
 
-async function onExportar() {
+  async function onExportar() {
+    if (!statusAssinatura.isPremium) {
+      navigation.navigate("Paywall");
+      return;
+    }
+
     setGerando(true);
     try {
       const comentario = montarComentarioRelatorio({
@@ -523,7 +532,7 @@ async function onExportar() {
         projecao,
         seriesGraficos,
         historicoPeriodo,
-        dadosFinancas, // <--- ADICIONE ESTA LINHA AQUI
+        dadosFinancas,
         formatoMoeda,
         comentario,
         nomeTesoureiro: user?.displayName || user?.email || "Tesoureiro",
@@ -567,6 +576,7 @@ async function onExportar() {
             </Text>
           </View>
 
+          {/* Botão original de Gerar Relatório */}
           <TouchableOpacity
             style={[
               styles.pdfBtn,
@@ -586,6 +596,19 @@ async function onExportar() {
               </>
             )}
           </TouchableOpacity>
+
+          {/* Timer sutil abaixo do botão caso o usuário esteja no plano Premium */}
+          {statusAssinatura.isPremium && (
+            <Text style={styles.textoTimer}>{statusAssinatura.tempoRestanteTexto}</Text>
+          )}
+        </View>
+
+        {/* Texto chamativo posicionado FORA do bloco de cima, logo abaixo de tudo */}
+        <View style={styles.containerChamativo}>
+          <Ionicons name="sparkles-outline" size={18} color={'#FFB74D'} />
+          <Text style={[styles.textoChamativo, { color: muted }]}>
+            Gere relatórios incríveis e completos com os principais dados financeiros registrados para a sua igreja.
+          </Text>
         </View>
       </ScrollView>
     </View>
@@ -634,5 +657,26 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontFamily: "Roboto-Bold",
+  },
+  textoTimer: {
+    fontSize: 11,
+    fontFamily: "Roboto-Regular",
+    color: "#64748b",
+    textAlign: "center",
+    marginTop: 10,
+  },
+  containerChamativo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 4,
+  },
+  textoChamativo: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Roboto-Medium",
+    lineHeight: 18,
   },
 });
