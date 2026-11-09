@@ -1,3 +1,4 @@
+// src/screens/Registro.js
 import { useContext, useState, useEffect } from "react";
 import {
   View,
@@ -15,15 +16,16 @@ import {
 import { useTheme, useNavigation, useRoute } from "@react-navigation/native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { launchImageLibrary } from "react-native-image-picker";
-import RNFS from "react-native-fs";
 import { AppContext } from "../context/AppContext";
-import { db } from "../firebaseConnection";
+import { db, storage } from "../firebaseConnection";
 import { collection, addDoc } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import Load from "../componentes/Load";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { useAuth } from "../context/AuthContext";
 import { useAppAlert } from "../context/AlertContext";
 import { MINISTERIOS } from "../constants/ministerios";
+import { verificarStatusAssinatura } from "../utils/assinatura"; // <-- IMPORTAÇÃO DA ASSINATURA
 
 function parseNumero(txt) {
   if (txt === null || txt === undefined) return 0;
@@ -201,7 +203,6 @@ export default function Registro() {
   const [modalMinisterio, setModalMinisterio] = useState(false);
   const [modalTipo, setModalTipo] = useState(false);
 
-  // Preenche automaticamente os dados se vier da Projeção de Gastos (mantendo o valor em branco)
   useEffect(() => {
     const gasto = route.params?.preencherGasto;
     if (gasto) {
@@ -250,21 +251,41 @@ export default function Registro() {
     return total;
   }
 
-  async function salvarImagemLocal(uri) {
-    const nomeArquivo = `recibo_${Date.now()}.jpg`;
-    const pastaDestino = `${RNFS.DocumentDirectoryPath}/recibos`;
-    const pastaExiste = await RNFS.exists(pastaDestino);
-    if (!pastaExiste) await RNFS.mkdir(pastaDestino);
-    const caminhoFinal = `${pastaDestino}/${nomeArquivo}`;
-    await RNFS.copyFile(uri, caminhoFinal);
-    return `file://${caminhoFinal}`;
+  // Envio para o Storage com tratamento de erros
+  async function salvarImagemNoStorage(uri) {
+    if (!uri) return null;
+    const response = await fetch(uri);
+    const blob = await response.blob();
+
+    const idSeguro = igrejaId || "sem_igreja";
+    const nomeArquivo = `recibos/${idSeguro}_${Date.now()}.jpg`;
+    const storageRef = ref(storage, nomeArquivo);
+
+    const snapshot = await uploadBytes(storageRef, blob);
+    if (blob.close) blob.close();
+
+    const downloadUrl = await getDownloadURL(snapshot.ref);
+    return downloadUrl;
   }
 
+  // Galeria com verificação Premium e compressão automática
   async function escolherDaGaleria() {
+    const statusAssinatura = verificarStatusAssinatura(igrejaAtiva);
+    if (!statusAssinatura.isPremium) {
+      showAlert({
+        title: "Recurso Premium",
+        message: "O envio de recibos e comprovantes é exclusivo para assinantes Premium.",
+      });
+      navigation.navigate("Paywall");
+      return;
+    }
+
     try {
       const result = await launchImageLibrary({
         mediaType: "photo",
-        quality: 0.8,
+        quality: 0.7, // Comprime a qualidade para 70%
+        maxWidth: 1200, // Limita largura máxima
+        maxHeight: 1200, // Limita altura máxima
         selectionLimit: 1,
       });
       if (result.didCancel || result.errorCode) return;
@@ -343,6 +364,17 @@ export default function Registro() {
       return;
     }
 
+    // Validação extra do plano Premium caso haja recibo anexado
+    const statusAssinatura = verificarStatusAssinatura(igrejaAtiva);
+    if (reciboUri && !statusAssinatura.isPremium) {
+      showAlert({
+        title: "Recurso Premium",
+        message: "Sua igreja precisa do plano Premium para anexar recibos aos lançamentos.",
+      });
+      navigation.navigate("Paywall");
+      return;
+    }
+
     const caixinhaSel = (caixinhas || []).find((c) => c.id === caixinhaId);
     const valor = parseNumero(valorTotal);
 
@@ -383,6 +415,8 @@ export default function Registro() {
           caixinhaNome: caixinhaSel?.nome || null,
         });
 
+        const reciboUrlCloud = reciboUri ? await salvarImagemNoStorage(reciboUri) : null;
+
         await addDoc(collection(db, "registros"), {
           igrejaId,
           idUsuario: uid,
@@ -403,7 +437,7 @@ export default function Registro() {
           caixinhaNome:
             origemPagamento === "caixinha" ? caixinhaSel?.nome || null : null,
           ministerio: ministerio || null,
-          reciboUrl: reciboUri ? await salvarImagemLocal(reciboUri) : null,
+          reciboUrl: reciboUrlCloud,
           reg: Date.now(),
           createdAt: Date.now(),
         });
@@ -434,6 +468,8 @@ export default function Registro() {
     if (!validarOrigemSaida(parcial)) return;
     setLoad(true);
     try {
+      const reciboUrlCloud = reciboUri ? await salvarImagemNoStorage(reciboUri) : null;
+
       const base = {
         igrejaId,
         idUsuario: uid,
@@ -478,7 +514,7 @@ export default function Registro() {
         base.caixinhaNome =
           origemPagamento === "caixinha" ? caixinhaSel?.nome || null : null;
         base.ministerio = ministerio || null;
-        base.reciboUrl = reciboUri ? await salvarImagemLocal(reciboUri) : null;
+        base.reciboUrl = reciboUrlCloud;
       }
 
       await addDoc(collection(db, "registros"), base);
@@ -782,7 +818,7 @@ export default function Registro() {
               {tipoMovimento === "saida" && (
                 <View style={[styles.field, { backgroundColor: card }]}>
                   <Text style={[styles.fieldLabel, { color: muted }]}>
-                    Comprovante / Recibo (opcional)
+                    Comprovante / Recibo (opcional - Premium)
                   </Text>
                   <View style={styles.reciboContainer}>
                     {reciboUri ? (

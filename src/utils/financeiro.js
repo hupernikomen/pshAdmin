@@ -28,6 +28,11 @@ export function valorAReceberItem(item) {
   if (item?.tipoMovimento !== "entrada") return 0;
   if (item?.tipo === "Saldo inicial") return 0;
 
+  // Garante que só considera se a data do item for estritamente futura (maior que o fim de hoje)
+  const limiteHoje = fimDoDiaTs();
+  const ts = dataDoItem(item);
+  if (!ts || ts <= limiteHoje) return 0;
+
   const total = Number(item.valorTotal) || 0;
   const recebido = Number(item.valorRecebidoTotal) || 0;
   const falta = Math.max(0, arred(total - recebido));

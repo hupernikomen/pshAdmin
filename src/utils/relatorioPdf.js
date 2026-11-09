@@ -453,7 +453,7 @@ export async function exportarRelatorioPDF({
     yLeft -= 8;
   }
 
-  // 2.1 Tabela de Dízimos Totais (6 meses anteriores terminando no mês selecionado)
+  // 2.1 Tabela de Dízimos Totais (6 meses anteriores terminando no mês selecionado - 100% distribuído)
   sectionLeft("Dízimos Totais (Histórico 6 Meses)");
   {
     const { ano: anoSelecionado, mes: mesSelecionado } = obterDataInicialDoPeriodo(labelPeriodo);
@@ -480,20 +480,9 @@ export async function exportarRelatorioPDF({
       }
     });
 
-    const colWidthVal = 38;
-    const colWidthDesc = colLeftW - (6 * colWidthVal);
+    const colWidthVal = colLeftW / 6;
 
     ensureLeft(16);
-    // Cabeçalho pequeno (tamanho 6.5)
-    page.drawText(safe("Total Dízimos"), {
-      x: xLeft,
-      y: yLeft,
-      size: 6.5,
-      font: fontBold,
-      color: C.muted,
-      maxWidth: colWidthDesc - 4,
-    });
-
     listaMesesDizimos.forEach((kMes, idx) => {
       const [anoStr, mStr] = kMes.split("-");
       const mIdx = parseInt(mStr, 10);
@@ -501,12 +490,12 @@ export async function exportarRelatorioPDF({
       const anoCurto = anoStr.slice(-2);
       const labelM = `${nomeMesCurto}/${anoCurto}`;
 
-      const posX = xLeft + colWidthDesc + idx * colWidthVal;
-      const wTxt = fontBold.widthOfTextAtSize(labelM, 6.5);
+      const posX = xLeft + idx * colWidthVal;
+      const wTxt = fontBold.widthOfTextAtSize(labelM, 7.5);
       page.drawText(labelM, {
-        x: posX + colWidthVal - wTxt,
+        x: posX + (colWidthVal - wTxt) / 2,
         y: yLeft,
-        size: 6.5,
+        size: 7.5,
         font: fontBold,
         color: C.muted,
       });
@@ -522,23 +511,14 @@ export async function exportarRelatorioPDF({
     yLeft -= 12;
 
     ensureLeft(14);
-    page.drawText(safe(""), {
-      x: xLeft,
-      y: yLeft,
-      size: 8,
-      font,
-      color: C.ink,
-      maxWidth: colWidthDesc - 4,
-    });
 
-    // Conteúdo interno ajustado para tamanho 8
     listaMesesDizimos.forEach((kMes, idx) => {
       const v = mapaDizimosMes[kMes] || 0;
       const valTxt = v > 0 ? `+ ${valSemCifrao(formatoMoeda, v)}` : "-";
-      const posX = xLeft + colWidthDesc + idx * colWidthVal;
+      const posX = xLeft + idx * colWidthVal;
       const vw = fontMedium.widthOfTextAtSize(valTxt, 8);
       page.drawText(valTxt, {
-        x: posX + colWidthVal - vw,
+        x: posX + (colWidthVal - vw) / 2,
         y: yLeft,
         size: 8,
         font: fontMedium,
@@ -576,7 +556,7 @@ export async function exportarRelatorioPDF({
     "neg"
   );
 
-  // 5. Valores a Pagar (Mapeia a partir do mês selecionado)
+  // 5. Parcelamentos (Mapeia a partir do mês selecionado)
   const mapaDescricaoMes = {};
   const listaCompleta = dadosFinancas || historicoPeriodo || [];
 
@@ -604,13 +584,12 @@ export async function exportarRelatorioPDF({
 
           const keyMes = `${dt.getFullYear()}-${String(dt.getMonth()).padStart(2, "0")}`;
           if (!mapaDescricaoMes[desc]) {
-            mapaDescricaoMes[desc] = { meses: {}, maisQtd: 0, maisValor: 0 };
+            mapaDescricaoMes[desc] = { meses: {}, maisValor: 0 };
           }
 
           if (listaMesesChaves.includes(keyMes)) {
             mapaDescricaoMes[desc].meses[keyMes] = (mapaDescricaoMes[desc].meses[keyMes] || 0) + (Number(p.valor) || 0);
           } else if (keyMes > listaMesesChaves[2]) {
-            mapaDescricaoMes[desc].maisQtd += 1;
             mapaDescricaoMes[desc].maisValor += (Number(p.valor) || 0);
           }
         }
@@ -625,13 +604,12 @@ export async function exportarRelatorioPDF({
         if (!isNaN(dt.getTime())) {
           const keyMes = `${dt.getFullYear()}-${String(dt.getMonth()).padStart(2, "0")}`;
           if (!mapaDescricaoMes[desc]) {
-            mapaDescricaoMes[desc] = { meses: {}, maisQtd: 0, maisValor: 0 };
+            mapaDescricaoMes[desc] = { meses: {}, maisValor: 0 };
           }
 
           if (listaMesesChaves.includes(keyMes)) {
             mapaDescricaoMes[desc].meses[keyMes] = (mapaDescricaoMes[desc].meses[keyMes] || 0) + pendente;
           } else if (keyMes > listaMesesChaves[2]) {
-            mapaDescricaoMes[desc].maisQtd += 1;
             mapaDescricaoMes[desc].maisValor += pendente;
           }
         }
@@ -639,13 +617,13 @@ export async function exportarRelatorioPDF({
     }
   });
 
-  sectionLeft("Valores a Pagar");
+  sectionLeft("Parcelamentos");
   {
     const descricoes = Object.keys(mapaDescricaoMes);
 
     if (descricoes.length === 0) {
       ensureLeft(14);
-      page.drawText(safe("Nenhum valor a pagar pendente."), {
+      page.drawText(safe("Nenhum parcelamento pendente."), {
         x: xLeft,
         y: yLeft,
         size: 8,
@@ -654,12 +632,11 @@ export async function exportarRelatorioPDF({
       });
       yLeft -= 16;
     } else {
-      const colWidthVal = 42;
-      const colWidthMais = 56;
+      const colWidthVal = 48;
+      const colWidthMais = 50;
       const colWidthDesc = colLeftW - (3 * colWidthVal + colWidthMais);
 
       ensureLeft(16);
-      // Cabeçalho pequeno (tamanho 7)
       page.drawText(safe("Descrição"), {
         x: xLeft,
         y: yLeft,
@@ -687,8 +664,8 @@ export async function exportarRelatorioPDF({
       });
 
       const posMaisX = xLeft + colWidthDesc + 3 * colWidthVal;
-      const wMaisTxt = fontBold.widthOfTextAtSize("Mais", 7);
-      page.drawText("Mais", {
+      const wMaisTxt = fontBold.widthOfTextAtSize("Restante", 7);
+      page.drawText("Restante", {
         x: posMaisX + colWidthMais - wMaisTxt,
         y: yLeft,
         size: 7,
@@ -706,7 +683,6 @@ export async function exportarRelatorioPDF({
       });
       yLeft -= 12;
 
-      // Conteúdo interno ajustado para tamanho 8
       descricoes.forEach((desc) => {
         ensureLeft(14);
         let nomeLimpo = safe(desc);
@@ -736,7 +712,8 @@ export async function exportarRelatorioPDF({
         });
 
         const maisObj = mapaDescricaoMes[desc];
-        const maisTxt = maisObj.maisQtd > 0 ? `+${maisObj.maisQtd} (- ${valSemCifrao(formatoMoeda, maisObj.maisValor)})` : "-";
+        const maisVal = maisObj.maisValor || 0;
+        const maisTxt = maisVal > 0 ? `- ${valSemCifrao(formatoMoeda, maisVal)}` : "-";
         const vwMais = fontMedium.widthOfTextAtSize(maisTxt, 8);
         page.drawText(maisTxt, {
           x: posMaisX + colWidthMais - vwMais,
@@ -809,7 +786,7 @@ export async function exportarRelatorioPDF({
       }
 
       let nome = safe(`${dia} ${lab}`);
-      if (nome.length > 22) nome = nome.slice(0, 21) + ".";
+      if (nome.length > 25) nome = nome.slice(0, 24) + ".";
 
       page.drawText(nome, {
         x: xRight,
@@ -856,17 +833,19 @@ export async function exportarRelatorioPDF({
   const base64 = await pdfDoc.saveAsBase64();
   if (!base64) throw new Error("Falha ao gerar o conteúdo do PDF.");
 
-  const igrejaSanitizada = String(nomeIgreja || "Igreja")
+  const palavrasIgreja = String(nomeIgreja || "Igreja").trim().split(/\s+/);
+  const ultimaPalavra = palavrasIgreja[palavrasIgreja.length - 1] || "Igreja";
+  
+  const igrejaSanitizada = String(ultimaPalavra)
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9]/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_|_$/g, "");
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toLowerCase();
 
   const { ano: anoPer, mes: mesPer } = obterDataInicialDoPeriodo(labelPeriodo);
-  const mesAnoStr = `${MESES_CURTO[mesPer]}-${String(anoPer).slice(-2)}`;
+  const mesAnoStr = `${MESES_CURTO[mesPer].toLowerCase()}${String(anoPer).slice(-2)}`;
 
-  const fileName = `RF_${igrejaSanitizada || "Tesouraria"}_${mesAnoStr}.pdf`;
+  const fileName = `Rf_${igrejaSanitizada || "igreja"}${mesAnoStr}.pdf`;
   const cachePath = `${RNFS.CachesDirectoryPath}/${fileName}`;
   await RNFS.writeFile(cachePath, base64, "base64");
   const fileUrl = cachePath.startsWith("file://")

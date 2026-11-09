@@ -14,6 +14,7 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 import { AppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
 import { useAppAlert } from "../context/AlertContext";
+import { PLAN_CONFIG } from "../constants/appConfig";
 
 export default function MenuScreen() {
   const { colors, dark } = useTheme();
@@ -33,6 +34,7 @@ export default function MenuScreen() {
   const muted = colors.muted || (dark ? "#9aa0a6" : "#888");
   const bg = colors.background;
   const border = colors.border || (dark ? "#333" : "#ececec");
+      const lockConfig = PLAN_CONFIG.PREMIUM_LOCK || {};
 
   useEffect(() => {
     navigation.setOptions({
@@ -99,7 +101,6 @@ export default function MenuScreen() {
 
           {!!igrejaAtiva?.nome && (
             <View style={[styles.igrejaInfoRow, { backgroundColor: principal + "12" }]}>
-              <Ionicons name="business-outline" size={16} color={principal} />
               <Text style={[styles.igrejaNomeText, { color: text }]} numberOfLines={1}>
                 {igrejaAtiva.nome}
               </Text>
@@ -124,7 +125,7 @@ export default function MenuScreen() {
                 <Ionicons name="people" size={20} color="#3b82f6" />
               </View>
               <View style={styles.menuItemTextos}>
-                <Text style={[styles.menuItemTitulo, { color: text }]}>Membros da Igreja</Text>
+                <Text style={[styles.menuItemTitulo, { color: text }]}>Acessos</Text>
                 <Text style={[styles.menuItemSub, { color: muted }]}>Gerencie acessos e permissões</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={muted} />
@@ -172,10 +173,10 @@ export default function MenuScreen() {
             activeOpacity={0.6}
           >
             <View style={[styles.iconBox, { backgroundColor: "#10b98115" }]}>
-              <Ionicons name="sparkles" size={20} color="#10b981" />
+              <Ionicons    name={lockConfig.icon || "sparkles"} size={20} color="#10b981" />
             </View>
             <View style={styles.menuItemTextos}>
-              <Text style={[styles.menuItemTitulo, { color: text }]}>Assinatura Premium</Text>
+              <Text style={[styles.menuItemTitulo, { color: text }]}>Seja Premium</Text>
               <Text style={[styles.menuItemSub, { color: muted }]}>Gerencie seu plano e recursos</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={muted} />
@@ -271,7 +272,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 14,
     paddingVertical: 8,
-    paddingHorizontal: 12,
     borderRadius: 10,
     gap: 8,
   },

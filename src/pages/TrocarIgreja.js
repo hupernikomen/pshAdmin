@@ -32,7 +32,7 @@ export default function TrocarIgreja() {
 
     try {
       await selecionarIgreja(igrejaId);
-      navigation.goBack();
+      navigation.navigate('Tabs');
     } catch (error) {
       // Tratar erro se necessário
     }
@@ -88,19 +88,7 @@ export default function TrocarIgreja() {
         }}
       />
 
-      {/* Rodapé limpo */}
-      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-        <TouchableOpacity
-          style={[styles.novaIgrejaBtn, { backgroundColor: card, borderColor: dark ? "#262626" : "#E5E7EB" }]}
-          onPress={() => navigation.navigate("Configuracoes")}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="add" size={16} color={principal} />
-          <Text style={[styles.novaIgrejaText, { color: text }]}>
-            Cadastrar nova igreja
-          </Text>
-        </TouchableOpacity>
-      </View>
+
     </View>
   );
 }

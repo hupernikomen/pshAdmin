@@ -1,3 +1,4 @@
+// src/screens/Configuracoes.js
 import { useContext, useEffect, useRef, useState, useCallback } from "react";
 import {
   View,
@@ -74,6 +75,7 @@ export default function Configuracoes() {
     carregarIgrejasDoUsuario,
     ocultarNomesDoadores,
     setOcultarNomesDoadores,
+    podeEditarFinanceiro,
   } = useContext(AppContext);
 
   const [nome, setNome] = useState("");
@@ -92,8 +94,10 @@ export default function Configuracoes() {
 
   const semIgreja = !igrejaAtiva?.id;
   const isAdmin = igrejaAtiva?.papel === "admin";
-  const podeFinanceiro =
-    igrejaAtiva?.papel === "admin" || igrejaAtiva?.papel === "tesoureiro";
+  
+  // Utiliza a função do contexto para validar escrita (Admin ou Tesoureiro)
+  const podeFinanceiro = podeEditarFinanceiro ? podeEditarFinanceiro() : (igrejaAtiva?.papel === "admin" || igrejaAtiva?.papel === "tesoureiro");
+  
   const igrejaId = getIgrejaId?.() || igrejaAtiva?.id || null;
 
   const exclusaoPrevistaEm = Number(igrejaAtiva?.exclusaoPrevistaEm) || 0;
@@ -389,8 +393,8 @@ export default function Configuracoes() {
     useCallback(() => {
       return () => {
         if (!semIgreja) {
-          persistirNome(nomeAtualRef.current);
-          persistirSaldo(valorAtualRef.current);
+          if (isAdmin) persistirNome(nomeAtualRef.current);
+          if (podeFinanceiro) persistirSaldo(valorAtualRef.current);
         }
       };
     }, [semIgreja, isAdmin, podeFinanceiro, uid, igrejaId])
@@ -496,7 +500,7 @@ export default function Configuracoes() {
             style={[
               styles.rowInput,
               { color: colors.text },
-              !isAdmin && styles.inputDisabled,
+              (!isAdmin || exclusaoAgendada) && styles.inputDisabled,
             ]}
             value={nome}
             maxLength={25}
@@ -547,11 +551,15 @@ export default function Configuracoes() {
             <Text style={[styles.rowLabel, { color: colors.text }]}>
               Ocultar nomes de dizimistas e ofertantes no relatório
             </Text>
-            
           </View>
           <Switch
             value={!!ocultarNomesDoadores}
-            onValueChange={(v) => setOcultarNomesDoadores?.(v)}
+            onValueChange={(v) => {
+              if (podeFinanceiro) {
+                setOcultarNomesDoadores?.(v);
+              }
+            }}
+            disabled={!podeFinanceiro}
             trackColor={{
               false: dark ? "#555" : "#ccc",
               true: '#555',
@@ -562,7 +570,7 @@ export default function Configuracoes() {
       </View>
 
       <Text style={[styles.hint, { color: muted }]}>
-        As alterações são salvas automaticamente.
+        {podeFinanceiro ? "As alterações são salvas automaticamente." : "Perfil de leitura: visualização sem permissão de alteração."}
       </Text>
 
       {isAdmin && (
@@ -623,7 +631,6 @@ export default function Configuracoes() {
                   </Text>
                 )}
               </TouchableOpacity>
-      
             </>
           )}
         </View>

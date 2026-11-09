@@ -131,7 +131,8 @@ function mesesHorizonteProjecao(lista) {
     if (pegouParcela) continue;
     if (item.tipo === "Sem Prazo" && !item.vencimento) continue;
 
-    const ts = Number(p.vencimento || p.data || dataDoItem(item) || 0);
+    // CORRIGIDO AQUI: Trocado 'p' por 'item'
+    const ts = Number(item.vencimento || item.data || dataDoItem(item) || 0);
     if (ts && ts > agoraTs) maxTs = Math.max(maxTs, ts);
   }
 

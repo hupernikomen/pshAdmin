@@ -1,6 +1,7 @@
-
+// firebaseConnection.js
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage'; // <-- ADICIONE ESTA IMPORTAÇÃO
 import {
   initializeAuth,
   getAuth,
@@ -29,5 +30,6 @@ try {
 }
 
 export const db = getFirestore(app);
+export const storage = getStorage(app); // <-- ADICIONE ESTA EXPORTAÇÃO
 export { auth };
 export default app;

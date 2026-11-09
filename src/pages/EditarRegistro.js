@@ -86,6 +86,21 @@ function alinharParcelasPagas(parcelas, dataAntiga, dataNova) {
   });
 }
 
+/** Recalcula as parcelas proporcionalmente ou ajusta a última ao alterar o valor total */
+function recalcularParcelas(parcelasAntigas, novoValorTotal) {
+  if (!Array.isArray(parcelasAntigas) || parcelasAntigas.length === 0) return [];
+  const n = parcelasAntigas.length;
+  const base = arred(novoValorTotal / n);
+
+  return parcelasAntigas.map((p, index) => {
+    const valorAjustado = index === n - 1 ? arred(novoValorTotal - base * (n - 1)) : base;
+    return {
+      ...p,
+      valor: valorAjustado,
+    };
+  });
+}
+
 function montarDevolucoesCaixinha(item) {
   const map = new Map();
   const add = (cxId, valor) => {
@@ -246,7 +261,7 @@ export default function EditarRegistro() {
     if (selected) setData(selected);
   }
 
-  async function salvar() {
+async function salvar() {
     if (!item) return;
 
     if (!podeEditar) {
@@ -291,13 +306,21 @@ export default function EditarRegistro() {
       return;
     }
 
-    const pago =
-      Number(item.valorPagoTotal || item.valorRecebidoTotal || 0) || 0;
-    if (novoTotal < pago) {
+    const pagoAtual = Number(item.valorPagoTotal || item.valorRecebidoTotal || 0) || 0;
+    
+    // Se o registro for de entrada/saída simples e estiver totalmente quitado, 
+    // o valor pago/recebido deve acompanhar o novo total editado.
+    const ehQuitadoSimples = 
+      (!item.parcelas || item.parcelas.length === 0) && 
+      (item.status === "quitada" || pagoAtual >= Number(item.valorTotal || 0) * 0.99);
+
+    const novoValorEfetivo = ehQuitadoSimples ? novoTotal : pagoAtual;
+
+    if (novoTotal < novoValorEfetivo) {
       showAlert({
         title: "Atenção",
         message: `O total não pode ser menor que o já pago/recebido (R$ ${formatoMoeda.format(
-          pago
+          novoValorEfetivo
         )}).`,
       });
       return;
@@ -305,9 +328,11 @@ export default function EditarRegistro() {
 
     setSalvando(true);
     try {
-      const status = novoTotal <= pago ? "quitada" : "aberta";
       const dataAntiga = Number(item.data || 0);
       const dataNova = data.getTime();
+
+      // Determina o status correto (quitada se o total novo igualar o pago, aberta se for maior)
+      const status = novoTotal <= novoValorEfetivo ? "quitada" : "aberta";
 
       const patch = {
         descricao: descricao.trim(),
@@ -318,31 +343,40 @@ export default function EditarRegistro() {
         atualizadoEm: Date.now(),
       };
 
-      if (Array.isArray(item.valoresPagos) && item.valoresPagos.length) {
-        patch.valoresPagos = alinharDatasLista(
-          item.valoresPagos,
-          dataAntiga,
-          dataNova
-        );
+      // 1. Atualização para ENTRADA simples (valoresRecebidos)
+      if (item.tipoMovimento === "entrada") {
+        if (Array.isArray(item.valoresRecebidos) && item.valoresRecebidos.length > 0) {
+          // Atualiza o primeiro item do array com o novo valor total e nova data
+          patch.valoresRecebidos = item.valoresRecebidos.map((r, index) => 
+            index === 0 ? { ...r, valor: novoTotal, data: dataNova } : r
+          );
+        }
+        patch.valorRecebidoTotal = novoTotal;
+      } 
+      // 2. Atualização para SAÍDA simples (valoresPagos)
+      else if (item.tipoMovimento === "saida") {
+        if (Array.isArray(item.valoresPagos) && item.valoresPagos.length > 0) {
+          // Atualiza o primeiro item do array com o novo valor total e nova data
+          patch.valoresPagos = item.valoresPagos.map((p, index) => 
+            index === 0 ? { ...p, valor: novoTotal, data: dataNova } : p
+          );
+        }
+        patch.valorPagoTotal = novoTotal;
       }
 
-      if (
-        Array.isArray(item.valoresRecebidos) &&
-        item.valoresRecebidos.length
-      ) {
-        patch.valoresRecebidos = alinharDatasLista(
-          item.valoresRecebidos,
-          dataAntiga,
-          dataNova
-        );
+      // 3. Se possuir parcelas, recalcula proporcionalmente
+      if (Array.isArray(item.parcelas) && item.parcelas.length > 0) {
+        patch.parcelas = recalcularParcelas(item.parcelas, novoTotal);
+        patch.parcelas = alinharParcelasPagas(patch.parcelas, dataAntiga, dataNova);
       }
 
-      if (Array.isArray(item.parcelas) && item.parcelas.length) {
-        patch.parcelas = alinharParcelasPagas(
-          item.parcelas,
-          dataAntiga,
-          dataNova
-        );
+      // Alinha datas genéricas se houver múltiplos registros nos arrays
+      if (Array.isArray(item.valoresPagos) && item.valoresPagos.length > 1) {
+        patch.valoresPagos = alinharDatasLista(item.valoresPagos, dataAntiga, dataNova);
+      }
+
+      if (Array.isArray(item.valoresRecebidos) && item.valoresRecebidos.length > 1) {
+        patch.valoresRecebidos = alinharDatasLista(item.valoresRecebidos, dataAntiga, dataNova);
       }
 
       await updateDoc(doc(db, "registros", item.id), patch);

@@ -29,6 +29,7 @@ export default function Saldo({
     saldo,
     igrejaAtiva,
     getIgrejaId,
+    podeEditarFinanceiro,
   } = useContext(AppContext);
   const navigation = useNavigation();
 
@@ -44,6 +45,9 @@ export default function Saldo({
 
   const statusAssinatura = verificarStatusAssinatura(igrejaAtiva);
   const isCaixinhasBloqueado = !statusAssinatura.isPremium;
+
+  // Valida se o usuário tem permissão de escrita (Admin ou Tesoureiro)
+  const temPermissaoEscrita = podeEditarFinanceiro ? podeEditarFinanceiro() : true;
 
   useEffect(() => {
     if (!largura) return;
@@ -146,13 +150,17 @@ export default function Saldo({
                       </Text>
                     )}
                   </View>
-                  <TouchableOpacity
-                    onPress={() => navigation.navigate("Registro")}
-                    style={[styles.addBtn, { backgroundColor: colors.principal }]}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="add" size={22} color="#fff" />
-                  </TouchableOpacity>
+
+                  {/* Botão de Adicionar Registro (Apenas Admin/Tesoureiro) */}
+                  {temPermissaoEscrita && (
+                    <TouchableOpacity
+                      onPress={() => navigation.navigate("Registro")}
+                      style={[styles.addBtn, { backgroundColor: colors.principal }]}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="add" size={22} color="#fff" />
+                    </TouchableOpacity>
+                  )}
                 </View>
 
                 <View style={styles.balanceMiddle}>
@@ -204,26 +212,30 @@ export default function Saldo({
                       </Text>
                     )}
                   </View>
-                  <TouchableOpacity
-                    onPress={() => {
-                      if (isCaixinhasBloqueado) {
-                        navigation.navigate("Paywall");
-                        return;
-                      }
-                      navigation.navigate("Caixinhas");
-                    }}
-                    style={[
-                      styles.addBtn,
-                      { backgroundColor: isCaixinhasBloqueado ? lockColor : colors.principal },
-                    ]}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons
-                      name={isCaixinhasBloqueado ? (lockConfig.icon || "star") : "chevron-forward"}
-                      size={isCaixinhasBloqueado ? (lockConfig.size || 14) : 22}
-                      color="#fff"
-                    />
-                  </TouchableOpacity>
+
+                  {/* Botão de Caixinhas: Se for Leitura, ocultamos ou bloqueamos. Aqui ocultamos igual ao botão de adicionar se não tiver permissão */}
+                  {temPermissaoEscrita && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (isCaixinhasBloqueado) {
+                          navigation.navigate("Paywall");
+                          return;
+                        }
+                        navigation.navigate("Caixinhas");
+                      }}
+                      style={[
+                        styles.addBtn,
+                        { backgroundColor: isCaixinhasBloqueado ? lockColor : colors.principal },
+                      ]}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons
+                        name={isCaixinhasBloqueado ? (lockConfig.icon || "star") : "chevron-forward"}
+                        size={isCaixinhasBloqueado ? (lockConfig.size || 14) : 22}
+                        color="#fff"
+                      />
+                    </TouchableOpacity>
+                  )}
                 </View>
 
                 <View style={styles.balanceMiddle}>

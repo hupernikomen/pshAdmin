@@ -1,3 +1,4 @@
+// src/screens/Historico.js
 import { useContext, useMemo, useState } from "react";
 import {
   View,
@@ -21,7 +22,7 @@ import Load from "../componentes/Load";
 import SwipeCard from "../componentes/SwipeCard";
 import { podeEditarRegistro } from "../utils/registroEdit";
 import { verificarStatusAssinatura } from "../utils/assinatura";
-import { PLAN_CONFIG } from "../constants/appConfig"; // <-- IMPORTAÇÃO AQUI
+import { PLAN_CONFIG } from "../constants/appConfig";
 
 const LIMITES = [
   { n: 7, label: "Últimos 7", premium: false },
@@ -82,6 +83,11 @@ function montarLinhasHistorico(dadosFinancas) {
 
   (dadosFinancas || []).forEach((item) => {
     if (item.tipo === "Saldo inicial") return;
+
+    const statusGeral = item.status || "quitada";
+    if (statusGeral === "aberta" && (!item.valoresPagos || item.valoresPagos.length === 0) && (!item.valoresRecebidos || item.valoresRecebidos.length === 0) && (!item.parcelas || item.parcelas.length === 0)) {
+      return;
+    }
 
     const sortBase = Number(item.data || item.reg || item.createdAt || 0) || 0;
     const createdAtPai = Number(item.createdAt || item.reg || sortBase) || 0;
@@ -203,6 +209,10 @@ function montarLinhasHistorico(dadosFinancas) {
       return;
     }
 
+    if (statusGeral !== "quitada" && statusGeral !== "paga") {
+      return;
+    }
+
     linhas.push({
       ...item,
       kind: "registro",
@@ -251,11 +261,9 @@ export default function Historico() {
   const bg = colors.background;
   const border = colors.border;
 
-  // Usa as configurações centralizadas da constante
   const lockConfig = PLAN_CONFIG.PREMIUM_LOCK || {};
   const lockColor = dark ? lockConfig.colorDark : lockConfig.colorLight;
 
-  // Verifica se a igreja ativa tem plano Premium ativo
   const statusAssinatura = verificarStatusAssinatura(igrejaAtiva);
 
   const onRefresh = async () => {
@@ -265,8 +273,17 @@ export default function Historico() {
     setRefreshing(false);
   };
 
+  // Função atualizada para abrir recibos tanto da web (Firebase Storage) quanto locais antigos
   async function abrirRecibo(reciboUrl) {
     if (!reciboUrl) return;
+
+    // Se for URL da nuvem (Firebase Storage), abre direto
+    if (reciboUrl.startsWith("http://") || reciboUrl.startsWith("https://")) {
+      setFotoSelecionada(reciboUrl);
+      return;
+    }
+
+    // Compatibilidade com arquivos antigos salvos no celular
     const uri = normalizarUri(reciboUrl);
     const path = caminhoSemPrefixo(uri);
     try {
@@ -376,7 +393,6 @@ export default function Historico() {
             </ScrollView>
           </View>
         }
-       
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -571,20 +587,20 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Regular",
     textAlign: "center",
   },
-  modalOverlay: {
+modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.85)",
+    backgroundColor: "rgba(0,0,0,0.9)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
   },
   modalContent: {
     width: "100%",
     alignItems: "center",
+    paddingHorizontal: 10, // Margem lateral pequena para ocupar quase a tela toda
   },
   modalImage: {
     width: "100%",
-    height: "75%",
+    height: "80%", // Ocupa 80% da altura da tela mantendo proporção
     borderRadius: 12,
   },
   closeBtn: {
