@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 14,
     minWidth: 0,
     marginRight: 12,
   },
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
   topoRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 14,
   },
   topoBtn: {
     padding: 8,
