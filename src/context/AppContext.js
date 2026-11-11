@@ -1,5 +1,5 @@
 // src/context/AppContext.js
-import React, { createContext, useEffect, useState, useContext } from "react";
+import React, { createContext, useEffect, useState, useContext, useRef } from "react";
 import { db } from "../firebaseConnection";
 import {
   doc,
@@ -44,8 +44,8 @@ function montarIgrejaAtiva(item, dadosFirestore = {}) {
     createdAt: dadosFirestore.createdAt || item.createdAt || null,
     exclusaoAgendadaEm: dadosFirestore.exclusaoAgendadaEm || item.exclusaoAgendadaEm || null,
     exclusaoPrevistaEm: dadosFirestore.exclusaoPrevistaEm || item.exclusaoPrevistaEm || null,
-    isPremium: dadosFirestore.isPremium ?? item.isPremium ?? false, // <-- Captura o status Premium
-    dataExpiracaoPremium: dadosFirestore.dataExpiracaoPremium ?? item.dataExpiracaoPremium ?? null, // <-- Captura a expiração
+    isPremium: dadosFirestore.isPremium ?? item.isPremium ?? false,
+    dataExpiracaoPremium: dadosFirestore.dataExpiracaoPremium ?? item.dataExpiracaoPremium ?? null,
   };
 }
 
@@ -77,6 +77,9 @@ export function AppProvider({ children }) {
 
   const [semConexao, setSemConexao] = useState(false);
 
+  // Trava em memória para evitar criação duplicada em renderizações simultâneas
+  const criandoReservaRef = useRef(false);
+
   function getUserId() {
     return uid || user?.uid || null;
   }
@@ -93,7 +96,6 @@ export function AppProvider({ children }) {
     return true;
   }
 
-  // Função para atualizar o estado local da igreja imediatamente após o pagamento
   function atualizarIgrejaLocal(dadosAtualizados) {
     setIgrejaAtiva((prev) => ({
       ...prev,
@@ -342,7 +344,6 @@ export function AppProvider({ children }) {
     const item = igrejasDoUsuario.find((i) => i.igrejaId === igrejaId);
     if (!item) return;
 
-    // Busca detalhada direto do Firestore para garantir dados atualizados (como isPremium)
     try {
       const snap = await getDoc(doc(db, "igrejas", igrejaId));
       if (snap.exists()) {
@@ -390,6 +391,21 @@ export function AppProvider({ children }) {
       papel: "admin",
       createdAt: agora,
     });
+
+    try {
+      await addDoc(collection(db, "caixinhas"), {
+        igrejaId: igrejaRef.id,
+        idUsuario: userId,
+        nome: "Reserva de emergência",
+        valor: 0,
+        editavel: false,
+        naoExcluir: true,
+        reg: agora,
+        createdAt: agora,
+      });
+    } catch (errCaixa) {
+      console.log("Erro ao criar caixinha padrão 'Reserva de emergência':", errCaixa);
+    }
 
     const nova = {
       igrejaId: igrejaRef.id,
@@ -550,6 +566,50 @@ export function AppProvider({ children }) {
     return calcularSaldoRealizado(lista);
   }
 
+  // Auto-healing resiliente para criar a Reserva de Emergência caso ainda não exista
+  async function garantirReservaEmergencia(igrejaId, listaAtual) {
+    const jaExiste = (listaAtual || []).some(
+      (c) => c.nome === "Reserva de emergência"
+    );
+    if (jaExiste) return null;
+
+    if (criandoReservaRef.current) return null;
+    criandoReservaRef.current = true;
+
+    try {
+      const userId = getUserId();
+      const agora = Date.now();
+
+      const docRef = await addDoc(collection(db, "caixinhas"), {
+        igrejaId,
+        idUsuario: userId,
+        nome: "Reserva de emergência",
+        valor: 0,
+        editavel: false,
+        naoExcluir: true,
+        reg: agora,
+        createdAt: agora,
+      });
+
+      return {
+        id: docRef.id,
+        igrejaId,
+        idUsuario: userId,
+        nome: "Reserva de Emergência",
+        valor: 0,
+        editavel: false,
+        naoExcluir: true,
+        reg: agora,
+        createdAt: agora,
+      };
+    } catch (err) {
+      console.log("Erro ao autocriar Reserva de emergência:", err);
+      return null;
+    } finally {
+      criandoReservaRef.current = false;
+    }
+  }
+
   async function CarregarCaixinhas() {
     const igrejaId = getIgrejaId();
     if (!igrejaId) {
@@ -559,34 +619,42 @@ export function AppProvider({ children }) {
     }
 
     try {
-      const q = query(
-        collection(db, "caixinhas"),
-        where("igrejaId", "==", igrejaId),
-        orderBy("reg", "desc")
-      );
-      const snap = await getDocs(q);
-      const lista = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setCaixinhas(lista);
-      const total = lista.reduce((acc, c) => acc + (Number(c.valor) || 0), 0);
-      setTotalReservado(arredondarMoney(total));
-      return lista;
-    } catch (e) {
+      let lista = [];
+
       try {
+        const q = query(
+          collection(db, "caixinhas"),
+          where("igrejaId", "==", igrejaId),
+          orderBy("reg", "desc")
+        );
+        const snap = await getDocs(q);
+        lista = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      } catch (e) {
         const q2 = query(
           collection(db, "caixinhas"),
           where("igrejaId", "==", igrejaId)
         );
         const snap2 = await getDocs(q2);
-        const lista = snap2.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setCaixinhas(lista);
-        const total = lista.reduce((acc, c) => acc + (Number(c.valor) || 0), 0);
-        setTotalReservado(arredondarMoney(total));
-        return lista;
-      } catch (e2) {
-        setCaixinhas([]);
-        setTotalReservado(0);
-        return [];
+        lista = snap2.docs.map((d) => ({ id: d.id, ...d.data() }));
       }
+
+      // Se for perfil de escrita e faltar a caixinha padrão, cria automaticamente
+      if (podeEditarFinanceiro()) {
+        const novaCaixinha = await garantirReservaEmergencia(igrejaId, lista);
+        if (novaCaixinha) {
+          lista.unshift(novaCaixinha);
+        }
+      }
+
+      setCaixinhas(lista);
+      const total = lista.reduce((acc, c) => acc + (Number(c.valor) || 0), 0);
+      setTotalReservado(arredondarMoney(total));
+      return lista;
+    } catch (e2) {
+      console.log("Erro geral CarregarCaixinhas:", e2);
+      setCaixinhas([]);
+      setTotalReservado(0);
+      return [];
     }
   }
 
@@ -770,7 +838,7 @@ export function AppProvider({ children }) {
         toggleOcultarNomesDoadores,
         semConexao,
         podeGerarPdf,
-        atualizarIgrejaLocal, // <-- Função exportada para uso no PaywallScreen
+        atualizarIgrejaLocal,
       }}
     >
       {children}

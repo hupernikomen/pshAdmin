@@ -53,7 +53,7 @@ export default function Rotas() {
           component={Projecao}
           options={{ title: "Projeção de Gastos" }}
         />
-        
+
         <Stack.Screen
           name="Paywall"
           component={PaywallScreen}
@@ -96,7 +96,10 @@ export default function Rotas() {
           options={{ title: "A pagar" }}
         />
 
-        <Stack.Screen name="Caixinhas" component={Caixinhas} />
+        <Stack.Screen
+          name="Caixinhas"
+          component={Caixinhas}
+        />
 
         <Stack.Screen
           name="Registro"

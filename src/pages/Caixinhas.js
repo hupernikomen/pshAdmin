@@ -1,3 +1,4 @@
+// src/pages/Caixinhas.js
 import { useContext, useEffect, useState } from "react";
 import {
   View,
@@ -18,6 +19,9 @@ import { AppContext } from "../context/AppContext";
 import { useAppAlert } from "../context/AlertContext";
 import Load from "../componentes/Load";
 import SwipeCard from "../componentes/SwipeCard";
+
+import { PLAN_CONFIG } from "../constants/appConfig";
+import { verificarStatusAssinatura } from "../utils/assinatura";
 
 function parseValor(txt) {
   if (txt === null || txt === undefined) return 0;
@@ -75,11 +79,21 @@ export default function Caixinhas() {
   const bg = colors.background;
   const surface = dark ? "#2a2a2a" : "#f4f5f7";
   const border = colors.border || (dark ? "#333" : "#ececec");
-  const danger = dark ? "#E57373" : "#C62828";
-  const okGreen = dark ? "#81C784" : "#2E7D32";
-  const warnOrange = dark ? "#FFB74D" : "#E65100";
+// src/pages/Caixinhas.js
+
+// Altere as constantes de cores para tons mais fortes e saturados:
+const danger = dark ? "#FF5252" : "#D32F2F";    // Vermelho vivo / forte
+const okGreen = dark ? "#4CAF50" : "#1B5E20";   // Verde vibrante / escuro
+const warnOrange = dark ? "#FF9800" : "#E65100"; // Laranja forte
   const iconMuted = dark ? "#9aa0a6" : "#555";
   const tintCard = dark ? "#2c2c2c" : "#f0f0f0";
+
+  const { FREE_LIMITES } = PLAN_CONFIG;
+  const statusAssinatura = verificarStatusAssinatura(igrejaAtiva);
+  const isCaixinhasBloqueado = (!FREE_LIMITES?.PERMITE_CAIXINHAS && !statusAssinatura.isPremium);
+
+  const lockConfig = PLAN_CONFIG.PREMIUM_LOCK || {};
+  const lockColor = "#fff";
 
   useEffect(() => {
     navigation.setOptions({
@@ -111,6 +125,12 @@ export default function Caixinhas() {
       });
       return;
     }
+
+    if (isCaixinhasBloqueado) {
+      navigation.navigate("Paywall");
+      return;
+    }
+
     setModoModal("criar");
     setCxSel(null);
     setNome("");
@@ -156,6 +176,15 @@ export default function Caixinhas() {
       });
       return;
     }
+
+    if (cx.naoExcluir || cx.nome === "Reserva de Emergência") {
+      showAlert({
+        title: "Caixinha Protegida",
+        message: "A Reserva de Emergência é uma caixinha padrão do sistema e não pode ser excluída.",
+      });
+      return;
+    }
+
     showAlert({
       title: "Excluir caixinha",
       message: `Excluir "${cx.nome}"? O valor volta a contar só no caixa livre (não gera lançamento automático).`,
@@ -234,6 +263,13 @@ export default function Caixinhas() {
           });
           return;
         }
+        if (v > (Number(cxSel?.valor) || 0) + 0.001) {
+          showAlert({
+            title: "Saldo insuficiente",
+            message: `Na caixinha: R$ ${formatoMoeda.format(cxSel?.valor || 0)}`,
+          });
+          return;
+        }
         await RetirarDaCaixinha(cxSel.id, v);
       }
 
@@ -284,40 +320,61 @@ export default function Caixinhas() {
             </Text>
             {podeEditar && (
               <TouchableOpacity
-                style={[styles.emptyBtn, { backgroundColor: principal }]}
+                style={[
+                  styles.emptyBtn,
+                  { backgroundColor: isCaixinhasBloqueado ? (dark ? lockConfig.colorDark : lockConfig.colorLight) : principal },
+                ]}
                 onPress={abrirCriar}
               >
+                {isCaixinhasBloqueado && (
+                  <Ionicons
+                    name={lockConfig.icon || "star"}
+                    size={lockConfig.size || 14}
+                    color={lockColor}
+                    style={{ marginRight: 6 }}
+                  />
+                )}
                 <Text style={styles.emptyBtnText}>Criar caixinha</Text>
               </TouchableOpacity>
             )}
           </View>
         }
         renderItem={({ item }) => {
-          const actions = podeEditar
-            ? [
-                {
-                  key: "reservar",
-                  icon: "arrow-down-outline",
-                  label: "Reservar",
-                  backgroundColor: okGreen,
-                  onPress: () => abrirDepositar(item),
-                },
-                {
-                  key: "retirar",
-                  icon: "arrow-up-outline",
-                  label: "Retirar",
-                  backgroundColor: warnOrange,
-                  onPress: () => abrirRetirar(item),
-                },
-                {
-                  key: "excluir",
-                  icon: "trash-outline",
-                  label: "Excluir",
-                  backgroundColor: danger,
-                  onPress: () => confirmarExcluir(item),
-                },
-              ]
-            : [];
+          // Verifica se é a caixinha padrão protegida
+          const ehReservaEmergencia = item.naoExcluir || item.nome === "Reserva de Emergência";
+
+          const actions = [];
+
+          if (podeEditar) {
+            // Ações de Reservar e Retirar sempre aparecem
+            actions.push(
+              {
+                key: "reservar",
+                icon: "arrow-down-outline",
+                label: "Reservar",
+                backgroundColor: okGreen,
+                onPress: () => abrirDepositar(item),
+              },
+              {
+                key: "retirar",
+                icon: "arrow-up-outline",
+                label: "Retirar",
+                backgroundColor: warnOrange,
+                onPress: () => abrirRetirar(item),
+              }
+            );
+
+            // Apenas adiciona a opção de excluir se NÃO for a Reserva de Emergência
+            if (!ehReservaEmergencia) {
+              actions.push({
+                key: "excluir",
+                icon: "trash-outline",
+                label: "Excluir",
+                backgroundColor: danger,
+                onPress: () => confirmarExcluir(item),
+              });
+            }
+          }
 
           return (
             <SwipeCard
@@ -325,7 +382,7 @@ export default function Caixinhas() {
               iconColor={iconMuted}
               tint={tintCard}
               title={item.nome}
-              subtitle="Reservado"
+              subtitle={ehReservaEmergencia ? "Caixinha protegida" : "Reservado"}
               value={`R$ ${formatoMoeda.format(item.valor || 0)}`}
               actions={actions}
               open={abertoId === item.id}
@@ -339,11 +396,22 @@ export default function Caixinhas() {
 
       {podeEditar && (caixinhas || []).length > 0 && (
         <TouchableOpacity
-          style={[styles.fab, { backgroundColor: principal }]}
+          style={[
+            styles.fab,
+            { backgroundColor: isCaixinhasBloqueado ? (dark ? lockConfig.colorDark : lockConfig.colorLight) : principal },
+          ]}
           onPress={abrirCriar}
           activeOpacity={0.85}
         >
-          <Ionicons name="add" size={22} color="#fff" />
+          {isCaixinhasBloqueado ? (
+             <Ionicons
+               name={lockConfig.icon || "star"}
+               size={lockConfig.size || 14}
+               color={lockColor}
+             />
+          ) : (
+             <Ionicons name="add" size={22} color="#fff" />
+          )}
           <Text style={styles.fabText}>Nova caixinha</Text>
         </TouchableOpacity>
       )}
@@ -486,9 +554,11 @@ const styles = StyleSheet.create({
   },
   emptyBtn: {
     marginTop: 16,
+    flexDirection: 'row',
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 12,
+    alignItems: 'center',
   },
   emptyBtnText: {
     color: "#fff",
@@ -538,7 +608,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 12,
     fontFamily: "Roboto-Regular",
-    marginBottom: 4,
+    marginBottom: "4%",
   },
   input: {
     borderRadius: 12,

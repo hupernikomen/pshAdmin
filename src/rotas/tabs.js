@@ -45,7 +45,7 @@ export default function Tabs() {
         }}
       />
       <Tab.Screen
-        name="Relatório"
+        name="Relatório Financeiro"
         component={Relatorio}
         options={{
           tabBarIcon: 'reader-outline',

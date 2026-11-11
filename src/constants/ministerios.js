@@ -13,5 +13,6 @@ export const MINISTERIOS = [
   "Missões",
   "Mulheres",
   "Patrimônio",
-  "Sonoplastia"
+  "Sonoplastia",
+  "Zeladoria"
 ];

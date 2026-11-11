@@ -50,9 +50,6 @@ export default function PaywallScreen({ route }) {
       headerShown: true, // Garante que o header apareça se desejar exibir o título nativo
       title: "Premium",
       headerTintColor: text,
-      headerStyle: {
-        backgroundColor: card,
-      },
     });
   }, [navigation, text, card]);
 

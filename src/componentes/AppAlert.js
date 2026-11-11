@@ -31,7 +31,7 @@ export default function AppAlert() {
   return (
     <Modal transparent visible animationType="fade" statusBarTranslucent>
       <View style={styles.overlay}>
-        <View style={[styles.card, { backgroundColor: card }]}>
+        <View style={[styles.card, { backgroundColor: card, borderWidth: 2, borderColor: muted }]}>
           {!!config.title && (
             <Text style={[styles.title, { color: text }]}>{config.title}</Text>
           )}
@@ -94,10 +94,11 @@ export default function AppAlert() {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 32, 0.45)",
+    backgroundColor: "rgba(15, 23, 32, 0.66)",
     justifyContent: "center",
     alignItems: "center",
     padding: 28,
+
   },
   card: {
     width: "100%",

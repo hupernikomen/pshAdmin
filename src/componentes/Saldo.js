@@ -1,14 +1,10 @@
 // src/componentes/Saldo.js
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Animated } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
-import { useFocusEffect, useNavigation, useTheme } from "@react-navigation/native";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { useNavigation, useTheme } from "@react-navigation/native";
 import { AppContext } from "../context/AppContext";
-import { db } from "../firebaseConnection";
 import ValorOculto from "./ValorOculto";
-import { verificarStatusAssinatura } from "../utils/assinatura";
-import { PLAN_CONFIG } from "../constants/appConfig";
 
 const ABAS = ["saldo", "caixinhas"];
 const CARD_HEIGHT = 145;
@@ -20,15 +16,11 @@ export default function Saldo({
   saldoAnterior,
   qtdCaixinhas,
 }) {
-  const { colors, dark } = useTheme();
+  const { colors } = useTheme();
   const {
     formatoMoeda,
     ocultarValores,
     toggleOcultarValores,
-    dadosFinancas,
-    saldo,
-    igrejaAtiva,
-    getIgrejaId,
     podeEditarFinanceiro,
   } = useContext(AppContext);
   const navigation = useNavigation();
@@ -39,12 +31,6 @@ export default function Saldo({
   const slide = useRef(new Animated.Value(0)).current;
 
   const fmt = (v) => `R$ ${formatoMoeda.format(Number(v) || 0)}`;
-
-  const lockConfig = PLAN_CONFIG.PREMIUM_LOCK || {};
-  const lockColor = dark ? lockConfig.colorDark : lockConfig.colorLight;
-
-  const statusAssinatura = verificarStatusAssinatura(igrejaAtiva);
-  const isCaixinhasBloqueado = !statusAssinatura.isPremium;
 
   // Valida se o usuário tem permissão de escrita (Admin ou Tesoureiro)
   const temPermissaoEscrita = podeEditarFinanceiro ? podeEditarFinanceiro() : true;
@@ -65,9 +51,6 @@ export default function Saldo({
       <View style={styles.tabsContainer}>
         {ABAS.map((aba) => {
           const ativo = abaAtiva === aba;
-          const isCaixinhaAba = aba === "caixinhas";
-          const mostrarBloqueio = isCaixinhaAba && isCaixinhasBloqueado;
-
           const label = aba === "saldo" ? "Saldo" : "Caixinhas";
 
           return (
@@ -77,29 +60,18 @@ export default function Saldo({
                 styles.tabItem,
                 ativo && [styles.tabActive, { backgroundColor: colors.card }],
               ]}
-              onPress={() => {
-                setAbaAtiva(aba);
-              }}
+              onPress={() => setAbaAtiva(aba)}
               activeOpacity={0.8}
             >
-              <View style={styles.tabHeaderContent}>
-                {mostrarBloqueio && (
-                  <Ionicons
-                    name={lockConfig.icon || "star"}
-                    size={lockConfig.size || 11}
-                    color={lockColor}
-                  />
-                )}
-                <Text
-                  style={[
-                    styles.tabText,
-                    { color: colors.text },
-                    ativo && styles.tabTextActive,
-                  ]}
-                >
-                  {label}
-                </Text>
-              </View>
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: colors.text },
+                  ativo && styles.tabTextActive,
+                ]}
+              >
+                {label}
+              </Text>
             </TouchableOpacity>
           );
         })}
@@ -120,7 +92,7 @@ export default function Saldo({
               transform: [{ translateX: slide }],
             }}
           >
-            {/* SALDO */}
+            {/* SALDO (Aba 1) */}
             <View style={{ width: largura }}>
               <View style={styles.balanceCard}>
                 <View style={styles.balanceTop}>
@@ -137,7 +109,7 @@ export default function Saldo({
                         <Ionicons
                           name={ocultarValores ? "eye-off-outline" : "eye-outline"}
                           size={16}
-                          color={colors.muted || (dark ? "#9aa0a6" : "#888")}
+                          color={colors.muted}
                         />
                       </TouchableOpacity>
                     </View>
@@ -151,7 +123,6 @@ export default function Saldo({
                     )}
                   </View>
 
-                  {/* Botão de Adicionar Registro (Apenas Admin/Tesoureiro) */}
                   {temPermissaoEscrita && (
                     <TouchableOpacity
                       onPress={() => navigation.navigate("Registro")}
@@ -164,6 +135,19 @@ export default function Saldo({
                 </View>
 
                 <View style={styles.balanceMiddle}>
+                  <View style={{ alignItems: "flex-start" }}>
+                    <Text style={[styles.miniLabel, { color: colors.text }]}>
+                      Saldo anterior
+                    </Text>
+                    {ocultarValores ? (
+                      <ValorOculto size="medium" style={{ alignSelf: "flex-end" }} />
+                    ) : (
+                      <Text style={[styles.miniValue, { color: colors.text }]}>
+                        {fmt(saldoAnterior)}
+                      </Text>
+                    )}
+                  </View>
+
                   <View>
                     <Text style={[styles.miniLabel, { color: colors.text }]}>
                       Caixa livre
@@ -177,26 +161,12 @@ export default function Saldo({
                     )}
                   </View>
 
-                  <View style={{ alignItems: "flex-end" }}>
-                    <Text style={[styles.miniLabel, { color: colors.text }]}>
-                      Saldo anterior
-                    </Text>
-                    {ocultarValores ? (
-                      <ValorOculto
-                        size="medium"
-                        style={{ alignSelf: "flex-end" }}
-                      />
-                    ) : (
-                      <Text style={[styles.miniValue, { color: colors.text }]}>
-                        {fmt(saldoAnterior)}
-                      </Text>
-                    )}
-                  </View>
+
                 </View>
               </View>
             </View>
 
-            {/* CAIXINHAS */}
+            {/* CAIXINHAS (Aba 2) */}
             <View style={{ width: largura }}>
               <View style={styles.balanceCard}>
                 <View style={styles.balanceTop}>
@@ -213,27 +183,13 @@ export default function Saldo({
                     )}
                   </View>
 
-                  {/* Botão de Caixinhas: Se for Leitura, ocultamos ou bloqueamos. Aqui ocultamos igual ao botão de adicionar se não tiver permissão */}
                   {temPermissaoEscrita && (
                     <TouchableOpacity
-                      onPress={() => {
-                        if (isCaixinhasBloqueado) {
-                          navigation.navigate("Paywall");
-                          return;
-                        }
-                        navigation.navigate("Caixinhas");
-                      }}
-                      style={[
-                        styles.addBtn,
-                        { backgroundColor: isCaixinhasBloqueado ? lockColor : colors.principal },
-                      ]}
+                      onPress={() => navigation.navigate("Caixinhas")}
+                      style={[styles.addBtn, { backgroundColor: colors.principal }]}
                       activeOpacity={0.8}
                     >
-                      <Ionicons
-                        name={isCaixinhasBloqueado ? (lockConfig.icon || "star") : "chevron-forward"}
-                        size={isCaixinhasBloqueado ? (lockConfig.size || 14) : 22}
-                        color="#fff"
-                      />
+                      <Ionicons name="chevron-forward" size={22} color="#fff" />
                     </TouchableOpacity>
                   )}
                 </View>
@@ -273,11 +229,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     backgroundColor: "transparent",
-  },
-  tabHeaderContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
   },
   tabActive: {
     shadowColor: "transparent",

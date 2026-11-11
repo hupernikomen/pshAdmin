@@ -25,7 +25,7 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 import { useAuth } from "../context/AuthContext";
 import { useAppAlert } from "../context/AlertContext";
 import { MINISTERIOS } from "../constants/ministerios";
-import { verificarStatusAssinatura } from "../utils/assinatura"; // <-- IMPORTAÇÃO DA ASSINATURA
+import { verificarStatusAssinatura } from "../utils/assinatura";
 
 function parseNumero(txt) {
   if (txt === null || txt === undefined) return 0;
@@ -52,7 +52,7 @@ function arred(v) {
 function inicioDoDia(d) {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
-  return x;
+  return x.getTime();
 }
 
 function maisUmMes(d) {
@@ -62,8 +62,10 @@ function maisUmMes(d) {
 }
 
 function isDataFutura(d) {
-  const hoje = inicioDoDia(new Date());
-  const dia = inicioDoDia(d || new Date());
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const dia = new Date(d || new Date());
+  dia.setHours(0, 0, 0, 0);
   return dia.getTime() > hoje.getTime();
 }
 
@@ -97,14 +99,14 @@ function montarParcelas({
         valor,
         vencimento: vencTs,
         status: "paga",
-        pagoEm: dataBase.getTime(),
+        pagoEm: inicioDoDia(dataBase),
         origemPagamento: origemPagamento || null,
         caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,
         caixinhaNome: origemPagamento === "caixinha" ? caixinhaNome : null,
       });
       pagamentos.push({
         valor,
-        data: dataBase.getTime(),
+        data: inicioDoDia(dataBase),
         id: `${Date.now()}_${i}`,
         parcelaNumero: i,
         origemPagamento: origemPagamento || null,
@@ -251,24 +253,34 @@ export default function Registro() {
     return total;
   }
 
-  // Envio para o Storage com tratamento de erros
+  // Upload robusto com tratamento de timeout e falhas de rede
   async function salvarImagemNoStorage(uri) {
     if (!uri) return null;
-    const response = await fetch(uri);
-    const blob = await response.blob();
+    try {
+      const response = await fetch(uri);
+      const blob = await response.blob();
 
-    const idSeguro = igrejaId || "sem_igreja";
-    const nomeArquivo = `recibos/${idSeguro}_${Date.now()}.jpg`;
-    const storageRef = ref(storage, nomeArquivo);
+      const idSeguro = igrejaId || "sem_igreja";
+      const nomeArquivo = `recibos/${idSeguro}_${Date.now()}.jpg`;
+      const storageRef = ref(storage, nomeArquivo);
 
-    const snapshot = await uploadBytes(storageRef, blob);
-    if (blob.close) blob.close();
+      // Timeout de 20 segundos para conexões lentas
+      const uploadPromise = uploadBytes(storageRef, blob);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout no upload")), 20000)
+      );
 
-    const downloadUrl = await getDownloadURL(snapshot.ref);
-    return downloadUrl;
+      const snapshot = await Promise.race([uploadPromise, timeoutPromise]);
+      if (blob.close) blob.close();
+
+      const downloadUrl = await getDownloadURL(snapshot.ref);
+      return downloadUrl;
+    } catch (e) {
+      console.log("Erro no upload do recibo:", e);
+      throw new Error("Falha ao enviar o recibo. Verifique sua conexão com a internet.");
+    }
   }
 
-  // Galeria com verificação Premium e compressão automática
   async function escolherDaGaleria() {
     const statusAssinatura = verificarStatusAssinatura(igrejaAtiva);
     if (!statusAssinatura.isPremium) {
@@ -283,9 +295,9 @@ export default function Registro() {
     try {
       const result = await launchImageLibrary({
         mediaType: "photo",
-        quality: 0.7, // Comprime a qualidade para 70%
-        maxWidth: 1200, // Limita largura máxima
-        maxHeight: 1200, // Limita altura máxima
+        quality: 0.7,
+        maxWidth: 1200,
+        maxHeight: 1200,
         selectionLimit: 1,
       });
       if (result.didCancel || result.errorCode) return;
@@ -364,7 +376,6 @@ export default function Registro() {
       return;
     }
 
-    // Validação extra do plano Premium caso haja recibo anexado
     const statusAssinatura = verificarStatusAssinatura(igrejaAtiva);
     if (reciboUri && !statusAssinatura.isPremium) {
       showAlert({
@@ -422,8 +433,8 @@ export default function Registro() {
           idUsuario: uid,
           tipoMovimento: "saida",
           tipo: "Parcelada",
-          data: data.getTime(),
-          dataPrimeiraParcela: dataPrimeiraParcela.getTime(),
+          data: inicioDoDia(data),
+          dataPrimeiraParcela: inicioDoDia(dataPrimeiraParcela),
           descricao: descricao.trim(),
           valorTotal: valor,
           observacao: observacao.trim(),
@@ -475,7 +486,7 @@ export default function Registro() {
         idUsuario: uid,
         tipoMovimento,
         tipo,
-        data: data.getTime(),
+        data: inicioDoDia(data),
         descricao: descricao.trim(),
         valorTotal: valor,
         observacao: observacao.trim(),
@@ -487,7 +498,7 @@ export default function Registro() {
       if (tipoMovimento === "entrada") {
         base.valoresRecebidos =
           parcial > 0
-            ? [{ valor: parcial, data: data.getTime(), id: Date.now().toString() }]
+            ? [{ valor: parcial, data: inicioDoDia(data), id: Date.now().toString() }]
             : [];
         base.valorRecebidoTotal = parcial;
       } else {
@@ -496,7 +507,7 @@ export default function Registro() {
             ? [
                 {
                   valor: parcial,
-                  data: data.getTime(),
+                  data: inicioDoDia(data),
                   id: Date.now().toString(),
                   origemPagamento,
                   caixinhaId: origemPagamento === "caixinha" ? caixinhaId : null,

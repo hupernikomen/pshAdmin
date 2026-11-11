@@ -20,12 +20,13 @@ import { useAuth } from "../context/AuthContext";
 import { useAppAlert } from "../context/AlertContext";
 import Load from "../componentes/Load";
 import SwipeCard from "../componentes/SwipeCard";
+import ValorOculto from "../componentes/ValorOculto"; // IMPORTADO: Para usar o visual de bloqueio
 import { podeEditarRegistro } from "../utils/registroEdit";
 import { verificarStatusAssinatura } from "../utils/assinatura";
 import { PLAN_CONFIG } from "../constants/appConfig";
 
 const LIMITES = [
-  { n: 7, label: "Últimos 7", premium: false },
+  { n: 15, label: "Últimos 15", premium: false },
   { n: 30, label: "Últimos 30", premium: true },
   { n: 90, label: "Últimos 90", premium: true },
 ];
@@ -78,7 +79,8 @@ function ehSaidaParcelada(item, parcelas) {
   return false;
 }
 
-function montarLinhasHistorico(dadosFinancas) {
+// Passamos o 'podeEditarEscrita' para esta função decidir se oculta
+function montarLinhasHistorico(dadosFinancas, podeEditarEscrita) {
   const linhas = [];
 
   (dadosFinancas || []).forEach((item) => {
@@ -103,6 +105,18 @@ function montarLinhasHistorico(dadosFinancas) {
     const isParcelada = totalParcelasRaw > 1;
     const totalParcelas = isParcelada ? totalParcelasRaw : null;
 
+    // --- LOGICA DE OCULTAR NOME DO DIZIMISTA ---
+    const isDizimo = item.tipo === "Dízimo";
+    // Ocultamos se for dízimo E o usuário NÃO puder editar (tesoureiro/admin)
+    const ocultarDizimista = isDizimo && !podeEditarEscrita; 
+
+    // Definimos a descrição final aqui
+    let descricaoFinal = item.descricao || item.tipo || "Sem descrição";
+    if (ocultarDizimista) {
+        descricaoFinal = "Dízimo"; // Nome genérico
+    }
+    // -------------------------------------------
+
     if (item.tipoMovimento === "saida" && pagos.length > 0) {
       pagos.forEach((p, idx) => {
         const tsPag = Number(p.data || sortBase) || sortBase;
@@ -118,7 +132,7 @@ function montarLinhasHistorico(dadosFinancas) {
           id: item.id,
           tipoMovimento: "saida",
           tipo: item.tipo || "Pagamento",
-          descricao: item.descricao || item.tipo || "Despesa",
+          descricao: descricaoFinal, // Usamos a descrição final definida acima
           data: tsPag,
           valorTotal: Number(p.valor) || 0,
           valorPagoTotal: Number(p.valor) || 0,
@@ -134,6 +148,7 @@ function montarLinhasHistorico(dadosFinancas) {
           sortKey: tsPag,
           createdAt: createdAtPai,
           reciboUrl: item.reciboUrl || null,
+          ocultarDizimista, // Passamos esta flag para o renderItem usar
         });
       });
       return;
@@ -154,7 +169,7 @@ function montarLinhasHistorico(dadosFinancas) {
             id: item.id,
             tipoMovimento: "saida",
             tipo: item.tipo || "Pagamento",
-            descricao: item.descricao || item.tipo || "Despesa",
+            descricao: descricaoFinal, // Usamos a descrição final definida acima
             data: tsPag,
             valorTotal: Number(p.valor) || 0,
             valorPagoTotal: Number(p.valor) || 0,
@@ -174,6 +189,7 @@ function montarLinhasHistorico(dadosFinancas) {
             sortKey: tsPag,
             createdAt: createdAtPai,
             reciboUrl: item.reciboUrl || null,
+            ocultarDizimista, // Passamos esta flag para o renderItem usar
           });
         });
         return;
@@ -193,7 +209,7 @@ function montarLinhasHistorico(dadosFinancas) {
           id: item.id,
           tipoMovimento: "entrada",
           tipo: item.tipo || "Recebimento",
-          descricao: item.descricao || item.tipo || "Receita",
+          descricao: descricaoFinal, // Usamos a descrição final definida acima
           data: tsRec,
           observacao: item.observacao || null,
           valorTotal: Number(p.valor) || 0,
@@ -204,6 +220,7 @@ function montarLinhasHistorico(dadosFinancas) {
           sortKey: tsRec,
           createdAt: createdAtPai,
           reciboUrl: item.reciboUrl || null,
+          ocultarDizimista, // Passamos esta flag para o renderItem usar
         });
       });
       return;
@@ -223,6 +240,8 @@ function montarLinhasHistorico(dadosFinancas) {
       reg: createdAtPai,
       parcelaNumero: null,
       parcelaTotal: null,
+      descricao: descricaoFinal, // Usamos a descrição final definida acima
+      ocultarDizimista, // Passamos esta flag para o renderItem usar
     });
   });
 
@@ -251,7 +270,7 @@ export default function Historico() {
   const navigation = useNavigation();
   const [refreshing, setRefreshing] = useState(false);
   const [fotoSelecionada, setFotoSelecionada] = useState(null);
-  const [limite, setLimite] = useState(7);
+  const [limite, setLimite] = useState(15);
   const [abertoId, setAbertoId] = useState(null);
 
   const principal = colors.principal || colors.primary;
@@ -272,6 +291,8 @@ export default function Historico() {
     await HistoricoMovimentos();
     setRefreshing(false);
   };
+
+  const podeEditarPapel = podeEditarFinanceiro?.() !== false;
 
   // Função atualizada para abrir recibos tanto da web (Firebase Storage) quanto locais antigos
   async function abrirRecibo(reciboUrl) {
@@ -302,16 +323,14 @@ export default function Historico() {
   }
 
   const linhas = useMemo(
-    () => montarLinhasHistorico(dadosFinancas),
-    [dadosFinancas]
+    () => montarLinhasHistorico(dadosFinancas, podeEditarPapel), // Passamos a permissão aqui
+    [dadosFinancas, podeEditarPapel]
   );
 
   const linhasLimitadas = useMemo(
     () => linhas.slice(0, limite),
     [linhas, limite]
   );
-
-  const podeEditarPapel = podeEditarFinanceiro?.() !== false;
 
   if (!authPronto) return <Load />;
   if (!financasProntas && !refreshing) return <Load />;
@@ -419,15 +438,21 @@ export default function Historico() {
 
           const temRecibo = !!item.reciboUrl;
           const origem = textoOrigem(item);
+          // Flag para editar é o papel E se o registro permite edição
           const editavel = podeEditarPapel && podeEditarRegistro(item);
 
           const dataStr = item.data
             ? new Date(item.data).toLocaleDateString("pt-BR")
             : "-";
 
-          const obsLimpa = item.observacao
+          // --- LOGICA DE OCULTAR OBSERVAÇÃO ---
+          // Se o dízimo estiver oculto, não mostramos a observação original (pois pode conter o nome)
+          const mostrarObs = !item.ocultarDizimista && !!item.observacao;
+
+          const obsLimpa = mostrarObs
             ? String(item.observacao).trim().replace(/\n/g, " ")
             : null;
+          // ------------------------------------
 
           const partesSub = [
             dataStr,
@@ -465,6 +490,14 @@ export default function Historico() {
           const iconEntrada = dark ? "#81C784" : "#2E7D32";
           const iconSaida = dark ? "#E57373" : "#C62828";
 
+          // Usamos o componente ValorOculto como título se ocultarDizimista for true
+          const TituloItem = item.ocultarDizimista ? (
+             // Usamos o visual do bloqueio cinza conforme solicitado
+            <ValorOculto size="small" style={{ alignSelf: 'flex-start', marginVertical: 4 }} />
+          ) : (
+            item.descricao || "Sem descrição"
+          );
+
           return (
             <SwipeCard
               hasRecibo={temRecibo}
@@ -472,7 +505,7 @@ export default function Historico() {
               icon={isEntrada ? "arrow-down-outline" : "arrow-up-outline"}
               iconColor={isEntrada ? iconEntrada : iconSaida}
               tint={isEntrada ? tintEntrada : tintSaida}
-              title={item.descricao || "Sem descrição"}
+              title={TituloItem} // Passamos o componente ou a string
               subtitle={partesSub.join(" · ")}
               value={`${isEntrada ? "+" : "-"} ${formatoMoeda.format(valor)}`}
               actions={actions}

@@ -1,3 +1,4 @@
+// src/screens/EditarRegistro.js
 import { useContext, useEffect, useState } from "react";
 import {
   View,
@@ -18,7 +19,8 @@ import {
   addDoc,
   collection,
 } from "firebase/firestore";
-import { db } from "../firebaseConnection";
+import { ref, deleteObject } from "firebase/storage"; // <-- IMPORTAÇÕES DO STORAGE
+import { db, storage } from "../firebaseConnection"; // <-- IMPORTADO 'storage'
 import { AppContext } from "../context/AppContext";
 import { useAppAlert } from "../context/AlertContext";
 import Load from "../componentes/Load";
@@ -86,7 +88,6 @@ function alinharParcelasPagas(parcelas, dataAntiga, dataNova) {
   });
 }
 
-/** Recalcula as parcelas proporcionalmente ou ajusta a última ao alterar o valor total */
 function recalcularParcelas(parcelasAntigas, novoValorTotal) {
   if (!Array.isArray(parcelasAntigas) || parcelasAntigas.length === 0) return [];
   const n = parcelasAntigas.length;
@@ -261,7 +262,7 @@ export default function EditarRegistro() {
     if (selected) setData(selected);
   }
 
-async function salvar() {
+  async function salvar() {
     if (!item) return;
 
     if (!podeEditar) {
@@ -308,8 +309,6 @@ async function salvar() {
 
     const pagoAtual = Number(item.valorPagoTotal || item.valorRecebidoTotal || 0) || 0;
     
-    // Se o registro for de entrada/saída simples e estiver totalmente quitado, 
-    // o valor pago/recebido deve acompanhar o novo total editado.
     const ehQuitadoSimples = 
       (!item.parcelas || item.parcelas.length === 0) && 
       (item.status === "quitada" || pagoAtual >= Number(item.valorTotal || 0) * 0.99);
@@ -330,8 +329,6 @@ async function salvar() {
     try {
       const dataAntiga = Number(item.data || 0);
       const dataNova = data.getTime();
-
-      // Determina o status correto (quitada se o total novo igualar o pago, aberta se for maior)
       const status = novoTotal <= novoValorEfetivo ? "quitada" : "aberta";
 
       const patch = {
@@ -343,20 +340,15 @@ async function salvar() {
         atualizadoEm: Date.now(),
       };
 
-      // 1. Atualização para ENTRADA simples (valoresRecebidos)
       if (item.tipoMovimento === "entrada") {
         if (Array.isArray(item.valoresRecebidos) && item.valoresRecebidos.length > 0) {
-          // Atualiza o primeiro item do array com o novo valor total e nova data
           patch.valoresRecebidos = item.valoresRecebidos.map((r, index) => 
             index === 0 ? { ...r, valor: novoTotal, data: dataNova } : r
           );
         }
         patch.valorRecebidoTotal = novoTotal;
-      } 
-      // 2. Atualização para SAÍDA simples (valoresPagos)
-      else if (item.tipoMovimento === "saida") {
+      } else if (item.tipoMovimento === "saida") {
         if (Array.isArray(item.valoresPagos) && item.valoresPagos.length > 0) {
-          // Atualiza o primeiro item do array com o novo valor total e nova data
           patch.valoresPagos = item.valoresPagos.map((p, index) => 
             index === 0 ? { ...p, valor: novoTotal, data: dataNova } : p
           );
@@ -364,13 +356,11 @@ async function salvar() {
         patch.valorPagoTotal = novoTotal;
       }
 
-      // 3. Se possuir parcelas, recalcula proporcionalmente
       if (Array.isArray(item.parcelas) && item.parcelas.length > 0) {
         patch.parcelas = recalcularParcelas(item.parcelas, novoTotal);
         patch.parcelas = alinharParcelasPagas(patch.parcelas, dataAntiga, dataNova);
       }
 
-      // Alinha datas genéricas se houver múltiplos registros nos arrays
       if (Array.isArray(item.valoresPagos) && item.valoresPagos.length > 1) {
         patch.valoresPagos = alinharDatasLista(item.valoresPagos, dataAntiga, dataNova);
       }
@@ -435,15 +425,36 @@ async function salvar() {
       if (typeof DepositarNaCaixinha === "function") {
         await DepositarNaCaixinha(caixinhaId, valor);
       } else {
-        const ref = doc(db, "caixinhas", caixinhaId);
-        const snap = await getDoc(ref);
+        const refDoc = doc(db, "caixinhas", caixinhaId);
+        const snap = await getDoc(refDoc);
         if (!snap.exists()) continue;
         const atual = Number(snap.data().valor) || 0;
-        await updateDoc(ref, {
+        await updateDoc(refDoc, {
           valor: arred(atual + valor),
           atualizadoEm: Date.now(),
         });
       }
+    }
+  }
+
+  // Função para remover o recibo do Firebase Storage caso exista
+  async function removerReciboDoStorage(reciboUrl) {
+    if (!reciboUrl || !storage) return;
+    try {
+      // Extrai o caminho do arquivo do Storage a partir da URL de download pública
+      const decodedUrl = decodeURIComponent(reciboUrl);
+      const startIndex = decodedUrl.indexOf("/o/");
+      if (startIndex === -1) return;
+      
+      const endIndex = decodedUrl.indexOf("?");
+      const pathWithO = decodedUrl.substring(startIndex + 3, endIndex !== -1 ? endIndex : undefined);
+      
+      if (pathWithO) {
+        const imageRef = ref(storage, pathWithO);
+        await deleteObject(imageRef);
+      }
+    } catch (e) {
+      console.log("Aviso: Não foi possível apagar o recibo do Storage ou ele já não existe.", e);
     }
   }
 
@@ -452,7 +463,13 @@ async function salvar() {
 
     setExcluindo(true);
     try {
+      // Devolve valores para as caixinhas se aplicável
       await devolverParaCaixinhas(item);
+
+      // Se houver um recibo associado na nuvem, remove do Firebase Storage
+      if (item.reciboUrl) {
+        await removerReciboDoStorage(item.reciboUrl);
+      }
 
       try {
         const { id: _id, ...resto } = item;
@@ -477,7 +494,7 @@ async function salvar() {
 
       showAlert({
         title: "Excluído",
-        message: "Registro removido e saldo atualizado.",
+        message: "Registro removido, saldo atualizado e recibo limpo da nuvem.",
       });
       navigation.goBack();
     } catch (e) {

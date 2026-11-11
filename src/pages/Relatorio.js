@@ -620,7 +620,6 @@ const styles = StyleSheet.create({
   content: {
     paddingBottom: 100,
     paddingHorizontal: 14,
-    paddingTop: 12,
   },
   block: {
     borderRadius: 18,

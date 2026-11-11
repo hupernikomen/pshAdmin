@@ -30,15 +30,20 @@ function useVerificarAtualizacao() {
     if (Platform.OS !== "android") return;
 
     try {
-      const inAppUpdates = new SpInAppUpdates(false);
+      const inAppUpdates = new SpInAppUpdates(true);
 
       inAppUpdates
         .checkNeedsUpdate()
         .then((result) => {
+          console.log("Resultado da verificação:", result);
+
           if (!result?.shouldUpdate) return;
 
           let updateType = null;
 
+          // Se a versão estiver pendente, vamos definir o tipo de atualização
+          // O FLEXIBLE mostra uma barra de progresso baixando em background
+          // O IMMEDIATE trava a tela com um popup tela cheia exigindo atualizar
           if (result.isFlexibleUpdateAllowed) {
             updateType = IAUUpdateKind.FLEXIBLE;
           } else if (result.isImmediateUpdateAllowed) {
@@ -47,10 +52,18 @@ function useVerificarAtualizacao() {
 
           if (!updateType) return;
 
-          inAppUpdates.startUpdate({ updateType });
+          // Passamos a 'updatePriority': 5 força o Google a dar destaque para o aviso
+          inAppUpdates.startUpdate({
+            updateType,
+            updatePriority: 5, // Prioridade máxima (de 0 a 5)
+          });
         })
-        .catch(() => {});
-    } catch (e) {}
+        .catch((err) => {
+          console.log("Erro na checagem de update:", err);
+        });
+    } catch (e) {
+      console.log("Erro geral:", e);
+    }
   }, []);
 }
 

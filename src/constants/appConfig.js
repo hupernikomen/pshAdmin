@@ -8,7 +8,7 @@ export const PLAN_CONFIG = {
   // Regras da versão Gratuita (Free)
   FREE_LIMITES: {
     LIMITE_HISTORICO: 10,
-    PERMITE_CAIXINHAS: false,
+    PERMITE_CAIXINHAS: true,
     MAX_USUARIOS: 1, // Apenas o admin principal
     PERMITE_GERAR_RELATORIO: false, // Exemplo: se quiser bloquear o relatório no grátis
   },
@@ -17,7 +17,7 @@ export const PLAN_CONFIG = {
   PREMIUM_LIMITES: {
     LIMITE_HISTORICO: Infinity,
     PERMITE_CAIXINHAS: true,
-    MAX_USUARIOS: Infinity,
+    MAX_USUARIOS: 5,
     PERMITE_GERAR_RELATORIO: true,
   },
 
