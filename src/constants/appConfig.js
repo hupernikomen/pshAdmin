@@ -2,8 +2,8 @@
 
 export const PLAN_CONFIG = {
   // Configurações financeiras dos planos
-  PRECO_MES: 3.90,
-  PRECO_ANUAL: 34.90,
+  PRECO_MES: 2.90,
+  PRECO_ANUAL: 24.90,
 
   // Regras da versão Gratuita (Free)
   FREE_LIMITES: {

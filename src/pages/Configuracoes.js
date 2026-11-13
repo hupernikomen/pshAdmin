@@ -25,7 +25,7 @@ import { AppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
 import { useAppAlert } from "../context/AlertContext";
 
-const MS_30_DIAS = 30 * 24 * 60 * 60 * 1000;
+const MS_3_DIAS = 3 * 24 * 60 * 60 * 1000;
 
 function parseNumero(txt) {
   if (txt === null || txt === undefined) return 0;
@@ -291,11 +291,11 @@ export default function Configuracoes() {
     if (!isAdmin || !igrejaId || processandoExclusao) return;
 
     const nomeIg = igrejaAtiva?.nome || "esta igreja";
-    const prevista = formatarData(Date.now() + MS_30_DIAS);
+    const prevista = formatarData(Date.now() + MS_3_DIAS);
 
     showAlert({
       title: "Agendar exclusão",
-      message: `A igreja "${nomeIg}" será excluída permanentemente em 30 dias (${prevista}).\n\nAté lá você pode cancelar a exclusão. Depois dessa data, registros, caixinhas e membros serão apagados.`,
+      message: `A igreja "${nomeIg}" será excluída permanentemente em 3 dias (${prevista}).\n\nAté lá você pode cancelar a exclusão. Depois dessa data, registros, caixinhas e membros serão apagados e você poderá criar uma nova Igreja.`,
       buttons: [
         { text: "Cancelar", style: "cancel" },
         {
@@ -315,7 +315,7 @@ export default function Configuracoes() {
       const agora = Date.now();
       await updateDoc(doc(db, "igrejas", igrejaId), {
         exclusaoAgendadaEm: agora,
-        exclusaoPrevistaEm: agora + MS_30_DIAS,
+        exclusaoPrevistaEm: agora + MS_3_DIAS,
         exclusaoSolicitadaPor: uid || null,
         updatedAt: agora,
       });
@@ -327,7 +327,7 @@ export default function Configuracoes() {
       showAlert({
         title: "Exclusão agendada",
         message: `A igreja será excluída em ${formatarData(
-          agora + MS_30_DIAS
+          agora + MS_3_DIAS
         )}. Você pode cancelar antes disso nesta tela.`,
       });
     } catch (e) {
@@ -627,7 +627,7 @@ export default function Configuracoes() {
                       { color: colors.negativo || "#C62828" },
                     ]}
                   >
-                    Excluir igreja em 30 dias
+                    Excluir igreja em 3 dias
                   </Text>
                 )}
               </TouchableOpacity>

@@ -21,6 +21,7 @@ import {
   calcularSaldoRealizado,
   totaisPendentes,
 } from "../utils/financeiro";
+import { agendarNotificacaoDoSistema, testarNotificacaoImediata } from "../services/notificacoes";
 
 export const AppContext = createContext({});
 
@@ -77,7 +78,6 @@ export function AppProvider({ children }) {
 
   const [semConexao, setSemConexao] = useState(false);
 
-  // Trava em memória para evitar criação duplicada em renderizações simultâneas
   const criandoReservaRef = useRef(false);
 
   function getUserId() {
@@ -108,7 +108,7 @@ export function AppProvider({ children }) {
       try {
         const v = await AsyncStorage.getItem(KEY_OCULTAR_VALORES);
         setOcultarValoresState(v === "1");
-      } catch (_) {}
+      } catch (_) { }
 
       try {
         const n = await AsyncStorage.getItem(KEY_OCULTAR_NOMES_DOADORES);
@@ -117,7 +117,7 @@ export function AppProvider({ children }) {
         } else {
           setOcultarNomesDoadoresState(n === "1");
         }
-      } catch (_) {}
+      } catch (_) { }
     })();
   }, []);
 
@@ -126,7 +126,7 @@ export function AppProvider({ children }) {
     setOcultarValoresState(next);
     try {
       await AsyncStorage.setItem(KEY_OCULTAR_VALORES, next ? "1" : "0");
-    } catch (_) {}
+    } catch (_) { }
   }
 
   function toggleOcultarValores() {
@@ -138,12 +138,31 @@ export function AppProvider({ children }) {
     setOcultarNomesDoadoresState(next);
     try {
       await AsyncStorage.setItem(KEY_OCULTAR_NOMES_DOADORES, next ? "1" : "0");
-    } catch (_) {}
+    } catch (_) { }
   }
 
   function toggleOcultarNomesDoadores() {
     setOcultarNomesDoadores(!ocultarNomesDoadores);
   }
+
+  // Inicialização das notificações ao abrir o app autenticado
+  useEffect(() => {
+    if (!authPronto || !uid) return;
+
+    (async () => {
+      try {
+        // 1. Agenda o lembrete semanal de culto
+        await agendarNotificacaoDoSistema('LEMBRETE_CULTO');
+
+        // 2. Se a igreja ativa tiver uma data de expiração cadastrada, agenda o aviso de vencimento
+        if (igrejaAtiva?.dataExpiracaoPremium) {
+          await agendarNotificacaoDoSistema('AVISO_VENCIMENTO_PLANO', igrejaAtiva.dataExpiracaoPremium);
+        }
+      } catch (err) {
+        console.log("Erro ao configurar notificações:", err);
+      }
+    })();
+  }, [authPronto, uid, igrejaAtiva?.dataExpiracaoPremium]);
 
   useEffect(() => {
     if (!authPronto) return;
@@ -324,7 +343,7 @@ export function AppProvider({ children }) {
         setIgrejaAtiva(null);
         try {
           await AsyncStorage.removeItem(KEY_IGREJA_ATIVA);
-        } catch (_) {}
+        } catch (_) { }
       }
     } catch (e) {
       console.log("Erro carregarIgrejasDoUsuario:", e);
@@ -566,7 +585,6 @@ export function AppProvider({ children }) {
     return calcularSaldoRealizado(lista);
   }
 
-  // Auto-healing resiliente para criar a Reserva de Emergência caso ainda não exista
   async function garantirReservaEmergencia(igrejaId, listaAtual) {
     const jaExiste = (listaAtual || []).some(
       (c) => c.nome === "Reserva de emergência"
@@ -595,7 +613,7 @@ export function AppProvider({ children }) {
         id: docRef.id,
         igrejaId,
         idUsuario: userId,
-        nome: "Reserva de Emergência",
+        nome: "Reserva de emergência",
         valor: 0,
         editavel: false,
         naoExcluir: true,
@@ -638,7 +656,6 @@ export function AppProvider({ children }) {
         lista = snap2.docs.map((d) => ({ id: d.id, ...d.data() }));
       }
 
-      // Se for perfil de escrita e faltar a caixinha padrão, cria automaticamente
       if (podeEditarFinanceiro()) {
         const novaCaixinha = await garantirReservaEmergencia(igrejaId, lista);
         if (novaCaixinha) {
