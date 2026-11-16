@@ -44,20 +44,27 @@ export default function PaywallScreen({ route }) {
   const lockConfig = PLAN_CONFIG.PREMIUM_LOCK || {};
   const lockColor = dark ? lockConfig.colorDark : lockConfig.colorLight;
 
-  // Configura o título da página no header do React Navigation
+  // Validação centralizada via PLAN_CONFIG
+  const statusPlano = PLAN_CONFIG.verificarStatus(igrejaAtiva);
+  const statusAssinatura = verificarStatusAssinatura(igrejaAtiva);
+  const jaEhAtivo = statusAssinatura.isPremium;
+  const textoStatus = statusAssinatura.tempoRestanteTexto;
+
+  // Identifica o tipo exato de plano ativo para customizar os textos
+  const tipoPlanoAtivo = statusPlano.tipo; // "TRIAL", "PAGO", "VITALICIO", "EXPIRADO"
+
+  // Configura o título do Header da navegação baseado no plano
   useEffect(() => {
+    let tituloHeader = "Assinatura";
+    if (tipoPlanoAtivo === "TRIAL") tituloHeader = "Período de Teste";
+    else if (tipoPlanoAtivo === "PAGO" || tipoPlanoAtivo === "VITALICIO") tituloHeader = "Plano Premium";
+
     navigation.setOptions({
       headerShown: true,
-      title: "Premium",
+      title: tituloHeader,
       headerTintColor: text,
     });
-  }, [navigation, text, card]);
-
-// Validação centralizada via PLAN_CONFIG
-  const statusAssinatura = verificarStatusAssinatura(igrejaAtiva);
-  const jaEhPremium = statusAssinatura.isPremium;
-  const textoStatus = statusAssinatura.tempoRestanteTexto;
-  const ehTrial = statusAssinatura.isTrial;
+  }, [navigation, text, card, tipoPlanoAtivo]);
 
   const timestampExpiracao = igrejaAtiva?.dataExpiracaoPremium ? Number(igrejaAtiva.dataExpiracaoPremium) : null;
   const dataExpiracaoFormatada = timestampExpiracao && !isNaN(timestampExpiracao)
@@ -169,6 +176,29 @@ export default function PaywallScreen({ route }) {
     }
   };
 
+  // 🧠 Textos dinâmicos do cabeçalho baseados exclusivamente no plano atual
+  let tituloCard = "Desbloqueie o App Completo";
+  let subtituloCard = "Libere relatórios em PDF ilimitados, criação de caixinhas e todas as funções avançadas para a sua igreja.";
+  let tituloBoxAtivo = "Plano Ativo";
+
+  if (tipoPlanoAtivo === "TRIAL") {
+    tituloCard = "Período de Teste Gratuito";
+    subtituloCard = `Aproveite todas as funcionalidades avançadas para ${nomeIgreja} durante os dias de avaliação.`;
+    tituloBoxAtivo = "Status: Temporário";
+  } else if (tipoPlanoAtivo === "PAGO") {
+    tituloCard = "Sua Igreja é Premium!";
+    subtituloCard = `Parabéns! Todos os recursos avançados e relatórios ilimitados estão ativos para ${nomeIgreja}.`;
+    tituloBoxAtivo = "Plano Premium Ativo";
+  } else if (tipoPlanoAtivo === "VITALICIO") {
+    tituloCard = "Acesso Vitalício Ativo";
+    subtituloCard = `Sua igreja possui acesso permanente e ilimitado a todas as ferramentas de gestão.`;
+    tituloBoxAtivo = "Plano Definitivo";
+  } else if (tipoPlanoAtivo === "EXPIRADO") {
+    tituloCard = "Seu Período Expirou";
+    subtituloCard = "Para continuar utilizando os recursos avançados e gerando relatórios, escolha um plano abaixo.";
+    tituloBoxAtivo = "Acesso Bloqueado";
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
       <ScrollView
@@ -181,20 +211,18 @@ export default function PaywallScreen({ route }) {
               <Ionicons name={lockConfig.icon || "sparkles"} size={32} color={lockColor} />
             </View>
             <Text style={[styles.title, { color: text }]}>
-              {jaEhPremium ? "Sua Igreja é Premium!" : "Desbloqueie o App Completo"}
+              {jaEhAtivo ? tituloCard : (tipoPlanoAtivo === "EXPIRADO" ? tituloCard : "Desbloqueie o App Completo")}
             </Text>
             <Text style={[styles.subtitle, { color: muted }]}>
-              {jaEhPremium
-                ? `Parabéns! Todos os recursos avançados, caixinhas e relatórios ilimitados estão ativos para ${nomeIgreja}.`
-                : "Libere relatórios em PDF ilimitados, criação de caixinhas e todas as funções avançadas para a sua igreja."}
+              {jaEhAtivo ? subtituloCard : subtituloCard}
             </Text>
           </View>
 
-          {jaEhPremium ? (
+          {jaEhAtivo ? (
             <View style={styles.premiumAtivoContainer}>
               <View style={[styles.statusBoxAtivo, { borderColor: principal, backgroundColor: principal + "10" }]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.statusAtivoTitulo, { color: text }]}>Plano Ativo</Text>
+                  <Text style={[styles.statusAtivoTitulo, { color: text }]}>{tituloBoxAtivo}</Text>
                   <Text style={[styles.statusAtivoDescricao, { color: muted }]}>
                     {textoStatus}
                   </Text>

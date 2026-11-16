@@ -34,7 +34,7 @@ export default function MenuScreen() {
   const muted = colors.muted || (dark ? "#9aa0a6" : "#888");
   const bg = colors.background;
   const border = colors.border || (dark ? "#333" : "#ececec");
-      const lockConfig = PLAN_CONFIG.PREMIUM_LOCK || {};
+  const lockConfig = PLAN_CONFIG.PREMIUM_LOCK || {};
 
   useEffect(() => {
     navigation.setOptions({
@@ -51,6 +51,30 @@ export default function MenuScreen() {
         message: "Não foi possível sair.",
       });
     }
+  }
+
+  // 🧠 Lógica dinâmica para o botão do Menu baseado no status centralizado
+  const statusPlano = PLAN_CONFIG.verificarStatus(igrejaAtiva);
+  let menuPremiumTitulo = "Seja Premium";
+  let menuPremiumSub = "Desbloqueie todos os recursos";
+  let menuPremiumColor = "#10b981"; // Verde (Chamada pra ação padrão)
+
+  if (statusPlano.tipo === "VITALICIO") {
+    menuPremiumTitulo = "Premium Vitalício";
+    menuPremiumSub = "Seu acesso é ilimitado e definitivo";
+    menuPremiumColor = "#f59e0b"; // Dourado/Amarelo
+  } else if (statusPlano.tipo === "PAGO") {
+    menuPremiumTitulo = "Plano Premium";
+    menuPremiumSub = `Ativo · Restam ${statusPlano.diasRestantes} dias`;
+    menuPremiumColor = "#3b82f6"; // Azul
+  } else if (statusPlano.tipo === "TRIAL") {
+    menuPremiumTitulo = "Período de Teste";
+    menuPremiumSub = `Restam ${statusPlano.diasRestantes} dias gratuitos`;
+    menuPremiumColor = "#8b5cf6"; // Roxo
+  } else if (statusPlano.tipo === "EXPIRADO") {
+    menuPremiumTitulo = "Plano Expirado";
+    menuPremiumSub = "Toque para reativar seu acesso";
+    menuPremiumColor = "#ef4444"; // Vermelho
   }
 
   return (
@@ -132,7 +156,6 @@ export default function MenuScreen() {
             </TouchableOpacity>
           )}
 
-          {/* NOVO BOTÃO: PROJEÇÃO DE GASTOS */}
           <TouchableOpacity
             style={styles.menuItem}
             onPress={() => navigation.navigate("Projecao")}
@@ -167,8 +190,6 @@ export default function MenuScreen() {
 
           <Text style={[styles.sectionTitle, { color: muted, marginTop: 18 }]}>CONTA E AJUSTES</Text>
 
-        
-
           <TouchableOpacity
             style={styles.menuItem}
             onPress={() => navigation.navigate("Configuracoes")}
@@ -184,17 +205,18 @@ export default function MenuScreen() {
             <Ionicons name="chevron-forward" size={18} color={muted} />
           </TouchableOpacity>
 
-            <TouchableOpacity
+          {/* BOTÃO PREMIUM DINÂMICO */}
+          <TouchableOpacity
             style={styles.menuItem}
             onPress={() => navigation.navigate("Paywall")}
             activeOpacity={0.6}
           >
-            <View style={[styles.iconBox, { backgroundColor: "#10b98115" }]}>
-              <Ionicons    name={lockConfig.icon || "sparkles"} size={20} color="#10b981" />
+            <View style={[styles.iconBox, { backgroundColor: menuPremiumColor + "15" }]}>
+              <Ionicons name={lockConfig.icon || "sparkles"} size={20} color={menuPremiumColor} />
             </View>
             <View style={styles.menuItemTextos}>
-              <Text style={[styles.menuItemTitulo, { color: text }]}>Seja Premium</Text>
-              <Text style={[styles.menuItemSub, { color: muted }]}>Gerencie seu plano e recursos</Text>
+              <Text style={[styles.menuItemTitulo, { color: text }]}>{menuPremiumTitulo}</Text>
+              <Text style={[styles.menuItemSub, { color: muted }]}>{menuPremiumSub}</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={muted} />
           </TouchableOpacity>
