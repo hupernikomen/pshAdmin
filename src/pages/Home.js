@@ -419,6 +419,7 @@ export default function Home() {
               tintColor={principal}
             />
           }
+          ListHeaderComponentStyle={{ marginBottom: 7 }}
           ListHeaderComponent={
             <View>
               <HomeTopo {...topoProps} />
@@ -453,13 +454,13 @@ export default function Home() {
               actions={
                 item.route
                   ? [
-                      {
-                        key: "go",
-                        icon: "arrow-forward",
-                        backgroundColor: principal,
-                        onPress: () => navigation.navigate(item.route),
-                      },
-                    ]
+                    {
+                      key: "go",
+                      icon: "arrow-forward",
+                      backgroundColor: principal,
+                      onPress: () => navigation.navigate(item.route),
+                    },
+                  ]
                   : []
               }
               onPress={

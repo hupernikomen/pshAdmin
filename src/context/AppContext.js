@@ -184,7 +184,7 @@ export function AppProvider({ children }) {
           await agendarNotificacaoDoSistema('AVISO_VENCIMENTO_PLANO', igrejaAtiva.dataExpiracaoPremium);
         }
       } catch (err) {
-        console.log("Erro ao configurar notificações:", err);
+        console.log("Erro ao configurar notificações em segundo plano:", err);
       }
     })();
   }, [authPronto, uid, igrejaAtiva?.dataExpiracaoPremium]);

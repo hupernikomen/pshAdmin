@@ -1,3 +1,4 @@
+// App.js
 import { useEffect, useContext } from "react";
 import {
   StatusBar,
@@ -41,9 +42,6 @@ function useVerificarAtualizacao() {
 
           let updateType = null;
 
-          // Se a versão estiver pendente, vamos definir o tipo de atualização
-          // O FLEXIBLE mostra uma barra de progresso baixando em background
-          // O IMMEDIATE trava a tela com um popup tela cheia exigindo atualizar
           if (result.isFlexibleUpdateAllowed) {
             updateType = IAUUpdateKind.FLEXIBLE;
           } else if (result.isImmediateUpdateAllowed) {
@@ -52,10 +50,9 @@ function useVerificarAtualizacao() {
 
           if (!updateType) return;
 
-          // Passamos a 'updatePriority': 5 força o Google a dar destaque para o aviso
           inAppUpdates.startUpdate({
             updateType,
-            updatePriority: 5, // Prioridade máxima (de 0 a 5)
+            updatePriority: 5,
           });
         })
         .catch((err) => {
@@ -150,8 +147,14 @@ const stylesOffline = StyleSheet.create({
 
 function AppNavigator() {
   const { user, authPronto } = useContext(AuthContext);
-  const { igrejasProntas, semConexao, carregarIgrejasDoUsuario, igrejaAtiva } =
-    useContext(AppContext);
+  const {
+    igrejasProntas,
+    financasProntas,
+    igrejasDoUsuario,
+    semConexao,
+    carregarIgrejasDoUsuario,
+    igrejaAtiva,
+  } = useContext(AppContext);
   const { tema, ready } = useAppTheme();
   const { colors } = tema;
 
@@ -171,7 +174,15 @@ function AppNavigator() {
     } catch (e) {}
   }, [tema.dark]);
 
-  if (!ready || !authPronto || (user && !igrejasProntas)) {
+  // 🛡️ Blindagem total contra piscadas e redirecionamentos prematuros:
+  // Mantém o Load na tela até que o tema, autenticação, igrejas, seleção da igreja ativa e extrato financeiro estejam 100% prontos.
+  const estaCarregandoDados =
+    user &&
+    (!igrejasProntas ||
+      !financasProntas ||
+      (igrejasDoUsuario.length > 0 && !igrejaAtiva));
+
+  if (!ready || !authPronto || estaCarregandoDados) {
     return <Load />;
   }
 
