@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 
-const TAB_SIZE = 52;
+const TAB_SIZE = 54;
 const PILL_SIZE = 50;
 
 function nomeIcone(nome, focado) {

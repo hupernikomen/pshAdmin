@@ -4,6 +4,10 @@ export const PLAN_CONFIG = {
   PRECO_MES: 3.90,
   PRECO_ANUAL: 36.90,
   DIAS_TRIAL_GRATUITO: 15,
+  DIAS_EXCLUSAO_IGREJA: 7,
+
+  // ⏱️ Limite de tempo para editar um registro (ex: 24 horas em milissegundos)
+  TEMPO_EDICAO_RG: 24 * 60 * 60 * 1000,
 
   FREE_LIMITES: {
     LIMITE_HISTORICO: 10,
@@ -27,7 +31,7 @@ export const PLAN_CONFIG = {
   },
 
   /**
-   * 🧠 REGRA CENTRALIZADA DE ASSINATURA
+   * REGRA CENTRALIZADA DE ASSINATURA
    * Trata as 4 situações solicitadas:
    * 1. Vitalício: isPremium true, dataExpiracaoPremium null/0
    * 2. Pago / Trial Ativo: isPremium true, dataExpiracaoPremium > agora

@@ -24,8 +24,10 @@ import { db } from "../firebaseConnection";
 import { AppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
 import { useAppAlert } from "../context/AlertContext";
+import { PLAN_CONFIG } from "../constants/appConfig"; // 👈 Importação centralizada
 
-const MS_3_DIAS = 3 * 24 * 60 * 60 * 1000;
+const DIAS_EXCLUSAO = PLAN_CONFIG.DIAS_EXCLUSAO_IGREJA || 3;
+const MS_DIAS_EXCLUSAO = DIAS_EXCLUSAO * 24 * 60 * 60 * 1000;
 
 function parseNumero(txt) {
   if (txt === null || txt === undefined) return 0;
@@ -95,7 +97,6 @@ export default function Configuracoes() {
   const semIgreja = !igrejaAtiva?.id;
   const isAdmin = igrejaAtiva?.papel === "admin";
   
-  // Utiliza a função do contexto para validar escrita (Admin ou Tesoureiro)
   const podeFinanceiro = podeEditarFinanceiro ? podeEditarFinanceiro() : (igrejaAtiva?.papel === "admin" || igrejaAtiva?.papel === "tesoureiro");
   
   const igrejaId = getIgrejaId?.() || igrejaAtiva?.id || null;
@@ -291,11 +292,11 @@ export default function Configuracoes() {
     if (!isAdmin || !igrejaId || processandoExclusao) return;
 
     const nomeIg = igrejaAtiva?.nome || "esta igreja";
-    const prevista = formatarData(Date.now() + MS_3_DIAS);
+    const prevista = formatarData(Date.now() + MS_DIAS_EXCLUSAO);
 
     showAlert({
       title: "Agendar exclusão",
-      message: `A igreja "${nomeIg}" será excluída permanentemente em 3 dias (${prevista}).\n\nAté lá você pode cancelar a exclusão. Depois dessa data, registros, caixinhas e membros serão apagados e você poderá criar uma nova Igreja.`,
+      message: `A igreja "${nomeIg}" será excluída permanentemente em ${DIAS_EXCLUSAO} dias (${prevista}).\n\nAté lá você pode cancelar a exclusão. Depois dessa data, registros, caixinhas e membros serão apagados e você poderá criar uma nova Igreja.`,
       buttons: [
         { text: "Cancelar", style: "cancel" },
         {
@@ -315,7 +316,7 @@ export default function Configuracoes() {
       const agora = Date.now();
       await updateDoc(doc(db, "igrejas", igrejaId), {
         exclusaoAgendadaEm: agora,
-        exclusaoPrevistaEm: agora + MS_3_DIAS,
+        exclusaoPrevistaEm: agora + MS_DIAS_EXCLUSAO,
         exclusaoSolicitadaPor: uid || null,
         updatedAt: agora,
       });
@@ -327,7 +328,7 @@ export default function Configuracoes() {
       showAlert({
         title: "Exclusão agendada",
         message: `A igreja será excluída em ${formatarData(
-          agora + MS_3_DIAS
+          agora + MS_DIAS_EXCLUSAO
         )}. Você pode cancelar antes disso nesta tela.`,
       });
     } catch (e) {
@@ -627,7 +628,7 @@ export default function Configuracoes() {
                       { color: colors.negativo || "#C62828" },
                     ]}
                   >
-                    Excluir igreja em 3 dias
+                    Excluir igreja em {DIAS_EXCLUSAO} dias
                   </Text>
                 )}
               </TouchableOpacity>

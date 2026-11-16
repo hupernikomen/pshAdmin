@@ -69,7 +69,7 @@ export default function PaywallScreen({ route }) {
   const economiaFormatada = economiaAnual.toFixed(2).replace(".", ",");
 
   useEffect(() => {
-    let tituloHeader = "Assinatura";
+    let tituloHeader = "Planos e Preços";
     if (tipoPlanoAtivo === "TRIAL") tituloHeader = "Período de Teste";
     else if (tipoPlanoAtivo === "PAGO" || tipoPlanoAtivo === "VITALICIO") tituloHeader = "Plano Premium";
 

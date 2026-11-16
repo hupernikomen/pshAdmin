@@ -1,5 +1,5 @@
 // App.js
-import { useEffect, useContext } from "react";
+import { useEffect, useContext, useState } from "react";
 import {
   StatusBar,
   View,
@@ -158,6 +158,9 @@ function AppNavigator() {
   const { tema, ready } = useAppTheme();
   const { colors } = tema;
 
+  // 🛡️ Estado extra de estabilização para evitar qualquer piscada de transição prematura
+  const [estabilizado, setEstabilizado] = useState(false);
+
   useVerificarAtualizacao();
 
   useEffect(() => {
@@ -174,15 +177,27 @@ function AppNavigator() {
     } catch (e) {}
   }, [tema.dark]);
 
-  // 🛡️ Blindagem total contra piscadas e redirecionamentos prematuros:
-  // Mantém o Load na tela até que o tema, autenticação, igrejas, seleção da igreja ativa e extrato financeiro estejam 100% prontos.
   const estaCarregandoDados =
     user &&
     (!igrejasProntas ||
       !financasProntas ||
       (igrejasDoUsuario.length > 0 && !igrejaAtiva));
 
-  if (!ready || !authPronto || estaCarregandoDados) {
+  const estaPronto = ready && authPronto && !estaCarregandoDados;
+
+  // Timer de estabilização de renderização para blindar contra flickering de tela
+  useEffect(() => {
+    if (estaPronto) {
+      const timer = setTimeout(() => {
+        setEstabilizado(true);
+      }, 150);
+      return () => clearTimeout(timer);
+    } else {
+      setEstabilizado(false);
+    }
+  }, [estaPronto]);
+
+  if (!estaPronto || !estabilizado) {
     return <Load />;
   }
 
