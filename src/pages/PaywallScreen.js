@@ -50,10 +50,24 @@ export default function PaywallScreen({ route }) {
   const jaEhAtivo = statusAssinatura.isPremium;
   const textoStatus = statusAssinatura.tempoRestanteTexto;
 
-  // Identifica o tipo exato de plano ativo para customizar os textos
   const tipoPlanoAtivo = statusPlano.tipo; // "TRIAL", "PAGO", "VITALICIO", "EXPIRADO"
+  const ehVitalicio = tipoPlanoAtivo === "VITALICIO";
 
-  // Configura o título do Header da navegação baseado no plano
+  // Informações dinâmicas extraídas diretamente de PLAN_CONFIG
+  const limiteHistoricoGrats = PLAN_CONFIG.FREE_LIMITES.LIMITE_HISTORICO;
+  const permiteCaixinhasGratis = PLAN_CONFIG.FREE_LIMITES.PERMITE_CAIXINHAS;
+  const maxUsuariosGratis = PLAN_CONFIG.FREE_LIMITES.MAX_USUARIOS;
+
+  const maxUsuariosPremium = PLAN_CONFIG.PREMIUM_LIMITES.MAX_USUARIOS;
+  const diasTrialGratuito = PLAN_CONFIG.DIAS_TRIAL_GRATUITO;
+
+  const valorMes = PLAN_CONFIG.PRECO_MES;
+  const valorAnual = PLAN_CONFIG.PRECO_ANUAL;
+
+  const valorTotalMensal12Meses = valorMes * 12;
+  const economiaAnual = valorTotalMensal12Meses - valorAnual;
+  const economiaFormatada = economiaAnual.toFixed(2).replace(".", ",");
+
   useEffect(() => {
     let tituloHeader = "Assinatura";
     if (tipoPlanoAtivo === "TRIAL") tituloHeader = "Período de Teste";
@@ -71,15 +85,11 @@ export default function PaywallScreen({ route }) {
     ? new Date(timestampExpiracao).toLocaleDateString("pt-BR")
     : null;
 
-  const valorTotalMensal12Meses = PLAN_CONFIG.PRECO_MES * 12;
-  const economiaAnual = valorTotalMensal12Meses - PLAN_CONFIG.PRECO_ANUAL;
-  const economiaFormatada = economiaAnual.toFixed(2).replace(".", ",");
-
   const handleAssinar = async (tipoPlano) => {
     setPlanoEscolhido(tipoPlano);
     setLoading(true);
     const valor =
-      tipoPlano === "MENSAL" ? PLAN_CONFIG.PRECO_MES : PLAN_CONFIG.PRECO_ANUAL;
+      tipoPlano === "MENSAL" ? valorMes : valorAnual;
 
     const resultado = await gerarPagamentoPix({
       plano: tipoPlano,
@@ -104,7 +114,6 @@ export default function PaywallScreen({ route }) {
     }
   };
 
-  // Verificação em tempo real via setInterval caso o app continue aberto
   useEffect(() => {
     let intervalo = null;
 
@@ -176,7 +185,6 @@ export default function PaywallScreen({ route }) {
     }
   };
 
-  // 🧠 Textos dinâmicos do cabeçalho baseados exclusivamente no plano atual
   let tituloCard = "Desbloqueie o App Completo";
   let subtituloCard = "Libere relatórios em PDF ilimitados, criação de caixinhas e todas as funções avançadas para a sua igreja.";
   let tituloBoxAtivo = "Plano Ativo";
@@ -184,7 +192,7 @@ export default function PaywallScreen({ route }) {
   if (tipoPlanoAtivo === "TRIAL") {
     tituloCard = "Período de Teste Gratuito";
     subtituloCard = `Aproveite todas as funcionalidades avançadas para ${nomeIgreja} durante os dias de avaliação.`;
-    tituloBoxAtivo = "Status: Temporário";
+    tituloBoxAtivo = "Status: Em Período de Teste";
   } else if (tipoPlanoAtivo === "PAGO") {
     tituloCard = "Sua Igreja é Premium!";
     subtituloCard = `Parabéns! Todos os recursos avançados e relatórios ilimitados estão ativos para ${nomeIgreja}.`;
@@ -207,9 +215,12 @@ export default function PaywallScreen({ route }) {
       >
         <View style={[styles.block, { backgroundColor: card }]}>
           <View style={styles.headerBox}>
-            <View style={[styles.iconHeaderBox, { backgroundColor: lockColor + "15" }]}>
-              <Ionicons name={lockConfig.icon || "sparkles"} size={32} color={lockColor} />
-            </View>
+            {jaEhAtivo && (
+              <View style={[styles.iconHeaderBox, { backgroundColor: lockColor + "15" }]}>
+                <Ionicons name={lockConfig.icon || "sparkles"} size={32} color={lockColor} />
+              </View>
+            )}
+
             <Text style={[styles.title, { color: text }]}>
               {jaEhAtivo ? tituloCard : (tipoPlanoAtivo === "EXPIRADO" ? tituloCard : "Desbloqueie o App Completo")}
             </Text>
@@ -220,65 +231,168 @@ export default function PaywallScreen({ route }) {
 
           {jaEhAtivo ? (
             <View style={styles.premiumAtivoContainer}>
-              <View style={[styles.statusBoxAtivo, { borderColor: principal, backgroundColor: principal + "10" }]}>
+              <View style={[styles.statusBoxAtivoElegante, { borderColor: principal, backgroundColor: principal + "10" }]}>
+                <View style={[styles.statusIconWrap, { backgroundColor: principal + "20" }]}>
+                  <Ionicons name="shield-checkmark" size={22} color={principal} />
+                </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.statusAtivoTitulo, { color: text }]}>{tituloBoxAtivo}</Text>
-                  <Text style={[styles.statusAtivoDescricao, { color: muted }]}>
+                  <Text style={[styles.statusAtivoTitulo, { color: principal }]}>{tituloBoxAtivo}</Text>
+                  <Text style={[styles.statusAtivoDescricaoElegante, { color: text }]}>
                     {textoStatus}
                   </Text>
                   {dataExpiracaoFormatada && (
-                    <Text style={[styles.statusAtivoData, { color: muted }]}>
-                      Válido até {dataExpiracaoFormatada}
+                    <Text style={[styles.statusAtivoDataElegante, { color: muted }]}>
+                      Válido até: <Text style={{ fontFamily: "Roboto-Bold", color: text }}>{dataExpiracaoFormatada}</Text>
                     </Text>
                   )}
                 </View>
               </View>
-
-              <TouchableOpacity
-                style={[styles.voltarBtn, { backgroundColor: principal }]}
-                onPress={() => navigation.goBack()}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.voltarBtnText}>Voltar ao Início</Text>
-              </TouchableOpacity>
             </View>
           ) : !dadosPix ? (
             <View style={styles.planosContainer}>
-              <TouchableOpacity
-                style={[styles.cardPlano, { borderColor: border, backgroundColor: dark ? "#252525" : "#fcfcfc" }]}
-                onPress={() => handleAssinar("MENSAL")}
-                disabled={loading}
-                activeOpacity={0.8}
-              >
-                <View style={styles.cardInfo}>
-                  <Text style={[styles.planoNome, { color: text }]}>Acesso por 30 dias</Text>
-                  <Text style={[styles.planoDetalhe, { color: muted }]}>Liberação imediata de todas as funções</Text>
-                </View>
-                <Text style={[styles.planoPreco, { color: principal }]}>
-                  R$ {PLAN_CONFIG.PRECO_MES.toFixed(2).replace(".", ",")}
-                </Text>
-              </TouchableOpacity>
+              {!ehVitalicio && (
+                <View style={styles.comparativoWrapper}>
+                  <Text style={[styles.comparativoHeaderTitle, { color: text }]}>Conheça os Planos</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.carrosselContainer}
+                  >
+                    {/* 1. Card Limitado / Grátis */}
+                    <View style={[styles.cardComparativo, { borderColor: border, backgroundColor: dark ? "#202020" : "#fafafa" }]}>
+                      <View style={styles.cardTopContent}>
+                        <View style={[styles.badgePlanoType, { backgroundColor: muted + "20" }]}>
+                          <Text style={[styles.badgePlanoTypeText, { color: muted }]}>ATUAL</Text>
+                        </View>
+                        <Text style={[styles.comparativoTitulo, { color: text }]}>Grátis</Text>
+                        <View style={styles.comparativoTopicos}>
+                          <View style={styles.topicoRow}>
+                            <Ionicons name="time" size={16} color={principal} />
+                            <Text style={[styles.topicoText, { color: muted }]}>{diasTrialGratuito} dias grátis</Text>
+                          </View>
+                          <View style={styles.topicoRow}>
+                            <Ionicons name="checkmark-circle" size={16} color={principal} />
+                            <Text style={[styles.topicoText, { color: muted }]}>Até {limiteHistoricoGrats} históricos</Text>
+                          </View>
+                          <View style={styles.topicoRow}>
+                            <Ionicons name={permiteCaixinhasGratis ? "checkmark-circle" : "close-circle"} size={16} color={permiteCaixinhasGratis ? principal : "#ef4444"} />
+                            <Text style={[styles.topicoText, { color: muted }]}>Caixinhas {permiteCaixinhasGratis ? "liberadas" : "bloqueadas"}</Text>
+                          </View>
+                          <View style={styles.topicoRow}>
+                            <Ionicons name="people" size={16} color={principal} />
+                            <Text style={[styles.topicoText, { color: muted }]}>Até {maxUsuariosGratis} {maxUsuariosGratis === 1 ? 'usuário' : 'usuários'}</Text>
+                          </View>
+                          <View style={styles.topicoRow}>
+                            <Ionicons name="close-circle" size={16} color="#ef4444" />
+                            <Text style={[styles.topicoText, { color: muted }]}>Sem relatórios PDF</Text>
+                          </View>
+                        </View>
+                      </View>
+                      <View style={styles.cardFooterArea}>
+                        <Text style={[styles.cardPrecoTexto, { color: muted }]}>R$ 0,00</Text>
+                      </View>
+                    </View>
 
-              <TouchableOpacity
-                style={[styles.cardPlano, styles.cardDestaque, { borderColor: principal, backgroundColor: principal + "08" }]}
-                onPress={() => handleAssinar("ANUAL")}
-                disabled={loading}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.badgeEconomia, { backgroundColor: principal }]}>
-                  <Text style={styles.badgeText}>MELHOR VALOR · 1 ANO</Text>
+                    {/* 2. Card Básico (30 dias) */}
+                    <View style={[styles.cardComparativo, { borderColor: border, backgroundColor: dark ? "#252525" : "#fcfcfc" }]}>
+                      <View style={styles.cardTopContent}>
+                        <View style={[styles.badgePlanoType, { backgroundColor: principal + "20" }]}>
+                          <Text style={[styles.badgePlanoTypeText, { color: principal }]}>POPULAR</Text>
+                        </View>
+                        <Text style={[styles.comparativoTitulo, { color: text }]}>Básico</Text>
+                        <View style={styles.comparativoTopicos}>
+                          <View style={styles.topicoRow}>
+                            <Ionicons name="checkmark-circle" size={16} color={principal} />
+                            <Text style={[styles.topicoText, { color: text }]}>Validade: 30 dias</Text>
+                          </View>
+                          <View style={styles.topicoRow}>
+                            <Ionicons name="checkmark-circle" size={16} color={principal} />
+                            <Text style={[styles.topicoText, { color: text }]}>Histórico Ilimitado</Text>
+                          </View>
+                          <View style={styles.topicoRow}>
+                            <Ionicons name="checkmark-circle" size={16} color={principal} />
+                            <Text style={[styles.topicoText, { color: text }]}>Caixinhas e Reservas</Text>
+                          </View>
+                          <View style={styles.topicoRow}>
+                            <Ionicons name="people" size={16} color={principal} />
+                            <Text style={[styles.topicoText, { color: text }]}>Até {maxUsuariosPremium} usuários</Text>
+                          </View>
+                          <View style={styles.topicoRow}>
+                            <Ionicons name="checkmark-circle" size={16} color={principal} />
+                            <Text style={[styles.topicoText, { color: text }]}>Relatórios em PDF</Text>
+                          </View>
+                        </View>
+                      </View>
+                      <View style={styles.cardFooterArea}>
+                        <Text style={[styles.cardPrecoValor, { color: principal }]}>
+                          R$ {valorMes.toFixed(2).replace(".", ",")}
+                        </Text>
+                        <TouchableOpacity
+                          style={[styles.queroEsseBtn, { backgroundColor: principal }]}
+                          onPress={() => handleAssinar("MENSAL")}
+                          disabled={loading}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.queroEsseBtnTextDestaque}>Quero Esse</Text>
+                          <Ionicons name="arrow-forward" size={12} color="#fff" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    {/* 3. Card Premium (1 ano) */}
+                    <View style={[styles.cardComparativo, styles.cardComparativoDestaque, { borderColor: principal, backgroundColor: principal + "06" }]}>
+                      <View style={styles.cardTopContent}>
+                        <View style={[styles.badgePlanoType, { backgroundColor: principal }]}>
+                          <Text style={[styles.badgePlanoTypeTextDestaque]}>MELHOR VALOR</Text>
+                        </View>
+                        <Text style={[styles.comparativoTitulo, { color: text }]}>Premium</Text>
+                        <View style={styles.comparativoTopicos}>
+                          <View style={styles.topicoRow}>
+                            <Ionicons name="checkmark-circle" size={16} color={principal} />
+                            <Text style={[styles.topicoText, { color: text }]}>Validade: 1 ano</Text>
+                          </View>
+                          <View style={styles.topicoRow}>
+                            <Ionicons name="checkmark-circle" size={16} color={principal} />
+                            <Text style={[styles.topicoText, { color: text }]}>Histórico Ilimitado</Text>
+                          </View>
+                          <View style={styles.topicoRow}>
+                            <Ionicons name="checkmark-circle" size={16} color={principal} />
+                            <Text style={[styles.topicoText, { color: text }]}>Caixinhas e Reservas</Text>
+                          </View>
+                          <View style={styles.topicoRow}>
+                            <Ionicons name="people" size={16} color={principal} />
+                            <Text style={[styles.topicoText, { color: text }]}>Até {maxUsuariosPremium} usuários</Text>
+                          </View>
+                          <View style={styles.topicoRow}>
+                            <Ionicons name="checkmark-circle" size={16} color={principal} />
+                            <Text style={[styles.topicoText, { color: text }]}>Relatórios em PDF</Text>
+                          </View>
+                          <View style={styles.topicoRow}>
+                            <Ionicons name="pricetag" size={16} color={principal} />
+                            <Text style={[styles.topicoTextDestaque, { color: principal }]}>
+                              Economia de R$ {economiaFormatada}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                      <View style={styles.cardFooterArea}>
+                        <Text style={[styles.cardPrecoValor, { color: principal }]}>
+                          R$ {valorAnual.toFixed(2).replace(".", ",")}
+                        </Text>
+                        <TouchableOpacity
+                          style={[styles.queroEsseBtn, { backgroundColor: principal }]}
+                          onPress={() => handleAssinar("ANUAL")}
+                          disabled={loading}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.queroEsseBtnTextDestaque}>Quero Esse</Text>
+                          <Ionicons name="arrow-forward" size={12} color="#fff" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </ScrollView>
                 </View>
-                <View style={styles.cardInfo}>
-                  <Text style={[styles.planoNome, { color: text }]}>Acesso por 1 ano</Text>
-                  <Text style={[styles.planoDetalhe, { color: muted }]}>Funções completas por 365 dias</Text>
-                  <Text style={[styles.textoEconomia, { color: principal }]}>
-                    Você está economizando R$ {economiaFormatada}
-                  </Text>
-                </View>
-                <Text style={[styles.planoPreco, { color: principal }]}>
-                  R$ {PLAN_CONFIG.PRECO_ANUAL.toFixed(2).replace(".", ",")}
-                </Text>
-              </TouchableOpacity>
+              )}
 
               {loading && (
                 <View style={styles.loadingContainer}>
@@ -326,7 +440,7 @@ export default function PaywallScreen({ route }) {
                   setPlanoEscolhido(null);
                 }}
               >
-                <Text style={styles.botaoCancelarText}>Escolher outro período</Text>
+                <Text style={styles.botaoCancelarText}>Escolher outro plano</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -339,28 +453,46 @@ export default function PaywallScreen({ route }) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingBottom: 40, paddingHorizontal: 14, paddingTop: 12 },
-  block: { borderRadius: 18, padding: 16 },
-  headerBox: { alignItems: "center", marginBottom: 20, paddingTop: 8 },
+  block: { borderRadius: 18 },
+  headerBox: { alignItems: "center", marginBottom: 20, padding: 14 },
   iconHeaderBox: { width: 64, height: 64, borderRadius: 20, alignItems: "center", justifyContent: "center", marginBottom: 14 },
   title: { fontSize: 20, fontFamily: "Roboto-Bold", textAlign: "center", marginBottom: 6 },
   subtitle: { fontSize: 13, fontFamily: "Roboto-Regular", textAlign: "center", lineHeight: 18, paddingHorizontal: 8 },
-  premiumAtivoContainer: { width: "100%", alignItems: "center", gap: 16, marginTop: 8 },
-  statusBoxAtivo: { flexDirection: "row", alignItems: "center", gap: 14, width: "100%", borderWidth: 1, borderRadius: 14, padding: 16 },
-  statusAtivoTitulo: { fontSize: 15, fontFamily: "Roboto-Bold" },
-  statusAtivoDescricao: { fontSize: 12, fontFamily: "Roboto-Regular", marginTop: 2 },
-  statusAtivoData: { fontSize: 11, fontFamily: "Roboto-Medium", marginTop: 4 },
-  voltarBtn: { height: 50, width: "100%", borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  voltarBtnText: { color: "#fff", fontSize: 15, fontFamily: "Roboto-Bold" },
+  
+  premiumAtivoContainer: { width: "100%", alignItems: "center", marginTop: 4, paddingHorizontal: 4 },
+  statusBoxAtivoElegante: { flexDirection: "row", alignItems: "center", gap: 12, width: "100%", borderWidth: 1, borderRadius: 14, padding: 14 },
+  statusIconWrap: { width: 40, height: 40, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  statusAtivoTitulo: { fontSize: 12, fontFamily: "Roboto-Bold", textTransform: "uppercase", letterSpacing: 0.5 },
+  statusAtivoDescricaoElegante: { fontSize: 14, fontFamily: "Roboto-Medium", marginTop: 2, lineHeight: 18 },
+  statusAtivoDataElegante: { fontSize: 12, fontFamily: "Roboto-Regular", marginTop: 3 },
+  
+  comparativoWrapper: { width: "100%", marginBottom: 6 },
+  comparativoHeaderTitle: { fontSize: 15, fontFamily: "Roboto-Bold", marginBottom: 12, textAlign: "left", paddingHorizontal: 14 },
+  carrosselContainer: { gap: 14, paddingBottom: 6, paddingHorizontal: 14, alignItems: "stretch" },
+  
+  cardComparativo: { width: 205, borderWidth: 1, borderRadius: 16, padding: 14, justifyContent: "space-between", height: 385 },
+  cardComparativoDestaque: { borderWidth: 1.5 },
+  cardTopContent: { flex: 1 },
+  
+  badgePlanoType: { alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginBottom: 8 },
+  badgePlanoTypeText: { fontSize: 11, fontFamily: "Roboto-Bold" },
+  badgePlanoTypeTextDestaque: { color: "#fff", fontSize: 11, fontFamily: "Roboto-Bold" },
+  
+  comparativoTitulo: { fontSize: 18, fontFamily: "Roboto-Bold", marginBottom: 10 },
+  
+  comparativoTopicos: { gap: 8, marginTop: 4 },
+  topicoRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  topicoText: { fontSize: 12, fontFamily: "Roboto-Regular" },
+  topicoTextDestaque: { fontSize: 12, fontFamily: "Roboto-Bold" },
+  
+  cardFooterArea: { height: 48, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#646363ff", flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  cardPrecoTexto: { fontSize: 14, fontFamily: "Roboto-Bold" },
+  cardPrecoValor: { fontSize: 13, fontFamily: "Roboto-Bold" },
+  
+  queroEsseBtn: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 8 },
+  queroEsseBtnTextDestaque: { color: "#fff", fontSize: 11, fontFamily: "Roboto-Bold" },
+
   planosContainer: { width: "100%", gap: 12 },
-  cardPlano: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1, borderRadius: 14, padding: 16 },
-  cardDestaque: { borderWidth: 1.5 },
-  badgeEconomia: { position: "absolute", top: -10, right: 16, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
-  badgeText: { color: "#fff", fontSize: 9, fontFamily: "Roboto-Bold" },
-  cardInfo: { flex: 1, paddingRight: 10 },
-  planoNome: { fontSize: 15, fontFamily: "Roboto-Bold" },
-  planoDetalhe: { fontSize: 12, fontFamily: "Roboto-Regular", marginTop: 2 },
-  textoEconomia: { fontSize: 11, fontFamily: "Roboto-Bold", marginTop: 4 },
-  planoPreco: { fontSize: 18, fontFamily: "Roboto-Bold" },
   loadingContainer: { marginTop: 16, alignItems: "center" },
   loadingText: { marginTop: 8, fontFamily: "Roboto-Regular", fontSize: 13 },
   pixContainer: { alignItems: "center", width: "100%", paddingTop: 4 },
