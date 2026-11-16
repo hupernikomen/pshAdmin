@@ -1,3 +1,4 @@
+// src/screens/Membros.js
 import { useContext, useEffect, useState, useCallback } from "react";
 import {
   View,
@@ -18,6 +19,7 @@ import { AppContext } from "../context/AppContext";
 import { useAppAlert } from "../context/AlertContext";
 import Load from "../componentes/Load";
 import SwipeCard from "../componentes/SwipeCard";
+import { PLAN_CONFIG } from "../constants/appConfig"; // 📌 Importação do arquivo de configuração
 
 const PAPEIS = [
   { id: "admin", label: "Admin" },
@@ -105,6 +107,23 @@ export default function Membros() {
       });
       return;
     }
+
+    // 🛡️ Validação do limite de usuários com base no plano atual via PLAN_CONFIG
+    const statusPlano = PLAN_CONFIG.verificarStatus(igrejaAtiva);
+    const limiteUsuarios = statusPlano.isPremium
+      ? PLAN_CONFIG.PREMIUM_LIMITES.MAX_USUARIOS
+      : PLAN_CONFIG.FREE_LIMITES.MAX_USUARIOS;
+
+    if (membros.length >= limiteUsuarios) {
+      showAlert({
+        title: "Limite de Membros Atingido",
+        message: `Seu plano atual permite cadastrar no máximo ${limiteUsuarios} ${
+          limiteUsuarios === 1 ? "usuário" : "usuários"
+        }. Faça o upgrade para o Premium para cadastrar mais membros.`,
+      });
+      return;
+    }
+
     setEmail("");
     setPapel("tesoureiro");
     setModalVisible(true);
@@ -196,8 +215,6 @@ export default function Membros() {
 
   return (
     <View style={[styles.container, { backgroundColor: bg }]}>
-
-
       <FlatList
         data={membros}
         keyExtractor={(item) => item.id}
@@ -375,7 +392,7 @@ export default function Membros() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: 14, paddingTop:14 },
+  container: { flex: 1, paddingHorizontal: 14, paddingTop: 14 },
   headerInfo: {
     paddingTop: 14,
     paddingBottom: 8,
