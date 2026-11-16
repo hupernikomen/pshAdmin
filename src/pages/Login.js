@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 35,
+    paddingHorizontal: 21,
     justifyContent: "center",
   },
   brandBlock: {

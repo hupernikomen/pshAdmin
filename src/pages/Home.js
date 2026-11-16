@@ -341,8 +341,8 @@ export default function Home() {
       },
       {
         id: "2",
-        label: "A pagar",
-        sub: "Despesas pendentes",
+        label: "Despesas Futuras",
+        sub: "Pendentes",
         value: `R$ ${formatoMoeda.format(despesasFuturas)}`,
         icon: "arrow-up-outline",
         tint: dark ? "#2A1515" : "#FEF2F2",

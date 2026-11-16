@@ -751,7 +751,9 @@ export default function ProjecaoGastos() {
         ministerio: item.ministerio || "",
         observacao: item.observacao || "",
         quantidadeParcelas: item.quantidadeParcelas ? String(item.quantidadeParcelas) : "1",
-        data: item.data ? new Date(item.data) : new Date(),
+        data: Date.now(), // 👈 Mudou de 'new Date()' para timestamp numérico!
+        projecaoId: item.id,
+        veioDaProjecao: true,
       },
     });
   }

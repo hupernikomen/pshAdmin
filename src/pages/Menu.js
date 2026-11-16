@@ -167,20 +167,7 @@ export default function MenuScreen() {
 
           <Text style={[styles.sectionTitle, { color: muted, marginTop: 18 }]}>CONTA E AJUSTES</Text>
 
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => navigation.navigate("Paywall")}
-            activeOpacity={0.6}
-          >
-            <View style={[styles.iconBox, { backgroundColor: "#10b98115" }]}>
-              <Ionicons    name={lockConfig.icon || "sparkles"} size={20} color="#10b981" />
-            </View>
-            <View style={styles.menuItemTextos}>
-              <Text style={[styles.menuItemTitulo, { color: text }]}>Seja Premium</Text>
-              <Text style={[styles.menuItemSub, { color: muted }]}>Gerencie seu plano e recursos</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={muted} />
-          </TouchableOpacity>
+        
 
           <TouchableOpacity
             style={styles.menuItem}
@@ -193,6 +180,21 @@ export default function MenuScreen() {
             <View style={styles.menuItemTextos}>
               <Text style={[styles.menuItemTitulo, { color: text }]}>Configurações</Text>
               <Text style={[styles.menuItemSub, { color: muted }]}>Ajustes gerais do aplicativo</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={muted} />
+          </TouchableOpacity>
+
+            <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => navigation.navigate("Paywall")}
+            activeOpacity={0.6}
+          >
+            <View style={[styles.iconBox, { backgroundColor: "#10b98115" }]}>
+              <Ionicons    name={lockConfig.icon || "sparkles"} size={20} color="#10b981" />
+            </View>
+            <View style={styles.menuItemTextos}>
+              <Text style={[styles.menuItemTitulo, { color: text }]}>Seja Premium</Text>
+              <Text style={[styles.menuItemSub, { color: muted }]}>Gerencie seu plano e recursos</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={muted} />
           </TouchableOpacity>

@@ -57,13 +57,13 @@ export default function Rotas() {
         <Stack.Screen
           name="Paywall"
           component={PaywallScreen}
-          options={{ title: "Planos" }}
+          options={{ title: "Planos", animation: "slide_from_right" }}
         />
 
         <Stack.Screen
           name="Menu"
           component={Menu}
-          options={{ headerShown: false }}
+          options={{ headerShown: false, animation: "slide_from_left" }}
         />
 
         <Stack.Screen
@@ -104,7 +104,7 @@ export default function Rotas() {
         <Stack.Screen
           name="Registro"
           component={Registro}
-          options={{ animation: "slide_from_left" }}
+          options={{ animation: "fade_from_bottom" }}
         />
 
         <Stack.Screen

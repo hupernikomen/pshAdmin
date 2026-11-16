@@ -6,12 +6,12 @@ import {
   collection,
   getDocs,
   query,
-  orderBy,
   where,
   addDoc,
   updateDoc,
   deleteDoc,
   getDoc,
+  onSnapshot,
 } from "firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AuthContext } from "./AuthContext";
@@ -21,7 +21,8 @@ import {
   calcularSaldoRealizado,
   totaisPendentes,
 } from "../utils/financeiro";
-import { agendarNotificacaoDoSistema, testarNotificacaoImediata } from "../services/notificacoes";
+import { agendarNotificacaoDoSistema } from "../services/notificacoes";
+import { PLAN_CONFIG } from "../constants/appConfig";
 
 export const AppContext = createContext({});
 
@@ -103,6 +104,34 @@ export function AppProvider({ children }) {
     }));
   }
 
+  // 🔄 ESCUTA A IGREJA ATIVA EM TEMPO REAL (Firestore onSnapshot)
+  useEffect(() => {
+    if (!igrejaAtiva?.id) return;
+
+    const unsubscribe = onSnapshot(
+      doc(db, "igrejas", igrejaAtiva.id),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const dadosFirestore = docSnap.data();
+          setIgrejaAtiva((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              isPremium: dadosFirestore.isPremium ?? prev.isPremium,
+              dataExpiracaoPremium: dadosFirestore.dataExpiracaoPremium ?? prev.dataExpiracaoPremium,
+              nome: dadosFirestore.nome ?? prev.nome,
+            };
+          });
+        }
+      },
+      (error) => {
+        console.log("Erro ao escutar mudanças da igreja em tempo real:", error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [igrejaAtiva?.id]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -145,16 +174,12 @@ export function AppProvider({ children }) {
     setOcultarNomesDoadores(!ocultarNomesDoadores);
   }
 
-  // Inicialização das notificações ao abrir o app autenticado
   useEffect(() => {
     if (!authPronto || !uid) return;
 
     (async () => {
       try {
-        // 1. Agenda o lembrete semanal de culto
         await agendarNotificacaoDoSistema('LEMBRETE_CULTO');
-
-        // 2. Se a igreja ativa tiver uma data de expiração cadastrada, agenda o aviso de vencimento
         if (igrejaAtiva?.dataExpiracaoPremium) {
           await agendarNotificacaoDoSistema('AVISO_VENCIMENTO_PLANO', igrejaAtiva.dataExpiracaoPremium);
         }
@@ -394,13 +419,18 @@ export function AppProvider({ children }) {
     }
 
     const agora = Date.now();
+    const diasTrial = PLAN_CONFIG.DIAS_TRIAL_GRATUITO;
+
+    const temTrial = diasTrial > 0;
+    const trialEmMs = temTrial ? diasTrial * 24 * 60 * 60 * 1000 : 0;
+    const dataExpiracaoTeste = temTrial ? agora + trialEmMs : null;
 
     const igrejaRef = await addDoc(collection(db, "igrejas"), {
       nome: nomeLimpo,
       createdAt: agora,
       createdBy: userId,
-      isPremium: false,
-      dataExpiracaoPremium: null,
+      isPremium: temTrial,
+      dataExpiracaoPremium: dataExpiracaoTeste,
     });
 
     const membroRef = await addDoc(collection(db, "membros"), {
@@ -423,7 +453,7 @@ export function AppProvider({ children }) {
         createdAt: agora,
       });
     } catch (errCaixa) {
-      console.log("Erro ao criar caixinha padrão 'Reserva de emergência':", errCaixa);
+      console.log("Erro ao criar caixinha padrão:", errCaixa);
     }
 
     const nova = {
@@ -434,8 +464,8 @@ export function AppProvider({ children }) {
       createdAt: agora,
       exclusaoAgendadaEm: null,
       exclusaoPrevistaEm: null,
-      isPremium: false,
-      dataExpiracaoPremium: null,
+      isPremium: temTrial,
+      dataExpiracaoPremium: dataExpiracaoTeste,
     };
 
     setIgrejasDoUsuario((prev) => [...prev, nova]);

@@ -4,9 +4,9 @@ export const NOTIFICACOES_CONFIG = {
     idUnico: 'lembrete-culto-semanal',
     titulo: 'Lembrete',
     corpo: 'Não se esqueça de atualizar os lançamentos e o caixa da igreja.',
-    diaSemana: 1, // 1 = Segunda-feira
-    hora: 9,
-    minuto: 0,
+    diaSemana: 5, // 1 = Segunda-feira
+    hora: 15,
+    minuto: 24,
     repetirSemanalmente: true,
   },
   AVISO_VENCIMENTO_PLANO: {

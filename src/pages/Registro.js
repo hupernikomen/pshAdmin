@@ -18,7 +18,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { launchImageLibrary } from "react-native-image-picker";
 import { AppContext } from "../context/AppContext";
 import { db, storage } from "../firebaseConnection";
-import { collection, addDoc } from "firebase/firestore";
+import { collection, addDoc, deleteDoc, doc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import Load from "../componentes/Load";
 import Ionicons from "react-native-vector-icons/Ionicons";
@@ -205,6 +205,9 @@ export default function Registro() {
   const [modalMinisterio, setModalMinisterio] = useState(false);
   const [modalTipo, setModalTipo] = useState(false);
 
+  const [veioDaProjecao, setVeioDaProjecao] = useState(false);
+  const [projecaoId, setProjecaoId] = useState(null);
+
   useEffect(() => {
     const gasto = route.params?.preencherGasto;
     if (gasto) {
@@ -214,7 +217,18 @@ export default function Registro() {
       setMinisterio(gasto.ministerio || "");
       setObservacao(gasto.observacao || "");
       if (gasto.quantidadeParcelas) setQtdParcelas(gasto.quantidadeParcelas);
-      if (gasto.data) setData(new Date(gasto.data));
+      
+      if (gasto.data) {
+        setData(new Date(gasto.data));
+      } else {
+        setData(new Date());
+      }
+
+      setVeioDaProjecao(Boolean(gasto.veioDaProjecao));
+      setProjecaoId(gasto.projecaoId || null);
+    } else {
+      setVeioDaProjecao(false);
+      setProjecaoId(null);
     }
   }, [route.params]);
 
@@ -253,7 +267,6 @@ export default function Registro() {
     return total;
   }
 
-  // Upload robusto com tratamento de timeout e falhas de rede
   async function salvarImagemNoStorage(uri) {
     if (!uri) return null;
     try {
@@ -264,7 +277,6 @@ export default function Registro() {
       const nomeArquivo = `recibos/${idSeguro}_${Date.now()}.jpg`;
       const storageRef = ref(storage, nomeArquivo);
 
-      // Timeout de 20 segundos para conexões lentas
       const uploadPromise = uploadBytes(storageRef, blob);
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error("Timeout no upload")), 20000)
@@ -351,6 +363,16 @@ export default function Registro() {
     }
   }
 
+  async function removerProjecaoVinculada() {
+    if (veioDaProjecao && projecaoId) {
+      try {
+        await deleteDoc(doc(db, "gastosProjetados", projecaoId));
+      } catch (eProj) {
+        console.log("Erro ao remover gasto projetado após registro:", eProj);
+      }
+    }
+  }
+
   async function salvar() {
     if (!uid) {
       showAlert({ title: "Atenção", message: "Faça login novamente." });
@@ -373,6 +395,14 @@ export default function Registro() {
     }
     if (!tipo || !descricao || !valorTotal) {
       showAlert({ title: "Atenção", message: "Preencha os campos obrigatórios." });
+      return;
+    }
+
+    if (isDataFutura(data)) {
+      showAlert({
+        title: "Data inválida",
+        message: "Não é permitido registrar lançamentos com data superior a hoje.",
+      });
       return;
     }
 
@@ -449,11 +479,15 @@ export default function Registro() {
             origemPagamento === "caixinha" ? caixinhaSel?.nome || null : null,
           ministerio: ministerio || null,
           reciboUrl: reciboUrlCloud,
+          veioDaProjecao,
+          projecaoId,
           reg: Date.now(),
           createdAt: Date.now(),
         });
 
         await debitarOrigemSeSaida(montado.valorPagoTotal);
+        await removerProjecaoVinculada();
+
         await Promise.all([
           HistoricoMovimentos(),
           ResumoFinanceiro(),
@@ -491,6 +525,8 @@ export default function Registro() {
         valorTotal: valor,
         observacao: observacao.trim(),
         status: parcial >= valor ? "quitada" : "aberta",
+        veioDaProjecao,
+        projecaoId,
         reg: Date.now(),
         createdAt: Date.now(),
       };
@@ -530,6 +566,8 @@ export default function Registro() {
 
       await addDoc(collection(db, "registros"), base);
       await debitarOrigemSeSaida(parcial);
+      await removerProjecaoVinculada();
+
       await Promise.all([
         HistoricoMovimentos(),
         ResumoFinanceiro(),
@@ -577,14 +615,20 @@ export default function Registro() {
         <View style={[styles.segment, { backgroundColor: card }]}>
           {["entrada", "saida"].map((item) => {
             const ativo = tipoMovimento === item;
+            // Se veio da projeção, desativa AMBOS os botões (tanto entrada quanto saída ficam travados)
+            const desativado = veioDaProjecao;
+
             return (
               <TouchableOpacity
                 key={item}
                 style={[
                   styles.segmentBtn,
                   ativo && { backgroundColor: principal },
+                  desativado && { opacity: 0.5 },
                 ]}
+                disabled={desativado}
                 onPress={() => {
+                  if (desativado) return;
                   setTipoMovimento(item);
                   setTipo(null);
                 }}
@@ -717,10 +761,18 @@ export default function Registro() {
                 <DateTimePicker
                   value={data}
                   mode="date"
+                  maximumDate={new Date()}
                   display="default"
                   onChange={(e, selected) => {
                     setShowDatePicker(false);
                     if (selected) {
+                      if (isDataFutura(selected)) {
+                        showAlert({
+                          title: "Data inválida",
+                          message: "Não é permitido escolher uma data superior a hoje.",
+                        });
+                        return;
+                      }
                       setData(selected);
                       setDataPrimeiraParcela(maisUmMes(selected));
                     }
@@ -810,10 +862,20 @@ export default function Registro() {
                     <DateTimePicker
                       value={dataPrimeiraParcela}
                       mode="date"
+                      maximumDate={new Date()}
                       display="default"
                       onChange={(e, selected) => {
                         setShowDatePrimeira(false);
-                        if (selected) setDataPrimeiraParcela(selected);
+                        if (selected) {
+                          if (isDataFutura(selected)) {
+                            showAlert({
+                              title: "Data inválida",
+                              message: "Não é permitido escolher uma data superior a hoje.",
+                            });
+                            return;
+                          }
+                          setDataPrimeiraParcela(selected);
+                        }
                       }}
                     />
                   )}

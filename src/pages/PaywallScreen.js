@@ -47,18 +47,21 @@ export default function PaywallScreen({ route }) {
   // Configura o título da página no header do React Navigation
   useEffect(() => {
     navigation.setOptions({
-      headerShown: true, // Garante que o header apareça se desejar exibir o título nativo
+      headerShown: true,
       title: "Premium",
       headerTintColor: text,
     });
   }, [navigation, text, card]);
 
-  // Valida se o plano atual da igreja está ativo
+// Validação centralizada via PLAN_CONFIG
   const statusAssinatura = verificarStatusAssinatura(igrejaAtiva);
   const jaEhPremium = statusAssinatura.isPremium;
+  const textoStatus = statusAssinatura.tempoRestanteTexto;
+  const ehTrial = statusAssinatura.isTrial;
 
-  const dataExpiracaoFormatada = igrejaAtiva?.dataExpiracaoPremium
-    ? new Date(Number(igrejaAtiva.dataExpiracaoPremium)).toLocaleDateString("pt-BR")
+  const timestampExpiracao = igrejaAtiva?.dataExpiracaoPremium ? Number(igrejaAtiva.dataExpiracaoPremium) : null;
+  const dataExpiracaoFormatada = timestampExpiracao && !isNaN(timestampExpiracao)
+    ? new Date(timestampExpiracao).toLocaleDateString("pt-BR")
     : null;
 
   const valorTotalMensal12Meses = PLAN_CONFIG.PRECO_MES * 12;
@@ -76,6 +79,7 @@ export default function PaywallScreen({ route }) {
       valor: valor,
       emailUsuario: emailUsuario,
       nomeIgreja: nomeIgreja,
+      igrejaId: igrejaAtiva?.id,
     });
 
     setLoading(false);
@@ -93,6 +97,7 @@ export default function PaywallScreen({ route }) {
     }
   };
 
+  // Verificação em tempo real via setInterval caso o app continue aberto
   useEffect(() => {
     let intervalo = null;
 
@@ -191,10 +196,13 @@ export default function PaywallScreen({ route }) {
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.statusAtivoTitulo, { color: text }]}>Plano Ativo</Text>
                   <Text style={[styles.statusAtivoDescricao, { color: muted }]}>
-                    {dataExpiracaoFormatada
-                      ? `Válido até ${dataExpiracaoFormatada}`
-                      : "Acesso vitalício ou por período ativo"}
+                    {textoStatus}
                   </Text>
+                  {dataExpiracaoFormatada && (
+                    <Text style={[styles.statusAtivoData, { color: muted }]}>
+                      Válido até {dataExpiracaoFormatada}
+                    </Text>
+                  )}
                 </View>
               </View>
 
@@ -312,6 +320,7 @@ const styles = StyleSheet.create({
   statusBoxAtivo: { flexDirection: "row", alignItems: "center", gap: 14, width: "100%", borderWidth: 1, borderRadius: 14, padding: 16 },
   statusAtivoTitulo: { fontSize: 15, fontFamily: "Roboto-Bold" },
   statusAtivoDescricao: { fontSize: 12, fontFamily: "Roboto-Regular", marginTop: 2 },
+  statusAtivoData: { fontSize: 11, fontFamily: "Roboto-Medium", marginTop: 4 },
   voltarBtn: { height: 50, width: "100%", borderRadius: 14, alignItems: "center", justifyContent: "center" },
   voltarBtnText: { color: "#fff", fontSize: 15, fontFamily: "Roboto-Bold" },
   planosContainer: { width: "100%", gap: 12 },

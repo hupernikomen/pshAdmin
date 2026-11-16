@@ -19,8 +19,8 @@ import {
   addDoc,
   collection,
 } from "firebase/firestore";
-import { ref, deleteObject } from "firebase/storage"; // <-- IMPORTAÇÕES DO STORAGE
-import { db, storage } from "../firebaseConnection"; // <-- IMPORTADO 'storage'
+import { ref, deleteObject } from "firebase/storage";
+import { db, storage } from "../firebaseConnection";
 import { AppContext } from "../context/AppContext";
 import { useAppAlert } from "../context/AlertContext";
 import Load from "../componentes/Load";
@@ -259,7 +259,21 @@ export default function EditarRegistro() {
   function onChangeData(event, selected) {
     if (Platform.OS === "android") setShowDate(false);
     if (event?.type === "dismissed") return;
-    if (selected) setData(selected);
+    if (selected) {
+      // Se veio da projeção, impede selecionar uma data posterior a hoje
+      if (item?.veioDaProjecao) {
+        const hoje = new Date();
+        hoje.setHours(23, 59, 59, 999);
+        if (selected.getTime() > hoje.getTime()) {
+          showAlert({
+            title: "Data inválida",
+            message: "Não é permitido definir uma data futura para gastos vindos da projeção.",
+          });
+          return;
+        }
+      }
+      setData(selected);
+    }
   }
 
   async function salvar() {
@@ -305,6 +319,19 @@ export default function EditarRegistro() {
     if (!data || Number.isNaN(data.getTime())) {
       showAlert({ title: "Atenção", message: "Informe uma data válida." });
       return;
+    }
+
+    // Validação extra caso venha da projeção para garantir que a data não seja futura
+    if (item?.veioDaProjecao) {
+      const hoje = new Date();
+      hoje.setHours(23, 59, 59, 999);
+      if (data.getTime() > hoje.getTime()) {
+        showAlert({
+          title: "Data inválida",
+          message: "A data não pode ser superior a hoje para este lançamento.",
+        });
+        return;
+      }
     }
 
     const pagoAtual = Number(item.valorPagoTotal || item.valorRecebidoTotal || 0) || 0;
@@ -370,6 +397,16 @@ export default function EditarRegistro() {
       }
 
       await updateDoc(doc(db, "registros", item.id), patch);
+
+      // SE VEIO DA PROJEÇÃO: Remove o item da coleção gastosProjetados após ser efetivado
+      if (item.projecaoId) {
+        try {
+          await deleteDoc(doc(db, "gastosProjetados", item.projecaoId));
+        } catch (eProj) {
+          console.log("Erro ao remover gasto projetado associado:", eProj);
+        }
+      }
+
       await Promise.all([HistoricoMovimentos(), ResumoFinanceiro?.()]);
       navigation.goBack();
     } catch (e) {
@@ -437,11 +474,9 @@ export default function EditarRegistro() {
     }
   }
 
-  // Função para remover o recibo do Firebase Storage caso exista
   async function removerReciboDoStorage(reciboUrl) {
     if (!reciboUrl || !storage) return;
     try {
-      // Extrai o caminho do arquivo do Storage a partir da URL de download pública
       const decodedUrl = decodeURIComponent(reciboUrl);
       const startIndex = decodedUrl.indexOf("/o/");
       if (startIndex === -1) return;
@@ -463,10 +498,8 @@ export default function EditarRegistro() {
 
     setExcluindo(true);
     try {
-      // Devolve valores para as caixinhas se aplicável
       await devolverParaCaixinhas(item);
 
-      // Se houver um recibo associado na nuvem, remove do Firebase Storage
       if (item.reciboUrl) {
         await removerReciboDoStorage(item.reciboUrl);
       }
@@ -531,6 +564,8 @@ export default function EditarRegistro() {
         <DateTimePicker
           value={data}
           mode="date"
+          // Trava a data máxima para hoje APENAS se o item veio da projeção de gastos
+          maximumDate={item?.veioDaProjecao ? new Date() : undefined}
           display={Platform.OS === "ios" ? "spinner" : "default"}
           onChange={onChangeData}
         />

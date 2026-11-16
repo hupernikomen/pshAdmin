@@ -549,7 +549,7 @@ export default function Configuracoes() {
         <View style={styles.rowSwitch}>
           <View style={styles.switchTextWrap}>
             <Text style={[styles.rowLabel, { color: colors.text }]}>
-              Ocultar nomes de dizimistas e ofertantes no relatório
+              Ocultar nomes de dizimistas no relatório
             </Text>
           </View>
           <Switch
