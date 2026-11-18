@@ -24,7 +24,7 @@ import { db } from "../firebaseConnection";
 import { AppContext } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
 import { useAppAlert } from "../context/AlertContext";
-import { PLAN_CONFIG } from "../constants/appConfig"; // 👈 Importação centralizada
+import { PLAN_CONFIG } from "../constants/appConfig";
 
 const DIAS_EXCLUSAO = PLAN_CONFIG.DIAS_EXCLUSAO_IGREJA || 3;
 const MS_DIAS_EXCLUSAO = DIAS_EXCLUSAO * 24 * 60 * 60 * 1000;
@@ -77,6 +77,10 @@ export default function Configuracoes() {
     carregarIgrejasDoUsuario,
     ocultarNomesDoadores,
     setOcultarNomesDoadores,
+    ocultarNomesApp,
+    setOcultarNomesApp,
+    ocultarNomesLeitores,       // 🆕 Novo estado do Context
+    setOcultarNomesLeitores,    // 🆕 Nova função do Context
     podeEditarFinanceiro,
   } = useContext(AppContext);
 
@@ -492,6 +496,8 @@ export default function Configuracoes() {
         </View>
       )}
 
+      {/* 🏷️ CATEGORIA 1: Informações da Igreja */}
+      <Text style={[styles.sectionHeader, { color: muted }]}>INFORMAÇÕES DA IGREJA</Text>
       <View style={[styles.card, { backgroundColor: colors.card }]}>
         <View style={styles.row}>
           <Text style={[styles.rowLabel, { color: colors.text }]}>
@@ -544,13 +550,18 @@ export default function Configuracoes() {
             />
           </View>
         </View>
+      </View>
 
-        <View style={[styles.separator, { backgroundColor: colors.border }]} />
-
+      {/* 🏷️ CATEGORIA 2: Funcionalidades e Privacidade */}
+      <Text style={[styles.sectionHeader, { color: muted, marginTop: 24 }]}>
+        PRIVACIDADE
+      </Text>
+      <View style={[styles.card, { backgroundColor: colors.card }]}>
+        {/* Switch 1: Ocultar no Relatório */}
         <View style={styles.rowSwitch}>
           <View style={styles.switchTextWrap}>
             <Text style={[styles.rowLabel, { color: colors.text }]}>
-              Ocultar nomes de dizimistas no relatório
+              Ocultar dizimistas no relatório
             </Text>
           </View>
           <Switch
@@ -566,6 +577,56 @@ export default function Configuracoes() {
               true: '#555',
             }}
             thumbColor={ocultarNomesDoadores ? principal : "#f4f3f4"}
+          />
+        </View>
+
+        <View style={[styles.separator, { backgroundColor: colors.border }]} />
+
+        {/* Switch 2: Ocultar no App (Histórico e Dízimos) */}
+        <View style={styles.rowSwitch}>
+          <View style={styles.switchTextWrap}>
+            <Text style={[styles.rowLabel, { color: colors.text }]}>
+              Ocultar dizimistas no app
+            </Text>
+          </View>
+          <Switch
+            value={!!ocultarNomesApp}
+            onValueChange={(v) => {
+              if (podeFinanceiro) {
+                setOcultarNomesApp?.(v);
+              }
+            }}
+            disabled={!podeFinanceiro}
+            trackColor={{
+              false: dark ? "#555" : "#ccc",
+              true: '#555',
+            }}
+            thumbColor={ocultarNomesApp ? principal : "#f4f3f4"}
+          />
+        </View>
+
+        <View style={[styles.separator, { backgroundColor: colors.border }]} />
+
+        {/* Switch 3: Ocultar para usuários leitores (NOVO) */}
+        <View style={styles.rowSwitch}>
+          <View style={styles.switchTextWrap}>
+            <Text style={[styles.rowLabel, { color: colors.text }]}>
+              Ocultar dizimistas de conta 'leitura'
+            </Text>
+          </View>
+          <Switch
+            value={!!ocultarNomesLeitores}
+            onValueChange={(v) => {
+              if (podeFinanceiro) {
+                setOcultarNomesLeitores?.(v);
+              }
+            }}
+            disabled={!podeFinanceiro}
+            trackColor={{
+              false: dark ? "#555" : "#ccc",
+              true: '#555',
+            }}
+            thumbColor={ocultarNomesLeitores ? principal : "#f4f3f4"}
           />
         </View>
       </View>
@@ -669,6 +730,13 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Regular",
     lineHeight: 18,
   },
+  sectionHeader: {
+    fontSize: 11,
+    fontFamily: "Roboto-Bold",
+    marginBottom: 8,
+    paddingHorizontal: 4,
+    letterSpacing: 0.5,
+  },
   card: {
     borderRadius: 16,
     paddingHorizontal: 16,
@@ -691,12 +759,6 @@ const styles = StyleSheet.create({
   switchTextWrap: {
     flex: 1,
     paddingRight: 8,
-  },
-  switchHint: {
-    marginTop: 3,
-    fontSize: 12,
-    fontFamily: "Roboto-Regular",
-    lineHeight: 16,
   },
   rowLabel: {
     fontSize: 14,

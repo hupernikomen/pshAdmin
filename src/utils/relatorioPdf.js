@@ -178,6 +178,7 @@ export async function exportarRelatorioPDF({
   resumo,
   historicoPeriodo,
   dadosFinancas,
+  caixinhasList = [],
   formatoMoeda,
   nomeTesoureiro,
   ocultarNomesDoadores = true,
@@ -529,6 +530,50 @@ export async function exportarRelatorioPDF({
     yLeft -= 18;
   }
 
+  // 2.2 Nova Seção: Caixinhas e Reservas
+  sectionLeft("Caixinhas e Reservas");
+  {
+    const caixas = Array.isArray(caixinhasList) ? caixinhasList : [];
+    if (caixas.length === 0) {
+      ensureLeft(14);
+      page.drawText(safe("Nenhuma caixinha cadastrada."), {
+        x: xLeft,
+        y: yLeft,
+        size: 8,
+        font,
+        color: C.muted,
+      });
+      yLeft -= 16;
+    } else {
+      caixas.forEach((c) => {
+        ensureLeft(15);
+        const nomeCaixa = safe(c.nome || "Caixinha");
+        const valorCaixa = Number(c.valor) || 0;
+        const valStr = `+ ${valSemCifrao(formatoMoeda, valorCaixa)}`;
+
+        page.drawText(nomeCaixa, {
+          x: xLeft,
+          y: yLeft,
+          size: 8,
+          font,
+          color: C.ink,
+          maxWidth: colLeftW - 72,
+        });
+
+        const vw = fontMedium.widthOfTextAtSize(valStr, 8);
+        page.drawText(valStr, {
+          x: xLeft + colLeftW - vw,
+          y: yLeft,
+          size: 8,
+          font: fontMedium,
+          color: C.black,
+        });
+        yLeft -= 14;
+      });
+      yLeft -= 8;
+    }
+  }
+
   // 3. Despesas fixas
   let totalDespesasFixas = 0;
   (historicoPeriodo || []).forEach((item) => {
@@ -842,10 +887,10 @@ export async function exportarRelatorioPDF({
     .replace(/[^a-zA-Z0-9]/g, "")
     .toLowerCase();
 
-  const { ano: anoPer, mes: mesPer } = obterDataInicialDoPeriodo(labelPeriodo);
-  const mesAnoStr = `${MESES_CURTO[mesPer].toLowerCase()}${String(anoPer).slice(-2)}`;
+  const { mes: mesPer } = obterDataInicialDoPeriodo(labelPeriodo);
+  const mesAnoStr = `${MESES_CURTO[mesPer].toLowerCase()}`;
 
-  const fileName = `Rf_${igrejaSanitizada || "igreja"}${mesAnoStr}.pdf`;
+  const fileName = `relf.${igrejaSanitizada || "igreja"}${mesAnoStr}.pdf`;
   const cachePath = `${RNFS.CachesDirectoryPath}/${fileName}`;
   await RNFS.writeFile(cachePath, base64, "base64");
   const fileUrl = cachePath.startsWith("file://")

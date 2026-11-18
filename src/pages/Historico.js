@@ -20,7 +20,7 @@ import { useAuth } from "../context/AuthContext";
 import { useAppAlert } from "../context/AlertContext";
 import Load from "../componentes/Load";
 import SwipeCard from "../componentes/SwipeCard";
-import ValorOculto from "../componentes/ValorOculto"; // IMPORTADO: Para usar o visual de bloqueio
+import ValorOculto from "../componentes/ValorOculto"; 
 import { podeEditarRegistro } from "../utils/registroEdit";
 import { verificarStatusAssinatura } from "../utils/assinatura";
 import { PLAN_CONFIG } from "../constants/appConfig";
@@ -79,8 +79,7 @@ function ehSaidaParcelada(item, parcelas) {
   return false;
 }
 
-// Passamos o 'podeEditarEscrita' para esta função decidir se oculta
-function montarLinhasHistorico(dadosFinancas, podeEditarEscrita) {
+function montarLinhasHistorico(dadosFinancas, podeEditarEscrita, ocultarNomesApp, ocultarNomesLeitores, isLeitor) {
   const linhas = [];
 
   (dadosFinancas || []).forEach((item) => {
@@ -105,17 +104,14 @@ function montarLinhasHistorico(dadosFinancas, podeEditarEscrita) {
     const isParcelada = totalParcelasRaw > 1;
     const totalParcelas = isParcelada ? totalParcelasRaw : null;
 
-    // --- LOGICA DE OCULTAR NOME DO DIZIMISTA ---
+    // --- LÓGICA DE OCULTAR NOME DO DIZIMISTA NO APP E PARA LEITORES ---
     const isDizimo = item.tipo === "Dízimo";
-    // Ocultamos se for dízimo E o usuário NÃO puder editar (tesoureiro/admin)
-    const ocultarDizimista = isDizimo && !podeEditarEscrita; 
+    const ocultarDizimista = isDizimo && (ocultarNomesApp || (isLeitor && ocultarNomesLeitores)); 
 
-    // Definimos a descrição final aqui
     let descricaoFinal = item.descricao || item.tipo || "Sem descrição";
     if (ocultarDizimista) {
-        descricaoFinal = "Dízimo"; // Nome genérico
+        descricaoFinal = "Dízimo"; 
     }
-    // -------------------------------------------
 
     if (item.tipoMovimento === "saida" && pagos.length > 0) {
       pagos.forEach((p, idx) => {
@@ -132,7 +128,7 @@ function montarLinhasHistorico(dadosFinancas, podeEditarEscrita) {
           id: item.id,
           tipoMovimento: "saida",
           tipo: item.tipo || "Pagamento",
-          descricao: descricaoFinal, // Usamos a descrição final definida acima
+          descricao: descricaoFinal,
           data: tsPag,
           valorTotal: Number(p.valor) || 0,
           valorPagoTotal: Number(p.valor) || 0,
@@ -148,7 +144,7 @@ function montarLinhasHistorico(dadosFinancas, podeEditarEscrita) {
           sortKey: tsPag,
           createdAt: createdAtPai,
           reciboUrl: item.reciboUrl || null,
-          ocultarDizimista, // Passamos esta flag para o renderItem usar
+          ocultarDizimista,
         });
       });
       return;
@@ -169,7 +165,7 @@ function montarLinhasHistorico(dadosFinancas, podeEditarEscrita) {
             id: item.id,
             tipoMovimento: "saida",
             tipo: item.tipo || "Pagamento",
-            descricao: descricaoFinal, // Usamos a descrição final definida acima
+            descricao: descricaoFinal,
             data: tsPag,
             valorTotal: Number(p.valor) || 0,
             valorPagoTotal: Number(p.valor) || 0,
@@ -189,7 +185,7 @@ function montarLinhasHistorico(dadosFinancas, podeEditarEscrita) {
             sortKey: tsPag,
             createdAt: createdAtPai,
             reciboUrl: item.reciboUrl || null,
-            ocultarDizimista, // Passamos esta flag para o renderItem usar
+            ocultarDizimista,
           });
         });
         return;
@@ -209,7 +205,7 @@ function montarLinhasHistorico(dadosFinancas, podeEditarEscrita) {
           id: item.id,
           tipoMovimento: "entrada",
           tipo: item.tipo || "Recebimento",
-          descricao: descricaoFinal, // Usamos a descrição final definida acima
+          descricao: descricaoFinal,
           data: tsRec,
           observacao: item.observacao || null,
           valorTotal: Number(p.valor) || 0,
@@ -220,7 +216,7 @@ function montarLinhasHistorico(dadosFinancas, podeEditarEscrita) {
           sortKey: tsRec,
           createdAt: createdAtPai,
           reciboUrl: item.reciboUrl || null,
-          ocultarDizimista, // Passamos esta flag para o renderItem usar
+          ocultarDizimista,
         });
       });
       return;
@@ -240,8 +236,8 @@ function montarLinhasHistorico(dadosFinancas, podeEditarEscrita) {
       reg: createdAtPai,
       parcelaNumero: null,
       parcelaTotal: null,
-      descricao: descricaoFinal, // Usamos a descrição final definida acima
-      ocultarDizimista, // Passamos esta flag para o renderItem usar
+      descricao: descricaoFinal,
+      ocultarDizimista,
     });
   });
 
@@ -262,6 +258,8 @@ export default function Historico() {
     formatoMoeda,
     podeEditarFinanceiro,
     igrejaAtiva,
+    ocultarNomesApp,
+    ocultarNomesLeitores, // 👈 Consumido do contexto
   } = useContext(AppContext);
 
   const { showAlert } = useAppAlert();
@@ -293,18 +291,16 @@ export default function Historico() {
   };
 
   const podeEditarPapel = podeEditarFinanceiro?.() !== false;
+  const isLeitor = igrejaAtiva?.papel === "leitura"; // 👈 Identifica se o usuário atual é leitor
 
-  // Função atualizada para abrir recibos tanto da web (Firebase Storage) quanto locais antigos
   async function abrirRecibo(reciboUrl) {
     if (!reciboUrl) return;
 
-    // Se for URL da nuvem (Firebase Storage), abre direto
     if (reciboUrl.startsWith("http://") || reciboUrl.startsWith("https://")) {
       setFotoSelecionada(reciboUrl);
       return;
     }
 
-    // Compatibilidade com arquivos antigos salvos no celular
     const uri = normalizarUri(reciboUrl);
     const path = caminhoSemPrefixo(uri);
     try {
@@ -323,8 +319,8 @@ export default function Historico() {
   }
 
   const linhas = useMemo(
-    () => montarLinhasHistorico(dadosFinancas, podeEditarPapel), // Passamos a permissão aqui
-    [dadosFinancas, podeEditarPapel]
+    () => montarLinhasHistorico(dadosFinancas, podeEditarPapel, ocultarNomesApp, ocultarNomesLeitores, isLeitor),
+    [dadosFinancas, podeEditarPapel, ocultarNomesApp, ocultarNomesLeitores, isLeitor]
   );
 
   const linhasLimitadas = useMemo(
@@ -438,21 +434,17 @@ export default function Historico() {
 
           const temRecibo = !!item.reciboUrl;
           const origem = textoOrigem(item);
-          // Flag para editar é o papel E se o registro permite edição
           const editavel = podeEditarPapel && podeEditarRegistro(item);
 
           const dataStr = item.data
             ? new Date(item.data).toLocaleDateString("pt-BR")
             : "-";
 
-          // --- LOGICA DE OCULTAR OBSERVAÇÃO ---
-          // Se o dízimo estiver oculto, não mostramos a observação original (pois pode conter o nome)
           const mostrarObs = !item.ocultarDizimista && !!item.observacao;
 
           const obsLimpa = mostrarObs
             ? String(item.observacao).trim().replace(/\n/g, " ")
             : null;
-          // ------------------------------------
 
           const partesSub = [
             dataStr,
@@ -490,9 +482,7 @@ export default function Historico() {
           const iconEntrada = dark ? "#81C784" : "#2E7D32";
           const iconSaida = dark ? "#E57373" : "#C62828";
 
-          // Usamos o componente ValorOculto como título se ocultarDizimista for true
           const TituloItem = item.ocultarDizimista ? (
-             // Usamos o visual do bloqueio cinza conforme solicitado
             <ValorOculto size="small" style={{ alignSelf: 'flex-start', marginVertical: 4 }} />
           ) : (
             item.descricao || "Sem descrição"
@@ -505,7 +495,7 @@ export default function Historico() {
               icon={isEntrada ? "arrow-down-outline" : "arrow-up-outline"}
               iconColor={isEntrada ? iconEntrada : iconSaida}
               tint={isEntrada ? tintEntrada : tintSaida}
-              title={TituloItem} // Passamos o componente ou a string
+              title={TituloItem}
               subtitle={partesSub.join(" · ")}
               value={`${isEntrada ? "+" : "-"} ${formatoMoeda.format(valor)}`}
               actions={actions}
@@ -577,21 +567,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Roboto-Medium",
   },
-  footerAviso: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 18,
-    paddingHorizontal: 16,
-    marginTop: 4,
-  },
-  footerAvisoText: {
-    fontSize: 13,
-    fontFamily: "Roboto-Regular",
-    textAlign: "center",
-    flex: 1,
-  },
   listContent: {
     paddingTop: 4,
     paddingBottom: 100,
@@ -620,7 +595,7 @@ const styles = StyleSheet.create({
     fontFamily: "Roboto-Regular",
     textAlign: "center",
   },
-modalOverlay: {
+  modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.9)",
     justifyContent: "center",
@@ -629,11 +604,11 @@ modalOverlay: {
   modalContent: {
     width: "100%",
     alignItems: "center",
-    paddingHorizontal: 10, // Margem lateral pequena para ocupar quase a tela toda
+    paddingHorizontal: 10,
   },
   modalImage: {
     width: "100%",
-    height: "80%", // Ocupa 80% da altura da tela mantendo proporção
+    height: "80%",
     borderRadius: 12,
   },
   closeBtn: {

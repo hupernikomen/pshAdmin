@@ -29,6 +29,8 @@ export const AppContext = createContext({});
 const KEY_IGREJA_ATIVA = "@igreja_ativa_id";
 const KEY_OCULTAR_VALORES = "@ocultar_valores";
 const KEY_OCULTAR_NOMES_DOADORES = "@ocultar_nomes_doadores";
+const KEY_OCULTAR_NOMES_APP = "@ocultar_nomes_app";
+const KEY_OCULTAR_NOMES_LEITORES = "@ocultar_nomes_leitores"; // 👈 Nova chave adicionada
 
 function normalizarEmail(email) {
   return String(email || "")
@@ -76,6 +78,8 @@ export function AppProvider({ children }) {
 
   const [ocultarValores, setOcultarValoresState] = useState(false);
   const [ocultarNomesDoadores, setOcultarNomesDoadoresState] = useState(true);
+  const [ocultarNomesApp, setOcultarNomesAppState] = useState(false);
+  const [ocultarNomesLeitores, setOcultarNomesLeitoresState] = useState(false); // 👈 Novo estado
 
   const [semConexao, setSemConexao] = useState(false);
 
@@ -104,7 +108,6 @@ export function AppProvider({ children }) {
     }));
   }
 
-  // 🔄 ESCUTA A IGREJA ATIVA EM TEMPO REAL (Firestore onSnapshot)
   useEffect(() => {
     if (!igrejaAtiva?.id) return;
 
@@ -147,6 +150,21 @@ export function AppProvider({ children }) {
           setOcultarNomesDoadoresState(n === "1");
         }
       } catch (_) { }
+
+      try {
+        const appPref = await AsyncStorage.getItem(KEY_OCULTAR_NOMES_APP);
+        if (appPref !== null) {
+          setOcultarNomesAppState(appPref === "1");
+        }
+      } catch (_) { }
+
+      // 🆕 Carregar preferência de ocultar nomes de leitores
+      try {
+        const leitoresPref = await AsyncStorage.getItem(KEY_OCULTAR_NOMES_LEITORES);
+        if (leitoresPref !== null) {
+          setOcultarNomesLeitoresState(leitoresPref === "1");
+        }
+      } catch (_) { }
     })();
   }, []);
 
@@ -172,6 +190,31 @@ export function AppProvider({ children }) {
 
   function toggleOcultarNomesDoadores() {
     setOcultarNomesDoadores(!ocultarNomesDoadores);
+  }
+
+  async function setOcultarNomesApp(oculto) {
+    const next = !!oculto;
+    setOcultarNomesAppState(next);
+    try {
+      await AsyncStorage.setItem(KEY_OCULTAR_NOMES_APP, next ? "1" : "0");
+    } catch (_) { }
+  }
+
+  function toggleOcultarNomesApp() {
+    setOcultarNomesApp(!ocultarNomesApp);
+  }
+
+  // 🆕 Função para atualizar e salvar ocultar nomes de leitores
+  async function setOcultarNomesLeitores(oculto) {
+    const next = !!oculto;
+    setOcultarNomesLeitoresState(next);
+    try {
+      await AsyncStorage.setItem(KEY_OCULTAR_NOMES_LEITORES, next ? "1" : "0");
+    } catch (_) { }
+  }
+
+  function toggleOcultarNomesLeitores() {
+    setOcultarNomesLeitores(!ocultarNomesLeitores);
   }
 
   useEffect(() => {
@@ -883,6 +926,12 @@ export function AppProvider({ children }) {
         ocultarNomesDoadores,
         setOcultarNomesDoadores,
         toggleOcultarNomesDoadores,
+        ocultarNomesApp,
+        setOcultarNomesApp,
+        toggleOcultarNomesApp,
+        ocultarNomesLeitores,       // 👈 Disponibilizado
+        setOcultarNomesLeitores,    // 👈 Disponibilizado
+        toggleOcultarNomesLeitores, // 👈 Disponibilizado
         semConexao,
         podeGerarPdf,
         atualizarIgrejaLocal,

@@ -26,6 +26,7 @@ import { useAppAlert } from "../context/AlertContext";
 import Load from "../componentes/Load";
 import { LIMITE_MS } from "../utils/registroEdit";
 
+
 function parseNumero(txt) {
   if (txt === null || txt === undefined) return 0;
   let s = String(txt).trim();

@@ -1,3 +1,4 @@
+// src/screens/Dizimos.js
 import { useContext, useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -12,6 +13,7 @@ import { AppContext } from "../context/AppContext";
 import Load from "../componentes/Load";
 import SwipeCard from "../componentes/SwipeCard";
 import SeletorMesAno from "../componentes/SeletorMesAno";
+import ValorOculto from "../componentes/ValorOculto"; 
 import { arred, dataDoItem } from "../utils/financeiro";
 
 const MESES = [
@@ -34,7 +36,7 @@ function isDizimo(item) {
   return t.includes("dizimo") || t.includes("dízimo");
 }
 
-function montarDizimosDoMes(lista, mes, ano) {
+function montarDizimosDoMes(lista, mes, ano, ocultarNomesApp, ocultarNomesLeitores, isLeitor) {
   const linhas = [];
 
   (lista || []).forEach((item) => {
@@ -45,6 +47,10 @@ function montarDizimosDoMes(lista, mes, ano) {
       ? item.valoresRecebidos
       : [];
 
+    const ocultarDizimista = ocultarNomesApp || (isLeitor && ocultarNomesLeitores);
+    const descricaoOriginal = item.descricao || "Dízimo";
+    const descricaoFinal = ocultarDizimista ? "Dízimo" : descricaoOriginal;
+
     if (recebidos.length > 0) {
       recebidos.forEach((r, idx) => {
         const ts = Number(r.data || item.data || 0);
@@ -54,7 +60,8 @@ function montarDizimosDoMes(lista, mes, ano) {
         linhas.push({
           rowId: `${item.id}_rec_${r.id || idx}`,
           id: item.id,
-          descricao: item.descricao || "Dízimo",
+          descricao: descricaoFinal,
+          ocultarDizimista,
           data: ts,
           valor: Number(r.valor) || 0,
         });
@@ -70,7 +77,8 @@ function montarDizimosDoMes(lista, mes, ano) {
     linhas.push({
       rowId: item.id,
       id: item.id,
-      descricao: item.descricao || "Dízimo",
+      descricao: descricaoFinal,
+      ocultarDizimista,
       data: ts,
       valor: Number(item.valorRecebidoTotal || item.valorTotal) || 0,
     });
@@ -86,6 +94,9 @@ export default function Dizimos() {
     setLoad,
     HistoricoMovimentos,
     formatoMoeda,
+    ocultarNomesApp,
+    ocultarNomesLeitores, // 👈 Consumido do contexto
+    igrejaAtiva,          // 👈 Consumido para checar o papel do usuário
   } = useContext(AppContext);
 
   const { colors, dark } = useTheme();
@@ -101,6 +112,8 @@ export default function Dizimos() {
   const bg = colors.background;
   const tint = dark ? "#1A2A3D" : "#E3F2FD";
   const iconColor = dark ? "#64B5F6" : "#1565C0";
+
+  const isLeitor = igrejaAtiva?.papel === "leitura"; // 👈 Valida se o usuário atual é leitor
 
   useEffect(() => {
     carregar();
@@ -119,8 +132,8 @@ export default function Dizimos() {
   };
 
   const linhas = useMemo(
-    () => montarDizimosDoMes(dadosFinancas, mes, ano),
-    [dadosFinancas, mes, ano]
+    () => montarDizimosDoMes(dadosFinancas, mes, ano, ocultarNomesApp, ocultarNomesLeitores, isLeitor),
+    [dadosFinancas, mes, ano, ocultarNomesApp, ocultarNomesLeitores, isLeitor]
   );
 
   const totalMes = arred(linhas.reduce((acc, i) => acc + (i.valor || 0), 0));
@@ -158,21 +171,28 @@ export default function Dizimos() {
               <Text style={[styles.totalValue, { color: text }]}>
                 R$ {formatoMoeda.format(totalMes)}
               </Text>
-     
             </View>
           </View>
         }
-        renderItem={({ item }) => (
-          <SwipeCard
-            icon="hand-left-outline"
-            iconColor={iconColor}
-            tint={tint}
-            title={item.descricao}
-            subtitle={new Date(item.data).toLocaleDateString("pt-BR")}
-            value={`R$ ${formatoMoeda.format(item.valor)}`}
-            actions={[]}
-          />
-        )}
+        renderItem={({ item }) => {
+          const TituloItem = item.ocultarDizimista ? (
+            <ValorOculto size="small" style={{ alignSelf: 'flex-start', marginVertical: 4 }} />
+          ) : (
+            item.descricao
+          );
+
+          return (
+            <SwipeCard
+              icon="hand-left-outline"
+              iconColor={iconColor}
+              tint={tint}
+              title={TituloItem}
+              subtitle={new Date(item.data).toLocaleDateString("pt-BR")}
+              value={`R$ ${formatoMoeda.format(item.valor)}`}
+              actions={[]}
+            />
+          );
+        }}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <View style={[styles.emptyIcon, { backgroundColor: card }]}>

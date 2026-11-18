@@ -190,9 +190,9 @@ export default function PaywallScreen({ route }) {
   let tituloBoxAtivo = "Plano Ativo";
 
   if (tipoPlanoAtivo === "TRIAL") {
-    tituloCard = "Período de Teste Gratuito";
+    tituloCard = "Teste Gratuito";
     subtituloCard = `Aproveite todas as funcionalidades avançadas para ${nomeIgreja} durante os dias de avaliação.`;
-    tituloBoxAtivo = "Status: Em Período de Teste";
+    tituloBoxAtivo = "Status: Período de Teste";
   } else if (tipoPlanoAtivo === "PAGO") {
     tituloCard = "Sua Igreja é Premium!";
     subtituloCard = `Parabéns! Todos os recursos avançados e relatórios ilimitados estão ativos para ${nomeIgreja}.`;
@@ -215,15 +215,15 @@ export default function PaywallScreen({ route }) {
       >
         <View style={[styles.block, { backgroundColor: card }]}>
           <View style={styles.headerBox}>
-            {jaEhAtivo && (
+            {/* {jaEhAtivo && (
               <View style={[styles.iconHeaderBox, { backgroundColor: lockColor + "15" }]}>
                 <Ionicons name={lockConfig.icon || "sparkles"} size={32} color={lockColor} />
               </View>
-            )}
+            )} */}
 
-            <Text style={[styles.title, { color: text }]}>
+            {/* <Text style={[styles.title, { color: text }]}>
               {jaEhAtivo ? tituloCard : (tipoPlanoAtivo === "EXPIRADO" ? tituloCard : "Desbloqueie o App Completo")}
-            </Text>
+            </Text> */}
             <Text style={[styles.subtitle, { color: muted }]}>
               {jaEhAtivo ? subtituloCard : subtituloCard}
             </Text>

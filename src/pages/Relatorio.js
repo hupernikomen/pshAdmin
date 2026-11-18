@@ -1,3 +1,4 @@
+// src/screens/Relatorio.js
 import { useContext, useMemo, useState } from "react";
 import {
   View,
@@ -310,6 +311,7 @@ function noMes(ts, ano, mes) {
 export default function Relatorio({ navigation }) {
   const {
     dadosFinancas,
+    caixinhas, // 👈 Caixinhas consumidas do AppContext
     financasProntas,
     formatoMoeda,
     igrejaAtiva,
@@ -533,6 +535,7 @@ export default function Relatorio({ navigation }) {
         seriesGraficos,
         historicoPeriodo,
         dadosFinancas,
+        caixinhasList: caixinhas, // 👈 Enviando a lista de caixinhas para o gerador de PDF
         formatoMoeda,
         comentario,
         nomeTesoureiro: user?.displayName || user?.email || "Tesoureiro",
